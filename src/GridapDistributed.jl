@@ -12,7 +12,7 @@ include("ScatteredVectors.jl")
 
 include("GhostedVectors.jl")
 
-include("DiscreteModels.jl")
+include("DistributedDiscreteModels.jl")
 
 include("CartesianDiscreteModels.jl")
 
