@@ -8,7 +8,6 @@ function Gridap.CartesianDiscreteModel(
   comm::Communicator,subdomains::Tuple,gdesc::CartesianDescriptor{D,T,F}) where {D,T,F}
 
   nsubdoms = prod(subdomains)
-  ngcells = prod(Tuple(gdesc.partition))
 
   function init_models(isubdom)
     ldesc = local_cartesian_descriptor(gdesc,subdomains,isubdom)
@@ -22,7 +21,7 @@ function Gridap.CartesianDiscreteModel(
 
   S = CartesianDiscreteModel{D,T,F}
   models = ScatteredVector{S}(comm,nsubdoms,init_models)
-  gids = GhostedVector{Int}(comm,ngcells,nsubdoms,init_gids)
+  gids = GhostedVector{Int}(comm,nsubdoms,init_gids)
 
   DistributedDiscreteModel(models,gids)
 end
