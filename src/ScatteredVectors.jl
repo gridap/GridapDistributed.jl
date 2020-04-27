@@ -48,4 +48,23 @@ function scatter(comm::SequentialCommunicator,b::AbstractVector)
   SequentialScatteredVector(b)
 end
 
+struct MPIScatteredVector{T} <: ScatteredVector{T}
+  part::T
+  comm::MPICommunicator
+end
+
+get_comm(a::MPIScatteredVector) = a.comm
+
+num_parts(a::MPIScatteredVector) = num_parts(a.comm)
+
+function ScatteredVector{T}(initializer::Function,comm::MPICommunicator,nparts::Integer,args...) where T
+  @assert nparts == num_parts(comm)
+  largs = map(a->a.part,args)
+  i = get_part(comm)
+  part = initializer(i,largs...)
+  MPIScatteredVector{T}(part,comm)
+end
+
+
+
 

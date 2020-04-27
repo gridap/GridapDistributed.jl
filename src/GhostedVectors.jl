@@ -106,3 +106,18 @@ function exchange!(a::SequentialGhostedVector)
     end
   end
 end
+
+struct MPIGhostedVector{T} <: GhostedVector{T}
+  part::GhostedVectorPart{T}
+  comm::MPICommunicator
+end
+
+function GhostedVector{T}(initializer::Function,comm::MPICommunicator,nparts::Integer,args...) where T
+  @assert nparts == num_parts(comm)
+  largs = map(a->a.part,args)
+  i = get_part(comm)
+  part = initializer(i,largs...)
+  MPIGhostedVector{T}(part,comm)
+end
+
+

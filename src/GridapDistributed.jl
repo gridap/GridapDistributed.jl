@@ -6,7 +6,10 @@ using Gridap.Geometry
 using Gridap.FESpaces
 using Gridap.Arrays
 
+using MPI
+
 export SequentialCommunicator
+export MPICommunicator
 export do_on_parts
 
 include("Communicators.jl")
