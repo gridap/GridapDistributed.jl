@@ -1,4 +1,8 @@
-
+# @santiagobadia : In this model, gluing is via global VEF dofs, I guess.
+# Do we want something else here? Do we need e.g. ghost cells too?
+# I agree that with global vef IDs we have a well-defined distributed model,
+# so these cells can be created when computing the triangulation and grid,
+# because they will certainly be needed for e.g. dG formulations, etc...
 struct DistributedDiscreteModel
   models::ScatteredVector{<:DiscreteModel}
   gids::GhostedVector{Int}
@@ -16,4 +20,3 @@ function Gridap.writevtk(model::DistributedDiscreteModel,filebase::String)
   do_on_parts(task,model.models,model.gids)
 
 end
-

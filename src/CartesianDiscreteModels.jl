@@ -1,4 +1,5 @@
-
+# @santiagobadia : From what I observe in the tests, I am not sure I understand
+# the logic between subdomains and cells.
 function Gridap.CartesianDiscreteModel(comm::Communicator,subdomains::Tuple,args...)
   desc = CartesianDescriptor(args...)
   CartesianDiscreteModel(comm,subdomains,desc)
@@ -39,7 +40,7 @@ function local_cartesian_descriptor_1d(
 
   if isubdom == 1
     lcells =  ocells + 1
-    lorigin = gorigin 
+    lorigin = gorigin
   elseif isubdom != nsubdoms
     lcells = ocells + 2
     lorigin = gorigin + H*(isubdom-1)-h
@@ -168,4 +169,3 @@ function uniform_partition_1d(glength,np,pid)
   end
   (1+offset):(olength+offset)
 end
-

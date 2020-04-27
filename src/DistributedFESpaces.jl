@@ -1,4 +1,8 @@
-
+# @santiagobadia : I think that the meshes in the vector of local FE Spaces
+# require ellaboration. They cannot be just the portion of the local mesh, since
+# one probably wants to integrate face terms, comnpute error estimates, etc...
+# Eventually, we should provide info about number_ghost_layers in the
+# constructor
 struct DistributedFESpace
   spaces::ScatteredVector{<:FESpace}
   free_gids::GhostedVector{Int}
