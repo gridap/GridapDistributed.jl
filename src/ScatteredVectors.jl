@@ -33,7 +33,7 @@ end
 
 get_comm(a::SequentialScatteredVector) = SequentialCommunicator()
 
-function ScatteredVector{T}(::SequentialCommunicator,length::Integer,initializer::Function,args...) where T
+function ScatteredVector{T}(initializer::Function,::SequentialCommunicator,length::Integer,args...) where T
   parts = [initializer(i,map(a->a.parts[i],args)...) for i in 1:length]
   SequentialScatteredVector(parts)
 end

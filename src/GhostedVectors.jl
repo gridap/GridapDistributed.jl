@@ -54,12 +54,12 @@ function exchange!(::GhostedVector)
 end
 
 function GhostedVector{T}(
-  ::Communicator,nparts::Integer,initializer::Function,args...) where T
+  initializer::Function,::Communicator,nparts::Integer,args...) where T
   @abstractmethod
 end
 
 function GhostedVector{T}(
-  ::GhostedVector,initializer::Function,args...) where T
+  initializer::Function,::GhostedVector,args...) where T
   @abstractmethod
 end
 
@@ -70,14 +70,14 @@ end
 get_comm(a::SequentialGhostedVector) = SequentialCommunicator()
 
 function GhostedVector{T}(
-  ::SequentialCommunicator,nparts::Integer,initializer::Function,args...) where T
+  initializer::Function,::SequentialCommunicator,nparts::Integer,args...) where T
 
   parts = [ initializer(i,map(a->a.parts[i],args)...) for i in 1:nparts ]
   SequentialGhostedVector{T}(parts)
 end
 
 function GhostedVector{T}(
-  a::SequentialGhostedVector,initializer::Function,args...) where T
+  initializer::Function,a::SequentialGhostedVector,args...) where T
 
   nparts = length(a.parts)
   parts = [

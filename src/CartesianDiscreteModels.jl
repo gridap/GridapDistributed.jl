@@ -10,19 +10,19 @@ function Gridap.CartesianDiscreteModel(
 
   nsubdoms = prod(subdomains)
 
-  function init_models(isubdom)
+  S = CartesianDiscreteModel{D,T,F}
+
+  models = ScatteredVector{S}(comm,nsubdoms) do (isubdom)
+
     ldesc = local_cartesian_descriptor(gdesc,subdomains,isubdom)
     CartesianDiscreteModel(ldesc)
   end
 
-  function init_gids(isubdom)
+  gids = GhostedVector{Int}(comm,nsubdoms) do (isubdom)
+
     lid_to_gid, lid_to_owner = local_cartesian_gids(gdesc,subdomains,isubdom)
     GhostedVectorPart(lid_to_gid,lid_to_gid,lid_to_owner)
   end
-
-  S = CartesianDiscreteModel{D,T,F}
-  models = ScatteredVector{S}(comm,nsubdoms,init_models)
-  gids = GhostedVector{Int}(comm,nsubdoms,init_gids)
 
   DistributedDiscreteModel(models,gids)
 end
