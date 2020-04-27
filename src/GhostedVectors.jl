@@ -12,6 +12,7 @@ abstract type GhostedVector{T} end
 # a lazy way? Does it have sense?
 
 struct GhostedVectorPart{T}
+  ngids::Int
   lid_to_item::Vector{T}
   lid_to_gid::Vector{Int}
   lid_to_owner::Vector{Int}
@@ -19,6 +20,7 @@ struct GhostedVectorPart{T}
 end
 
 function GhostedVectorPart{T}(
+  ngids::Int,
   lid_to_item::Vector,
   lid_to_gid::Vector{Int},
   lid_to_owner::Vector{Int}) where T
@@ -28,6 +30,7 @@ function GhostedVectorPart{T}(
     gid_to_lid[gid] = lid
   end
   GhostedVectorPart{T}(
+    ngids,
     lid_to_item,
     lid_to_gid,
     lid_to_owner,
@@ -35,11 +38,13 @@ function GhostedVectorPart{T}(
 end
 
 function GhostedVectorPart(
+  ngids::Int,
   lid_to_item::Vector{T},
   lid_to_gid::Vector{Int},
   lid_to_owner::Vector{Int}) where T
 
   GhostedVectorPart{T}(
+    ngids,
     lid_to_item,
     lid_to_gid,
     lid_to_owner)
@@ -82,6 +87,7 @@ function GhostedVector{T}(
   nparts = length(a.parts)
   parts = [
     GhostedVectorPart(
+    a.parts[i].ngids,
     initializer(i,map(a->a.parts[i],args)...),
     a.parts[i].lid_to_gid,
     a.parts[i].lid_to_owner,

@@ -41,8 +41,14 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
   part_to_num_oids = gather(a)
 
   if i_am_master(comm)
+    ngids = sum(part_to_num_oids)
+    ngids_array = fill(ngids,nsubdoms)
     _fill_offsets!(part_to_num_oids)
+  else
+    ngids_array = Int[]
   end
+
+  part_to_ngids = scatter(comm,ngids_array)
 
   offsets = scatter(comm,part_to_num_oids)
 
@@ -88,11 +94,11 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
 
   do_on_parts(update_lid_to_owner,part_to_lid_to_gid,spaces,part_to_cell_to_gids)
 
-  function init_free_gids(part,lid_to_gid,lid_to_owner)
-    GhostedVectorPart(lid_to_gid,lid_to_gid,lid_to_owner)
+  function init_free_gids(part,lid_to_gid,lid_to_owner,ngids)
+    GhostedVectorPart(ngids,lid_to_gid,lid_to_gid,lid_to_owner)
   end
 
-  free_gids = GhostedVector{Int}(init_free_gids,comm,nsubdoms,part_to_lid_to_gid,part_to_lid_to_owner)
+  free_gids = GhostedVector{Int}(init_free_gids,comm,nsubdoms,part_to_lid_to_gid,part_to_lid_to_owner,part_to_ngids)
 
   DistributedFESpace(spaces,free_gids)
 end
@@ -160,3 +166,5 @@ function _fill_max_part_around!(lid_to_owner,cell_to_owner,cell_to_lids)
     end
   end
 end
+
+

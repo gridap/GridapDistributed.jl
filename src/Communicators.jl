@@ -3,7 +3,7 @@
 # The abstract Communicator should probably be more abstract.
 abstract type Communicator end
 
-function do_on_parts(::Communicator,task::Function,args...)
+function do_on_parts(task::Function,::Communicator,args...)
   @abstractmethod
 end
 

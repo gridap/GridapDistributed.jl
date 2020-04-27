@@ -24,4 +24,8 @@ include("CartesianDiscreteModels.jl")
 
 include("DistributedFESpaces.jl")
 
+include("GloballyAddressableArrays.jl")
+
+include("SparseMatrixAssemblers.jl")
+
 end # module
