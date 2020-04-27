@@ -43,10 +43,10 @@ function local_cartesian_descriptor_1d(
     lorigin = gorigin
   elseif isubdom != nsubdoms
     lcells = ocells + 2
-    lorigin = gorigin + H*(isubdom-1)-h
+    lorigin = gorigin + (first(orange)-2)*h
   else
     lcells = ocells + 1
-    lorigin = gorigin + H*(isubdom-1)-h
+    lorigin = gorigin + (first(orange)-2)*h
   end
 
   CartesianDescriptor(lorigin,h,lcells,gdesc.map)
