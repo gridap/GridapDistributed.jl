@@ -1,5 +1,5 @@
 
-abstract type GloballyAddressableVector{T} end
+abstract type GloballyAddressableVector{T} <: DistributedData end
 
 function GloballyAddressableVector{T}(
   initializer::Function,comm::Communicator,nparts::Integer) where T
@@ -31,7 +31,7 @@ function Gridap.Algebra.add_entry!(
   @abstractmethod
 end
 
-abstract type GloballyAddressableMatrix{T} end
+abstract type GloballyAddressableMatrix{T} <: DistributedData end
 
 function GloballyAddressableMatrix{T}(
   initializer::Function,::Communicator,nparts::Integer,args...) where T
@@ -112,7 +112,7 @@ end
 
 function GloballyAddressableVector{T}(
   initializer::Function,comm::SequentialCommunicator,nparts::Integer,args...) where T
-  parts = [initializer(i,map(a->a.parts[i],args)...) for i in 1:nparts]
+  parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
   vec = sum(parts)
   parts = [vec for i in 1:nparts]
   SequentialGloballyAddressableVector(parts,vec)
@@ -136,7 +136,7 @@ end
 
 function GloballyAddressableMatrix{T}(
   initializer::Function,comm::SequentialCommunicator,nparts::Integer,args...) where T
-  parts = [initializer(i,map(a->a.parts[i],args)...) for i in 1:nparts]
+  parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
   mat = sum(parts)
   parts = [mat for i in 1:nparts]
   SequentialGloballyAddressableMatrix(parts,mat)

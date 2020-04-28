@@ -26,7 +26,7 @@ vector_type = Vector{T}
 matrix_type = SparseMatrixCSC{T,Int}
 
 b = GloballyAddressableVector{T}(
-  comm, nsubdoms, model.models, get_spaces_and_gids(V)) do part, model, (V, dof_gids)
+  comm, nsubdoms, model, V) do part, (model,_), (V, dof_gids)
 
   U = TrialFESpace(V)
 
@@ -56,7 +56,7 @@ end
 @test sum(b.vec) ≈ 1
 
 A = GloballyAddressableMatrix{T}(
-  comm, nsubdoms, model.models, get_spaces_and_gids(V)) do part, model, (V, dof_gids)
+  comm, nsubdoms, model, V) do part, (model,_), (V, dof_gids)
 
   U = TrialFESpace(V)
 

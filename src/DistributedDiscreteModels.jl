@@ -5,7 +5,7 @@ end
 
 function Gridap.writevtk(model::DistributedDiscreteModel,filebase::String)
 
-  do_on_parts(get_models_and_gids(model)) do part, (model, gids)
+  do_on_parts(model) do part, (model, gids)
 
     cdata = ["gids"=>gids.lid_to_gid,"owner"=>gids.lid_to_owner]
     filebase_part = filebase*"_$(part)"
@@ -15,7 +15,7 @@ function Gridap.writevtk(model::DistributedDiscreteModel,filebase::String)
 
 end
 
-function get_models_and_gids(dmodel::DistributedDiscreteModel)
+function get_distributed_data(dmodel::DistributedDiscreteModel)
   models = dmodel.models
   gids = dmodel.gids
   comm = get_comm(models)

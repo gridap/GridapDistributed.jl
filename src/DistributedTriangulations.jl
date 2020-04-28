@@ -2,6 +2,10 @@ struct DistributedTriangulation
   trians::ScatteredVector{<:Triangulation}
 end
 
+function get_distributed_data(dtrian::DistributedTriangulation)
+  dtrian.trians
+end
+
 function Gridap.Triangulation(dmodel::DistributedDiscreteModel,args...)
   comm = get_comm(dmodel.models)
   nparts = num_parts(dmodel.models)
@@ -31,7 +35,7 @@ end
 
 function Gridap.writevtk(dtrian::DistributedTriangulation,filebase::String)
 
-  do_on_parts(dtrian.trians) do part, trian
+  do_on_parts(dtrian) do part, trian
     filebase_part = filebase*"_$(part)"
     writevtk(trian,filebase_part)
   end

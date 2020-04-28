@@ -16,7 +16,7 @@ nsubdoms = prod(subdomains)
 
 V = FESpace(comm,model=model,valuetype=Float64,reffe=:Lagrangian,order=1)
 
-do_on_parts(get_spaces_and_gids(V),model.models) do part,(space,gids),model
+do_on_parts(V, model) do part,(space,gids), (model,_)
 
   uh_gids = FEFunction(space,gids.lid_to_gid)
   uh_owner = FEFunction(space,gids.lid_to_owner)

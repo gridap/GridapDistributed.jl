@@ -1,4 +1,4 @@
-abstract type GhostedVector{T} end
+abstract type GhostedVector{T} <: DistributedData end
 
 Base.eltype(::Type{<:GhostedVector{T}}) where T = T
 Base.eltype(::GhostedVector{T}) where T = T
@@ -83,7 +83,7 @@ get_comm(a::SequentialGhostedVector) = SequentialCommunicator()
 function GhostedVector{T}(
   initializer::Function,::SequentialCommunicator,nparts::Integer,args...) where T
 
-  parts = [ initializer(i,map(a->a.parts[i],args)...) for i in 1:nparts ]
+  parts = [ initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts ]
   SequentialGhostedVector{T}(parts)
 end
 
@@ -94,7 +94,7 @@ function GhostedVector{T}(
   parts = [
     GhostedVectorPart(
     a.parts[i].ngids,
-    initializer(i,map(a->a.parts[i],args)...),
+    initializer(i,map(a->get_distributed_data(a).parts[i],args)...),
     a.parts[i].lid_to_gid,
     a.parts[i].lid_to_owner,
     a.parts[i].gid_to_lid)
@@ -126,7 +126,7 @@ end
 
 function GhostedVector{T}(initializer::Function,comm::MPICommunicator,nparts::Integer,args...) where T
   @assert nparts == num_parts(comm)
-  largs = map(a->a.part,args)
+  largs = map(a->get_distributed_data(a).part,args)
   i = get_part(comm)
   part = initializer(i,largs...)
   MPIGhostedVector{T}(part,comm)

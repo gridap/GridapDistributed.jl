@@ -3,7 +3,7 @@ struct DistributedFESpace
   gids::GhostedVector{Int}
 end
 
-function get_spaces_and_gids(dspace::DistributedFESpace)
+function get_distributed_data(dspace::DistributedFESpace)
   spaces = dspace.spaces
   gids = dspace.gids
   comm = get_comm(spaces)
