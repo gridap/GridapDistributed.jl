@@ -1,11 +1,18 @@
-# @santiagobadia : I think that the meshes in the vector of local FE Spaces
-# require ellaboration. They cannot be just the portion of the local mesh, since
-# one probably wants to integrate face terms, comnpute error estimates, etc...
-# Eventually, we should provide info about number_ghost_layers in the
-# constructor
 struct DistributedFESpace
   spaces::ScatteredVector{<:FESpace}
-  free_gids::GhostedVector{Int}
+  gids::GhostedVector{Int}
+end
+
+function get_distributed_data(dspace::DistributedFESpace)
+  spaces = dspace.spaces
+  gids = dspace.gids
+  comm = get_comm(spaces)
+  nparts = num_parts(spaces)
+
+  T = Tuple{get_part_type(spaces),get_part_type(gids)}
+  ScatteredVector{T}(comm,nparts,spaces,gids) do part, space, lgids
+    space, lgids
+  end
 end
 
 function Gridap.FESpace(comm::Communicator;model::DistributedDiscreteModel,kwargs...)
@@ -41,8 +48,14 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
   part_to_num_oids = gather(a)
 
   if i_am_master(comm)
+    ngids = sum(part_to_num_oids)
+    ngids_array = fill(ngids,nsubdoms)
     _fill_offsets!(part_to_num_oids)
+  else
+    ngids_array = Int[]
   end
+
+  part_to_ngids = scatter(comm,ngids_array)
 
   offsets = scatter(comm,part_to_num_oids)
 
@@ -88,13 +101,13 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
 
   do_on_parts(update_lid_to_owner,part_to_lid_to_gid,spaces,part_to_cell_to_gids)
 
-  function init_free_gids(part,lid_to_gid,lid_to_owner)
-    GhostedVectorPart(lid_to_gid,lid_to_gid,lid_to_owner)
+  function init_free_gids(part,lid_to_gid,lid_to_owner,ngids)
+    GhostedVectorPart(ngids,lid_to_gid,lid_to_gid,lid_to_owner)
   end
 
-  free_gids = GhostedVector{Int}(init_free_gids,comm,nsubdoms,part_to_lid_to_gid,part_to_lid_to_owner)
+  gids = GhostedVector{Int}(init_free_gids,comm,nsubdoms,part_to_lid_to_gid,part_to_lid_to_owner,part_to_ngids)
 
-  DistributedFESpace(spaces,free_gids)
+  DistributedFESpace(spaces,gids)
 end
 
 function _update_lid_to_gid!(lid_to_gid,cell_to_lids,cell_to_gids,cell_to_owner,lid_to_owner)
@@ -160,3 +173,5 @@ function _fill_max_part_around!(lid_to_owner,cell_to_owner,cell_to_lids)
     end
   end
 end
+
+

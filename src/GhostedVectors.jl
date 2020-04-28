@@ -1,4 +1,10 @@
-abstract type GhostedVector{T} end
+abstract type GhostedVector{T} <: DistributedData end
+
+Base.eltype(::Type{<:GhostedVector{T}}) where T = T
+Base.eltype(::GhostedVector{T}) where T = T
+
+get_part_type(::Type{<:GhostedVector{T}}) where T = GhostedVectorPart{T}
+get_part_type(::GhostedVector{T}) where T = GhostedVectorPart{T}
 
 # @santiagobadia : Think about the name... not sure ghosted meaning does have
 # much sense in this context. GhostVector or something better (names in PETSc?)
@@ -12,6 +18,7 @@ abstract type GhostedVector{T} end
 # a lazy way? Does it have sense?
 
 struct GhostedVectorPart{T}
+  ngids::Int
   lid_to_item::Vector{T}
   lid_to_gid::Vector{Int}
   lid_to_owner::Vector{Int}
@@ -19,6 +26,7 @@ struct GhostedVectorPart{T}
 end
 
 function GhostedVectorPart{T}(
+  ngids::Int,
   lid_to_item::Vector,
   lid_to_gid::Vector{Int},
   lid_to_owner::Vector{Int}) where T
@@ -28,6 +36,7 @@ function GhostedVectorPart{T}(
     gid_to_lid[gid] = lid
   end
   GhostedVectorPart{T}(
+    ngids,
     lid_to_item,
     lid_to_gid,
     lid_to_owner,
@@ -35,11 +44,13 @@ function GhostedVectorPart{T}(
 end
 
 function GhostedVectorPart(
+  ngids::Int,
   lid_to_item::Vector{T},
   lid_to_gid::Vector{Int},
   lid_to_owner::Vector{Int}) where T
 
   GhostedVectorPart{T}(
+    ngids,
     lid_to_item,
     lid_to_gid,
     lid_to_owner)
@@ -69,10 +80,12 @@ end
 
 get_comm(a::SequentialGhostedVector) = SequentialCommunicator()
 
+num_parts(a::SequentialGhostedVector) = length(a.parts)
+
 function GhostedVector{T}(
   initializer::Function,::SequentialCommunicator,nparts::Integer,args...) where T
 
-  parts = [ initializer(i,map(a->a.parts[i],args)...) for i in 1:nparts ]
+  parts = [ initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts ]
   SequentialGhostedVector{T}(parts)
 end
 
@@ -82,7 +95,8 @@ function GhostedVector{T}(
   nparts = length(a.parts)
   parts = [
     GhostedVectorPart(
-    initializer(i,map(a->a.parts[i],args)...),
+    a.parts[i].ngids,
+    initializer(i,map(a->get_distributed_data(a).parts[i],args)...),
     a.parts[i].lid_to_gid,
     a.parts[i].lid_to_owner,
     a.parts[i].gid_to_lid)
@@ -112,9 +126,13 @@ struct MPIGhostedVector{T} <: GhostedVector{T}
   comm::MPICommunicator
 end
 
+get_comm(a::MPIGhostedVector) = a.comm
+
+num_parts(a::MPIGhostedVector) = num_parts(a.comm)
+
 function GhostedVector{T}(initializer::Function,comm::MPICommunicator,nparts::Integer,args...) where T
   @assert nparts == num_parts(comm)
-  largs = map(a->a.part,args)
+  largs = map(a->get_distributed_data(a).part,args)
   i = get_part(comm)
   part = initializer(i,largs...)
   MPIGhostedVector{T}(part,comm)

@@ -3,7 +3,7 @@
 # The abstract Communicator should probably be more abstract.
 abstract type Communicator end
 
-function do_on_parts(::Communicator,task::Function,args...)
+function do_on_parts(task::Function,::Communicator,args...)
   @abstractmethod
 end
 
@@ -12,15 +12,15 @@ function i_am_master(::Communicator)
 end
 
 function do_on_parts(task::Function,args...)
-  comm = get_comm(first(args))
+  comm = get_comm(get_distributed_data(first(args)))
   do_on_parts(task,comm,args...)
 end
 
 struct SequentialCommunicator <: Communicator end
 
 function do_on_parts(task::Function,::SequentialCommunicator,args...)
-  for part in 1:length(first(args).parts)
-    largs = map(a->a.parts[part],args)
+  for part in 1:num_parts(get_distributed_data(first(args)))
+    largs = map(a->get_distributed_data(a).parts[part],args)
     task(part,largs...)
   end
 end
@@ -38,6 +38,7 @@ struct MPICommunicator <: Communicator
 end
 
 function MPICommunicator()
+  # TODO copy the communicator
   MPICommunicator(MPI.COMM_WORLD)
 end
 
@@ -47,7 +48,7 @@ end
 
 function do_on_parts(task::Function,comm::MPICommunicator,args...)
   part = get_part(comm)
-  largs = map(a->a.part,args)
+  largs = map(a->get_distributed_data(a).part,args)
   task(part,largs...)
 end
 

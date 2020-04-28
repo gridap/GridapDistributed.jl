@@ -1,15 +1,13 @@
 
-abstract type ScatteredVector{T} end
+abstract type ScatteredVector{T} <: DistributedData end
+
+Base.eltype(::Type{<:ScatteredVector{T}}) where T = T
+Base.eltype(::ScatteredVector{T}) where T = T
+
+get_part_type(::Type{<:ScatteredVector{T}}) where T = T
+get_part_type(::ScatteredVector{T}) where T = T
 
 function ScatteredVector{T}(initializer::Function,::Communicator,nparts::Integer,args...) where T
-  @abstractmethod
-end
-
-function get_comm(::ScatteredVector)
-  @abstractmethod
-end
-
-function num_parts(::ScatteredVector)
   @abstractmethod
 end
 
@@ -27,6 +25,7 @@ function scatter(comm::Communicator,b::AbstractVector)
   @abstractmethod
 end
 
+
 struct SequentialScatteredVector{T} <: ScatteredVector{T}
   parts::Vector{T}
 end
@@ -34,7 +33,7 @@ end
 get_comm(a::SequentialScatteredVector) = SequentialCommunicator()
 
 function ScatteredVector{T}(initializer::Function,::SequentialCommunicator,nparts::Integer,args...) where T
-  parts = [initializer(i,map(a->a.parts[i],args)...) for i in 1:nparts]
+  parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
   SequentialScatteredVector(parts)
 end
 
@@ -59,7 +58,7 @@ num_parts(a::MPIScatteredVector) = num_parts(a.comm)
 
 function ScatteredVector{T}(initializer::Function,comm::MPICommunicator,nparts::Integer,args...) where T
   @assert nparts == num_parts(comm)
-  largs = map(a->a.part,args)
+  largs = map(a->get_distributed_data(a).part,args)
   i = get_part(comm)
   part = initializer(i,largs...)
   MPIScatteredVector{T}(part,comm)
