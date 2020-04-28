@@ -5,12 +5,16 @@ using Gridap.Helpers
 using Gridap.Geometry
 using Gridap.FESpaces
 using Gridap.Arrays
+using Gridap.Algebra
 
 using MPI
 
 export SequentialCommunicator
 export MPICommunicator
 export do_on_parts
+export GloballyAddressableVector
+export get_models_and_gids
+export get_spaces_and_gids
 
 include("Communicators.jl")
 

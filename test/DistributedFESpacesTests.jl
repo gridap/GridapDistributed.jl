@@ -3,6 +3,7 @@ module DistributedFESpacesTests
 using Gridap
 using GridapDistributed
 using Gridap.FESpaces
+using Test
 
 comm = SequentialCommunicator()
 
@@ -11,56 +12,56 @@ domain = (0,1,0,1)
 cells = (4,4)
 model = CartesianDiscreteModel(comm,subdomains,domain,cells)
 
+nsubdoms = prod(subdomains)
+
 V = FESpace(comm,model=model,valuetype=Float64,reffe=:Lagrangian,order=1)
 
-function print_dofs(part,lspace,free_gids,model)
-  uh_gids = FEFunction(lspace,free_gids.lid_to_gid)
-  uh_owner = FEFunction(lspace,free_gids.lid_to_owner)
+do_on_parts(get_spaces_and_gids(V),model.models) do part,(space,gids),model
+
+  uh_gids = FEFunction(space,gids.lid_to_gid)
+  uh_owner = FEFunction(space,gids.lid_to_owner)
   trian = Triangulation(model)
   writevtk(trian,"results_$(part)",cellfields=["gid"=>uh_gids,"owner"=>uh_owner])
 end
 
-do_on_parts(print_dofs,V.spaces,V.free_gids,model.models)
-
-using GridapDistributed: GloballyAddressableVector
-using GridapDistributed: num_parts
-using GridapDistributed: SequentialGloballyAddressableVectorPart
-using GridapDistributed: SparseMatrixAssemblerX
-using GridapDistributed: RowsComputedLocally
-
-function init_vectors(part,lspace,gids)
-  vec = zeros(Float64,gids.ngids)
-  SequentialGloballyAddressableVectorPart(vec)
-end
-
-b = GloballyAddressableVector{Float64}(init_vectors,comm,num_parts(V.spaces),V.spaces,V.free_gids)
-
-function assem_vector(part,lmodel,lspace, dof_gids, cell_gids, lb)
-
-  lV = lspace
-  lU = TrialFESpace(lspace)
-
-  dv = get_cell_basis(lV)
-  uh0 = zero(lU)
-
-  trian = Triangulation(lmodel)
-  quad = CellQuadrature(trian,2)
-
-  t = FESource( v->1*v, trian, quad)
-
-  vecdata = collect_cell_vector(uh0,dv,[t])
-
-  lid_to_gid = dof_gids.lid_to_gid
-  cell_to_owner = cell_gids.lid_to_owner
-  lid_to_owner = dof_gids.lid_to_owner
-
-  strategy = RowsComputedLocally(lid_to_gid,cell_to_owner,lid_to_owner)
-
-  assem = SparseMatrixAssemblerX(lU,lV,strategy)
-  assemble_vector!(lb,assem,vecdata...)
-end
-
-do_on_parts(assem_vector,model.models,V.spaces,V.free_gids,model.gids,b)
-
+#using GridapDistributed: SparseMatrixAssemblerX
+#using GridapDistributed: RowsComputedLocally
+#using SparseArrays
+#
+## Define type of vector and matrix
+#T = Float64
+#vector_type = Vector{T}
+#matrix_type = SparseMatrixCSC{T,Int}
+#
+#b = GloballyAddressableVector{T}(
+#  comm, nsubdoms,
+#  model.models, V.spaces, V.free_gids) do part, model, V, dof_gids
+#
+#  U = TrialFESpace(V)
+#
+#  # FE term to assemble
+#  trian = Triangulation(model)
+#  quad = CellQuadrature(trian,2)
+#  t = FESource( v->1*v, trian, quad)
+#
+#  # Cell-wise vector
+#  dv = get_cell_basis(V)
+#  uh0 = zero(U)
+#  vecdata = collect_cell_vector(uh0,dv,[t])
+#
+#  # Strategy for the parallel assembly
+#  strategy = RowsComputedLocally(
+#    part, dof_gids.lid_to_gid, dof_gids.lid_to_owner)
+#
+#  # Create the assembler
+#  assem = SparseMatrixAssemblerX(
+#    matrix_type, vector_type, U, V, strategy, dof_gids, dof_gids)
+#
+#  # Do the assembly
+#  assemble_vector(assem,vecdata...)
+#
+#end
+#
+#@test sum(b.vec) ≈ 1
 
 end # module

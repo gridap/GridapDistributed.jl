@@ -1,6 +1,12 @@
 
 abstract type ScatteredVector{T} end
 
+Base.eltype(::Type{<:ScatteredVector{T}}) where T = T
+Base.eltype(::ScatteredVector{T}) where T = T
+
+get_part_type(::Type{<:ScatteredVector{T}}) where T = T
+get_part_type(::ScatteredVector{T}) where T = T
+
 function ScatteredVector{T}(initializer::Function,::Communicator,nparts::Integer,args...) where T
   @abstractmethod
 end
@@ -26,6 +32,7 @@ end
 function scatter(comm::Communicator,b::AbstractVector)
   @abstractmethod
 end
+
 
 struct SequentialScatteredVector{T} <: ScatteredVector{T}
   parts::Vector{T}

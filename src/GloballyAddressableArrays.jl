@@ -12,8 +12,14 @@ Base.eltype(::Type{<:GloballyAddressableVectorPart{T}}) where T = T
 Base.eltype(::GloballyAddressableVectorPart{T}) where T = T
 
 function Gridap.FESpaces.allocate_vector(
-  ::Type{<:GloballyAddressableVectorPart})
-  # TODO to think the API of this one
+  ::Type{<:GloballyAddressableVectorPart},
+  allocator)
+  @abstractmethod
+end
+
+function Gridap.Algebra.fill_entries!(
+  A::GloballyAddressableVectorPart,
+  v::Number)
   @abstractmethod
 end
 
@@ -97,30 +103,26 @@ function Gridap.Algebra.copy_entries!(
   @abstractmethod
 end
 
-struct SequentialGloballyAddressableVectorPart{T} <: GloballyAddressableVectorPart{T}
-  vec::Vector{T}
-end
-
 struct SequentialGloballyAddressableVector{T} <: GloballyAddressableVector{T}
-  parts::Vector{SequentialGloballyAddressableVectorPart{T}}
+  parts::Vector{Vector{T}}
   vec::Vector{T}
 end
 
 function GloballyAddressableVector{T}(
   initializer::Function,comm::SequentialCommunicator,nparts::Integer,args...) where T
   parts = [initializer(i,map(a->a.parts[i],args)...) for i in 1:nparts]
-  vec = sum(map(p->p.vec,parts))
-  parts = [SequentialGloballyAddressableVectorPart(vec) for i in 1:nparts]
+  vec = sum(parts)
+  parts = [vec for i in 1:nparts]
   SequentialGloballyAddressableVector(parts,vec)
 end
 
-function Gridap.Algebra.add_entry!(
-  A::SequentialGloballyAddressableVectorPart,
-  v::Number,
-  global_i::Integer,
-  combine::Function=+)
-
-  ai = A.vec[global_i]
-  A.vec[global_i] = combine(ai,v)
+#TODO move to Gridap
+function Gridap.Algebra.add_entry!(a,v,i,combine=+)
+  ai = a[i]
+  a[i] = combine(ai,v)
 end
 
+function Gridap.FESpaces.allocate_vector(
+  ::Type{Vector{T}}, gids::GhostedVectorPart) where T
+  zeros(T,gids.ngids)
+end

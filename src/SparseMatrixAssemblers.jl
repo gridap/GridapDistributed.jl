@@ -34,8 +34,8 @@ end
 # Each proc computes locally all values in the owned rows
 # This typically requires to loop also over ghost cells
 struct RowsComputedLocally <: AssemblyStrategy
+  part::Int
   lid_to_gid::Vector{Int}
-  cell_to_owner::Vector{Int}
   lid_to_owner::Vector{Int}
 end
 
@@ -48,17 +48,21 @@ function col_map(a::RowsComputedLocally,col)
 end
 
 function row_mask(a::RowsComputedLocally,cell,row)
-  a.cell_to_owner[cell] == a.lid_to_owner[row]
+  a.part == a.lid_to_owner[row]
 end
 
 function col_mask(a::RowsComputedLocally,cell,col)
   true
 end
 
-struct SparseMatrixAssemblerX <: Assembler
+struct SparseMatrixAssemblerX{M,V} <: Assembler
+  matrix_type::Type{M}
+  vector_type::Type{V}
   trial::SingleFieldFESpace
   test::SingleFieldFESpace
   strategy::AssemblyStrategy
+  trial_alloc
+  test_alloc
 end
 
 Gridap.FESpaces.get_test(a::SparseMatrixAssemblerX) = a.test
@@ -66,12 +70,12 @@ Gridap.FESpaces.get_test(a::SparseMatrixAssemblerX) = a.test
 Gridap.FESpaces.get_trial(a::SparseMatrixAssemblerX) = a.trial
 
 function Gridap.FESpaces.allocate_vector(a::SparseMatrixAssemblerX,term_to_cellidsrows)
-  allocate_vector(a.vector_type,a.test)
+  allocate_vector(a.vector_type,a.test_alloc)
 end
 
 function Gridap.FESpaces.assemble_vector!(b,a::SparseMatrixAssemblerX,term_to_cellvec,term_to_cellidsrows)
   celldofs = get_cell_dofs(a.test)
-  fill!(b,zero(eltype(b)))
+  fill_entries!(b,zero(eltype(b)))
   for (cellvec, cellids) in zip(term_to_cellvec,term_to_cellidsrows)
     rows = reindex(celldofs,cellids)
     vals = apply_constraints_vector(a.test,cellvec,cellids)

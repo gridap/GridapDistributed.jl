@@ -6,4 +6,6 @@ using Test
 
 @time @testset "DistributedFESpaces" begin include("DistributedFESpacesTests.jl") end
 
+@time @testset "GloballyAddressableArrays" begin include("GloballyAddressableArraysTests.jl") end
+
 end # module

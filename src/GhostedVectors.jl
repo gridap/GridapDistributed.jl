@@ -1,5 +1,11 @@
 abstract type GhostedVector{T} end
 
+Base.eltype(::Type{<:GhostedVector{T}}) where T = T
+Base.eltype(::GhostedVector{T}) where T = T
+
+get_part_type(::Type{<:GhostedVector{T}}) where T = GhostedVectorPart{T}
+get_part_type(::GhostedVector{T}) where T = GhostedVectorPart{T}
+
 # @santiagobadia : Think about the name... not sure ghosted meaning does have
 # much sense in this context. GhostVector or something better (names in PETSc?)
 # @santiagobadia : I think that the GhostedVectorPart should be abstract,

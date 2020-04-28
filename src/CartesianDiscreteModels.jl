@@ -16,6 +16,7 @@ function Gridap.CartesianDiscreteModel(
   models = ScatteredVector{S}(comm,nsubdoms) do (isubdom)
 
     ldesc = local_cartesian_descriptor(gdesc,subdomains,isubdom)
+    #TODO face labeling has wrong ids
     CartesianDiscreteModel(ldesc)
   end
 
