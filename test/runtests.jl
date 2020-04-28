@@ -8,4 +8,6 @@ using Test
 
 @time @testset "GloballyAddressableArrays" begin include("GloballyAddressableArraysTests.jl") end
 
+@time @testset "SparseMatrixAssemblers" begin include("SparseMatrixAssemblersTests.jl") end
+
 end # module

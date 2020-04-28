@@ -68,8 +68,9 @@ function Gridap.Algebra.finalize_coo!(
   ::Type{<:GloballyAddressableMatrixPart},
   global_I::Vector,
   global_J::Vector,
-  V::Vector)
-  #TODO to think the api of this one
+  V::Vector,
+  row_alloc,
+  col_alloc)
   @abstractmethod
 end
 
@@ -77,8 +78,9 @@ function Gridap.Algebra.sparse_from_coo(
   ::Type{<:GloballyAddressableMatrixPart},
   global_I::Vector,
   global_J::Vector,
-  V::Vector)
-  #TODO to think the api of this one
+  V::Vector,
+  row_alloc,
+  col_alloc)
   @abstractmethod
 end
 
@@ -126,3 +128,48 @@ function Gridap.FESpaces.allocate_vector(
   ::Type{Vector{T}}, gids::GhostedVectorPart) where T
   zeros(T,gids.ngids)
 end
+
+struct SequentialGloballyAddressableMatrix{T,M<:AbstractMatrix{T}} <: GloballyAddressableMatrix{T}
+  parts::Vector{M}
+  mat::M
+end
+
+function GloballyAddressableMatrix{T}(
+  initializer::Function,comm::SequentialCommunicator,nparts::Integer,args...) where T
+  parts = [initializer(i,map(a->a.parts[i],args)...) for i in 1:nparts]
+  mat = sum(parts)
+  parts = [mat for i in 1:nparts]
+  SequentialGloballyAddressableMatrix(parts,mat)
+end
+
+# TODO the following have to be implemented for AbstractMatrix
+# instead of SparseMatrixCSC when enhanced the interface in Gridap
+using SparseArrays
+
+function Gridap.Algebra.finalize_coo!(
+  ::Type{M},
+  global_I::Vector,
+  global_J::Vector,
+  V::Vector,
+  row_gids::GhostedVectorPart,
+  col_gids::GhostedVectorPart) where M <:SparseMatrixCSC
+
+  n = row_gids.ngids
+  m = col_gids.ngids
+  finalize_coo!(M,global_I,global_J,V,n,m)
+end
+
+function Gridap.Algebra.sparse_from_coo(
+  ::Type{<:M},
+  global_I::Vector,
+  global_J::Vector,
+  V::Vector,
+  row_gids::GhostedVectorPart,
+  col_gids::GhostedVectorPart) where M <:SparseMatrixCSC
+
+  n = row_gids.ngids
+  m = col_gids.ngids
+  sparse_from_coo(M,global_I,global_J,V,n,m)
+end
+
+

@@ -13,6 +13,7 @@ export SequentialCommunicator
 export MPICommunicator
 export do_on_parts
 export GloballyAddressableVector
+export GloballyAddressableMatrix
 export get_models_and_gids
 export get_spaces_and_gids
 

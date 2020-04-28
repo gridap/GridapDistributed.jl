@@ -20,11 +20,11 @@ function col_map(a::AssemblyStrategy,col)
   @abstractmethod
 end
 
-function row_mask(a::AssemblyStrategy,cell,row)
+function row_mask(a::AssemblyStrategy,row)
   @abstractmethod
 end
 
-function col_mask(a::AssemblyStrategy,cell,col)
+function col_mask(a::AssemblyStrategy,col)
   @abstractmethod
 end
 
@@ -47,11 +47,11 @@ function col_map(a::RowsComputedLocally,col)
   a.lid_to_gid[col]
 end
 
-function row_mask(a::RowsComputedLocally,cell,row)
+function row_mask(a::RowsComputedLocally,row)
   a.part == a.lid_to_owner[row]
 end
 
-function col_mask(a::RowsComputedLocally,cell,col)
+function col_mask(a::RowsComputedLocally,col)
   true
 end
 
@@ -92,7 +92,7 @@ function _assemble_vector!(vec,vals_cache,rows_cache,cell_vals,cell_rows,strateg
     rows = getindex!(rows_cache,cell_rows,cell)
     vals = getindex!(vals_cache,cell_vals,cell)
     for (i,gid) in enumerate(rows)
-      if gid > 0 && row_mask(strategy,cell,gid)
+      if gid > 0 && row_mask(strategy,gid)
         _gid = row_map(strategy,gid)
         add_entry!(vec,vals[i],_gid)
       end
@@ -121,8 +121,8 @@ function Gridap.FESpaces.allocate_matrix(a::SparseMatrixAssemblerX,term_to_celli
     cols_cache = array_cache(cell_cols)
     nini = _allocate_matrix!(a.matrix_type,nini,I,J,rows_cache,cols_cache,cell_rows,cell_cols,a.strategy)
   end
-  finalize_coo!(a.matrix_type,I,J,V,a.test,a.trial)
-  sparse_from_coo(a.matrix_type,I,J,V,a.test,a.trial)
+  finalize_coo!(a.matrix_type,I,J,V,a.test_alloc,a.trial_alloc)
+  sparse_from_coo(a.matrix_type,I,J,V,a.test_alloc,a.trial_alloc)
 end
 
 @noinline function _count_matrix_entries(::Type{M},rows_cache,cols_cache,cell_rows,cell_cols,strategy) where M
@@ -131,10 +131,10 @@ end
     rows = getindex!(rows_cache,cell_rows,cell)
     cols = getindex!(cols_cache,cell_cols,cell)
     for gidcol in cols
-      if gidcol > 0 && col_mask(strategy,cell,gidcol)
+      if gidcol > 0 && col_mask(strategy,gidcol)
         _gidcol = col_map(strategy,gidcol)
         for gidrow in rows
-          if gidrow > 0 && row_mask(strategy,cell,gidrow)
+          if gidrow > 0 && row_mask(strategy,gidrow)
             _gidrow = row_map(strategy,gidrow)
             if is_entry_stored(M,_gidrow,_gidcol)
               n += 1
@@ -153,10 +153,10 @@ end
     rows = getindex!(rows_cache,cell_rows,cell)
     cols = getindex!(cols_cache,cell_cols,cell)
     for gidcol in cols
-      if gidcol > 0 && col_mask(strategy,cell,gidcol)
+      if gidcol > 0 && col_mask(strategy,gidcol)
         _gidcol = col_map(strategy,gidcol)
         for gidrow in rows
-          if gidrow > 0 && row_mask(strategy,cell,gidrow)
+          if gidrow > 0 && row_mask(strategy,gidrow)
             _gidrow = row_map(strategy,gidrow)
             if is_entry_stored(M,_gidrow,_gidcol)
               n += 1
@@ -203,10 +203,10 @@ function _assemble_matrix!(mat,vals_cache,rows_cache,cols_cache,cell_vals,cell_r
     cols = getindex!(cols_cache,cell_cols,cell)
     vals = getindex!(vals_cache,cell_vals,cell)
     for (j,gidcol) in enumerate(cols)
-      if gidcol > 0 && col_mask(strategy,cell,gidcol)
+      if gidcol > 0 && col_mask(strategy,gidcol)
         _gidcol = col_map(strategy,gidcol)
         for (i,gidrow) in enumerate(rows)
-          if gidrow > 0 && row_mask(strategy,cell,gidrow)
+          if gidrow > 0 && row_mask(strategy,gidrow)
             _gidrow = row_map(strategy,gidrow)
             v = vals[i,j]
             add_entry!(mat,v,_gidrow,_gidcol)
@@ -244,8 +244,8 @@ function Gridap.FESpaces.assemble_matrix(
     @assert length(cellmat) == length(cell_rows)
     nini = _assemble_matrix_fill!(a.matrix_type,nini,I,J,V,vals_cache,rows_cache,cols_cache,cellmat,cell_rows,cell_cols,a.strategy)
   end
-  finalize_coo!(a.matrix_type,I,J,V,a.test,a.trial)
-  sparse_from_coo(a.matrix_type,I,J,V,a.test,a.trial)
+  finalize_coo!(a.matrix_type,I,J,V,a.test_alloc,a.trial_alloc)
+  sparse_from_coo(a.matrix_type,I,J,V,a.test_alloc,a.trial_alloc)
 end
 
 @noinline function _assemble_matrix_fill!(::Type{M},nini,I,J,V,vals_cache,rows_cache,cols_cache,cell_vals,cell_rows,cell_cols,strategy) where M
@@ -255,10 +255,10 @@ end
     cols = getindex!(cols_cache,cell_cols,cell)
     vals = getindex!(vals_cache,cell_vals,cell)
     for (j,gidcol) in enumerate(cols)
-      if gidcol > 0 && col_mask(strategy,cell,gidcol)
+      if gidcol > 0 && col_mask(strategy,gidcol)
         _gidcol = col_map(strategy,gidcol)
         for (i,gidrow) in enumerate(rows)
-          if gidrow > 0 && row_mask(strategy,cell,gidrow)
+          if gidrow > 0 && row_mask(strategy,gidrow)
             _gidrow = row_map(strategy,gidrow)
             if is_entry_stored(M,_gidrow,_gidcol)
               n += 1
@@ -324,10 +324,10 @@ function _assemble_matrix_and_vector!(A,b,vals_cache,rows_cache,cols_cache,cell_
     vals = getindex!(vals_cache,cell_vals,cell)
     matvals, vecvals = vals
     for (j,gidcol) in enumerate(cols)
-      if gidcol > 0 && col_mask(strategy,cell,gidcol)
+      if gidcol > 0 && col_mask(strategy,gidcol)
         _gidcol = col_map(strategy,gidcol)
         for (i,gidrow) in enumerate(rows)
-          if gidrow > 0 && row_mask(strategy,cell,gidrow)
+          if gidrow > 0 && row_mask(strategy,gidrow)
             _gidrow = row_map(strategy,gidrow)
             v = matvals[i,j]
             add_entry!(A,v,_gidrow,_gidcol)
@@ -336,7 +336,7 @@ function _assemble_matrix_and_vector!(A,b,vals_cache,rows_cache,cols_cache,cell_
       end
     end
     for (i,gidrow) in enumerate(rows)
-      if gidrow > 0 && row_mask(strategy,cell,gidrow)
+      if gidrow > 0 && row_mask(strategy,gidrow)
         _gidrow = row_map(strategy,gidrow)
         bi = vecvals[i]
         add_entry!(b,bi,_gidrow)
@@ -399,8 +399,8 @@ function Gridap.FESpaces.assemble_matrix_and_vector( a::SparseMatrixAssemblerX, 
     _assemble_vector!(b,vals_cache,rows_cache,vals,rows,a.strategy)
   end
 
-  finalize_coo!(a.matrix_type,I,J,V,a.test,a.trial)
-  A = sparse_from_coo(a.matrix_type,I,J,V,a.test,a.trial)
+  finalize_coo!(a.matrix_type,I,J,V,a.test_alloc,a.trial_alloc)
+  A = sparse_from_coo(a.matrix_type,I,J,V,a.test_alloc,a.trial_alloc)
 
   (A, b)
 end
@@ -413,10 +413,10 @@ end
     vals = getindex!(vals_cache,cell_vals,cell)
     matvals, vecvals = vals
     for (j,gidcol) in enumerate(cols)
-      if gidcol > 0 && col_mask(strategy,cell,gidcol)
+      if gidcol > 0 && col_mask(strategy,gidcol)
         _gidcol = col_map(strategy,gidcol)
         for (i,gidrow) in enumerate(rows)
-          if gidrow > 0 && row_mask(strategy,cell,gidrow)
+          if gidrow > 0 && row_mask(strategy,gidrow)
             _gidrow = row_map(strategy,gidrow)
             if is_entry_stored(M,_gidrow,_gidcol)
               n += 1
@@ -430,7 +430,7 @@ end
       end
     end
     for (i,gidrow) in enumerate(rows)
-      if gidrow > 0 && row_mask(strategy,cell,gidrow)
+      if gidrow > 0 && row_mask(strategy,gidrow)
         _gidrow = row_map(strategy,gidrow)
       bi = vecvals[i]
       add_entry!(b,bi,_gidrow)
