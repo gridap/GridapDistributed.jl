@@ -150,7 +150,6 @@ function local_cartesian_gids(
   sci = zeros(Int,D)
 
   for lci in lcis
-    isowned = true
     for d in 1:D
       gci[d] = d_to_lid_to_gid[d][lci[d]]
       sci[d] = d_to_lid_to_owner[d][lci[d]]
