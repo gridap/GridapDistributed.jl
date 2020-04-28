@@ -6,17 +6,19 @@ Base.eltype(::GhostedVector{T}) where T = T
 get_part_type(::Type{<:GhostedVector{T}}) where T = GhostedVectorPart{T}
 get_part_type(::GhostedVector{T}) where T = GhostedVectorPart{T}
 
-# @santiagobadia : Think about the name... not sure ghosted meaning does have
-# much sense in this context. GhostVector or something better (names in PETSc?)
-# @santiagobadia : I think that the GhostedVectorPart should be abstract,
-# I don't think we want these attributes for whatever GhostedVectorPart
-# implementation.
-# @santiagobadia : We should probably create a method that given an inconsistent
-# GhostedVector provides a new consistent GhostedVector (after some comm
-# nn comm algorithm) in the abstract interface instead. Or create a type that
-# represents the vector without the comms. Do we want to do these operations in
-# a lazy way? Does it have sense?
-
+# @santiagobadia : Renaming after discussion, in which GhostedVector is a
+# DistributedIndexSet(and _Part) and then a DistributedVector(and _Part).
+# Consider an abstract version of these structs. E.g., I don't think we want
+# these things to be Vector or Dict, instead they could be an AbstractVector
+# and create lazy vectors such that get_index provides fun(i) instead, which is
+# going to be useful in many practical implementations. E.g., gid_to_lid(gi) =
+# gi - offset, lid_to_gid(gi) = li + offset for owned vefs, we could define
+# lid_to_gid based on in which rank i falls, etc.
+# @santiagobadia : The interface will certainly require more methods after
+# the changes above
+# @santiagobadia : The exchange! method sends and receives data from other
+# procs, would it have sense a two-stage approach too? Send and only receive
+# when needed?
 struct GhostedVectorPart{T}
   ngids::Int
   lid_to_item::Vector{T}
@@ -137,5 +139,3 @@ function GhostedVector{T}(initializer::Function,comm::MPICommunicator,nparts::In
   part = initializer(i,largs...)
   MPIGhostedVector{T}(part,comm)
 end
-
-

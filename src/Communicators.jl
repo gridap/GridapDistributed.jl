@@ -1,6 +1,3 @@
-# @santiagobadia : This model seems a master-slave model more in the flavour of
-# Julia native parallelism, which is not what I would expect from MPI.
-# The abstract Communicator should probably be more abstract.
 abstract type Communicator end
 
 function do_on_parts(task::Function,::Communicator,args...)
@@ -61,5 +58,3 @@ function get_part(comm::MPICommunicator)
   @notimplementedif comm.comm !== MPI.COMM_WORLD
   MPI.Comm_rank(comm.comm) + 1
 end
-
-

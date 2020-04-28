@@ -1,5 +1,3 @@
-# @santiagobadia : From what I observe in the tests, I am not sure I understand
-# the logic between subdomains and cells.
 function Gridap.CartesianDiscreteModel(comm::Communicator,subdomains::Tuple,args...)
   desc = CartesianDescriptor(args...)
   CartesianDiscreteModel(comm,subdomains,desc)
