@@ -19,7 +19,7 @@ end
 struct SequentialCommunicator <: Communicator end
 
 function do_on_parts(task::Function,::SequentialCommunicator,args...)
-  for part in 1:length(get_distributed_data(first(args)).parts)
+  for part in 1:num_parts(get_distributed_data(first(args)))
     largs = map(a->get_distributed_data(a).parts[part],args)
     task(part,largs...)
   end
@@ -38,6 +38,7 @@ struct MPICommunicator <: Communicator
 end
 
 function MPICommunicator()
+  # TODO copy the communicator
   MPICommunicator(MPI.COMM_WORLD)
 end
 

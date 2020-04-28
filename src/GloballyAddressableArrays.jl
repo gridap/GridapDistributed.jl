@@ -110,6 +110,10 @@ struct SequentialGloballyAddressableVector{T} <: GloballyAddressableVector{T}
   vec::Vector{T}
 end
 
+get_comm(a::SequentialGloballyAddressableVector) = SequentialCommunicator()
+
+num_parts(a::SequentialGloballyAddressableVector) = length(a.parts)
+
 function GloballyAddressableVector{T}(
   initializer::Function,comm::SequentialCommunicator,nparts::Integer,args...) where T
   parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
@@ -133,6 +137,10 @@ struct SequentialGloballyAddressableMatrix{T,M<:AbstractMatrix{T}} <: GloballyAd
   parts::Vector{M}
   mat::M
 end
+
+get_comm(a::SequentialGloballyAddressableMatrix) = SequentialCommunicator()
+
+num_parts(a::SequentialGloballyAddressableMatrix) = length(a.parts)
 
 function GloballyAddressableMatrix{T}(
   initializer::Function,comm::SequentialCommunicator,nparts::Integer,args...) where T

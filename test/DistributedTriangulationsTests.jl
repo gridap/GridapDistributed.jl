@@ -12,8 +12,10 @@ model = CartesianDiscreteModel(comm,subdomains,domain,cells)
 
 trian = Triangulation(model)
 
-btrian = BoundaryTriangulation(model)
+btrian = BoundaryTriangulation(model,"boundary")
 
+# TODO fix in Gridap
+#strian = SkeletonTriangulation(model,"interior")
 strian = SkeletonTriangulation(model)
 
 writevtk(trian,"trian")

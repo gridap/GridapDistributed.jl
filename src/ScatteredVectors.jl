@@ -11,14 +11,6 @@ function ScatteredVector{T}(initializer::Function,::Communicator,nparts::Integer
   @abstractmethod
 end
 
-function get_comm(::ScatteredVector)
-  @abstractmethod
-end
-
-function num_parts(::ScatteredVector)
-  @abstractmethod
-end
-
 function gather!(a::AbstractVector,b::ScatteredVector)
   @abstractmethod
 end

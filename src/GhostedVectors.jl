@@ -80,6 +80,8 @@ end
 
 get_comm(a::SequentialGhostedVector) = SequentialCommunicator()
 
+num_parts(a::SequentialGhostedVector) = length(a.parts)
+
 function GhostedVector{T}(
   initializer::Function,::SequentialCommunicator,nparts::Integer,args...) where T
 
@@ -123,6 +125,10 @@ struct MPIGhostedVector{T} <: GhostedVector{T}
   part::GhostedVectorPart{T}
   comm::MPICommunicator
 end
+
+get_comm(a::MPIGhostedVector) = a.comm
+
+num_parts(a::MPIGhostedVector) = num_parts(a.comm)
 
 function GhostedVector{T}(initializer::Function,comm::MPICommunicator,nparts::Integer,args...) where T
   @assert nparts == num_parts(comm)
