@@ -25,6 +25,8 @@ include("GhostedVectors.jl")
 
 include("DistributedDiscreteModels.jl")
 
+include("DistributedTriangulations.jl")
+
 include("CartesianDiscreteModels.jl")
 
 include("DistributedFESpaces.jl")
