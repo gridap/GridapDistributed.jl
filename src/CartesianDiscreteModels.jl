@@ -39,15 +39,18 @@ function local_cartesian_descriptor_1d(
   orange = uniform_partition_1d(gcells,nsubdoms,isubdom)
   ocells = length(orange)
 
-  if isubdom == 1
+  if nsubdoms == 1
+    lcells =  ocells
+    lorigin = gorigin
+  elseif isubdom == 1
     lcells =  ocells + 1
     lorigin = gorigin
   elseif isubdom != nsubdoms
     lcells = ocells + 2
-    lorigin = gorigin + H*(isubdom-1)-h
+    lorigin = gorigin + (first(orange)-2)*h
   else
     lcells = ocells + 1
-    lorigin = gorigin + H*(isubdom-1)-h
+    lorigin = gorigin + (first(orange)-2)*h
   end
 
   CartesianDescriptor(lorigin,h,lcells,gdesc.map)
@@ -62,7 +65,9 @@ function local_cartesian_gids_1d(
   orange = uniform_partition_1d(gcells,nsubdoms,isubdom)
   ocells = length(orange)
 
-  if isubdom == 1
+  if nsubdoms == 1
+    lrange = orange
+  elseif isubdom == 1
     lrange = orange.start:(orange.stop+1)
   elseif isubdom != nsubdoms
     lrange = (orange.start-1):(orange.stop+1)
@@ -74,7 +79,9 @@ function local_cartesian_gids_1d(
   lid_to_gid = collect(Int,lrange)
   lid_to_owner = fill(isubdom,lcells)
 
-  if isubdom == 1
+  if nsubdoms == 1
+    nothing
+  elseif isubdom == 1
     lid_to_owner[end] = 2
   elseif isubdom != nsubdoms
     lid_to_owner[1] = isubdom - 1

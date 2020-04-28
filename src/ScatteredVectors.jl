@@ -1,7 +1,7 @@
 
 abstract type ScatteredVector{T} end
 
-function ScatteredVector{T}(initializer::Function,::Communicator,nparts::Integer) where T
+function ScatteredVector{T}(initializer::Function,::Communicator,nparts::Integer,args...) where T
   @abstractmethod
 end
 
@@ -64,7 +64,3 @@ function ScatteredVector{T}(initializer::Function,comm::MPICommunicator,nparts::
   part = initializer(i,largs...)
   MPIScatteredVector{T}(part,comm)
 end
-
-
-
-
