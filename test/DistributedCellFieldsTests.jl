@@ -21,6 +21,8 @@ u(x) = x[1]+x[2]
 
 cf = CellField(u,trian)
 
+writevtk(trian,"cellfield",cellfields=["u"=>cf])
+
 ux = evaluate(cf,q)
 
 end # module
