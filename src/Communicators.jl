@@ -50,9 +50,9 @@ function num_workers(a::SequentialCommunicator)
   1
 end
 
-function do_on_parts(task::Function,a::SequentialCommunicator,args...)
-  for part in 1:num_parts(a)
-    largs = map(a->get_distributed_data(a).parts[part],args)
+function do_on_parts(task::Function,comm::SequentialCommunicator,args...)
+  for part in 1:num_parts(comm)
+    largs = map(a->get_distributed_data(comm,a).parts[part],args)
     task(part,largs...)
   end
 end
@@ -76,7 +76,7 @@ end
 
 function do_on_parts(task::Function,comm::MPICommunicator,args...)
   part = get_part(comm)
-  largs = map(a->get_distributed_data(a).part,args)
+  largs = map(a->get_distributed_data(comm,a).part,args)
   task(part,largs...)
 end
 

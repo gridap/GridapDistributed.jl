@@ -118,7 +118,7 @@ num_parts(a::SequentialGloballyAddressableVector) = length(a.parts)
 function GloballyAddressableVector{T}(
   initializer::Function,comm::SequentialCommunicator,args...) where T
   nparts = num_parts(comm)
-  parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
+  parts = [initializer(i,map(a->get_distributed_data(comm,a).parts[i],args)...) for i in 1:nparts]
   vec = sum(parts)
   parts = [vec for i in 1:nparts]
   SequentialGloballyAddressableVector(comm,parts,vec)
@@ -148,7 +148,7 @@ num_parts(a::SequentialGloballyAddressableMatrix) = length(a.parts)
 function GloballyAddressableMatrix{T}(
   initializer::Function,comm::SequentialCommunicator,args...) where T
   nparts = num_parts(comm)
-  parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
+  parts = [initializer(i,map(a->get_distributed_data(comm,a).parts[i],args)...) for i in 1:nparts]
   mat = sum(parts)
   parts = [mat for i in 1:nparts]
   SequentialGloballyAddressableMatrix(comm,parts,mat)
