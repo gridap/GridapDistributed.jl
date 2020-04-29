@@ -23,6 +23,4 @@ cf = CellField(u,trian)
 
 ux = evaluate(cf,q)
 
-writevtk(trian,"cellfield",cellfields=["u"=>cf])
-
 end # module
