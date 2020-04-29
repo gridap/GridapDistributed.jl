@@ -17,13 +17,11 @@ trian = Triangulation(model)
 degree = 1
 quad = CellQuadrature(trian,degree)
 
-nsubdoms = prod(subdomains)
-
 integral = integrate( 1 ,trian, quad)
 
 # TODO a more elegant way to filter contributions of ghost cells
 sums = ScatteredVector{Float64}(
-  comm, nsubdoms, integral, model, trian) do part, integral, (model,gids), trian
+  comm, integral, model, trian) do part, integral, (model,gids), trian
   i = collect(integral)
   lids = get_cell_id(trian)
   mask = gids.lid_to_owner[lids] .== part

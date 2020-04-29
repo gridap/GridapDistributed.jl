@@ -7,10 +7,9 @@ function get_distributed_data(dspace::DistributedFESpace)
   spaces = dspace.spaces
   gids = dspace.gids
   comm = get_comm(spaces)
-  nparts = num_parts(spaces)
 
   T = Tuple{get_part_type(spaces),get_part_type(gids)}
-  ScatteredVector{T}(comm,nparts,spaces,gids) do part, space, lgids
+  ScatteredVector{T}(comm,spaces,gids) do part, space, lgids
     space, lgids
   end
 end
@@ -27,7 +26,7 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
     lspace = FESpace(;model=model,kwargs...)
   end
 
-  spaces = ScatteredVector{FESpace}(init_local_spaces,comm,nsubdoms,model.models)
+  spaces = ScatteredVector{FESpace}(init_local_spaces,comm,model.models)
 
   function init_lid_to_owner(part,lspace,cell_gids)
     nlids = num_free_dofs(lspace)
@@ -38,13 +37,13 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
     lid_to_owner
   end
 
-  part_to_lid_to_owner = ScatteredVector{Vector{Int}}(init_lid_to_owner,comm,nsubdoms,spaces,model.gids)
+  part_to_lid_to_owner = ScatteredVector{Vector{Int}}(init_lid_to_owner,comm,spaces,model.gids)
 
   function count_owned_lids(part,lid_to_owner)
     count(owner -> owner == part,lid_to_owner)
   end
 
-  a = ScatteredVector{Int}(count_owned_lids,comm,nsubdoms,part_to_lid_to_owner)
+  a = ScatteredVector{Int}(count_owned_lids,comm,part_to_lid_to_owner)
   part_to_num_oids = gather(a)
 
   if i_am_master(comm)
@@ -55,7 +54,7 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
     ngids = -1
   end
 
-  part_to_ngids = scatter(comm,ngids,nsubdoms)
+  part_to_ngids = scatter(comm,ngids)
 
   offsets = scatter(comm,part_to_num_oids)
 
@@ -83,7 +82,7 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
     lid_to_gid
   end
 
-  part_to_lid_to_gid = ScatteredVector{Vector{Int}}(init_lid_to_gids,comm,nsubdoms,part_to_lid_to_owner,offsets)
+  part_to_lid_to_gid = ScatteredVector{Vector{Int}}(init_lid_to_gids,comm,part_to_lid_to_owner,offsets)
 
   part_to_cell_to_gids = GhostedVector{Vector{Int}}(init_cell_to_owners,model.gids,spaces,part_to_lid_to_gid)
 
