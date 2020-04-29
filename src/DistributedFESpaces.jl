@@ -52,10 +52,10 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
     ngids_array = fill(ngids,nsubdoms)
     _fill_offsets!(part_to_num_oids)
   else
-    ngids_array = Int[]
+    ngids = -1
   end
 
-  part_to_ngids = scatter(comm,ngids_array)
+  part_to_ngids = scatter(comm,ngids,nsubdoms)
 
   offsets = scatter(comm,part_to_num_oids)
 
