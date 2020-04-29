@@ -26,7 +26,8 @@ $ sudo apt-get install openmpi-bin libopenmpi-dev
 $ julia
 ```
 ```julia
-(@v1.4) pkg> add MPI
+(@v1.4) pkg> activate
+
 ```
 
 
