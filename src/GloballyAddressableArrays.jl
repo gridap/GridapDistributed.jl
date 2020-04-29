@@ -2,7 +2,7 @@
 abstract type GloballyAddressableVector{T} <: DistributedData end
 
 function GloballyAddressableVector{T}(
-  initializer::Function,comm::Communicator,nparts::Integer) where T
+  initializer::Function,comm::Communicator) where T
   @abstractmethod
 end
 
@@ -34,7 +34,7 @@ end
 abstract type GloballyAddressableMatrix{T} <: DistributedData end
 
 function GloballyAddressableMatrix{T}(
-  initializer::Function,::Communicator,nparts::Integer,args...) where T
+  initializer::Function,::Communicator,args...) where T
   @abstractmethod
 end
 
@@ -116,7 +116,8 @@ get_comm(a::SequentialGloballyAddressableVector) = a.comm
 num_parts(a::SequentialGloballyAddressableVector) = length(a.parts)
 
 function GloballyAddressableVector{T}(
-  initializer::Function,comm::SequentialCommunicator,nparts::Integer,args...) where T
+  initializer::Function,comm::SequentialCommunicator,args...) where T
+  nparts = num_parts(comm)
   parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
   vec = sum(parts)
   parts = [vec for i in 1:nparts]
@@ -145,7 +146,8 @@ get_comm(a::SequentialGloballyAddressableMatrix) = a.comm
 num_parts(a::SequentialGloballyAddressableMatrix) = length(a.parts)
 
 function GloballyAddressableMatrix{T}(
-  initializer::Function,comm::SequentialCommunicator,nparts::Integer,args...) where T
+  initializer::Function,comm::SequentialCommunicator,args...) where T
+  nparts = num_parts(comm)
   parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
   mat = sum(parts)
   parts = [mat for i in 1:nparts]

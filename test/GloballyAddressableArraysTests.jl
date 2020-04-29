@@ -9,7 +9,7 @@ n = 10
 
 comm = SequentialCommunicator(nparts)
 
-v = GloballyAddressableVector{T}(comm,nparts) do part
+v = GloballyAddressableVector{T}(comm) do part
   rand(T,n)
 end
 

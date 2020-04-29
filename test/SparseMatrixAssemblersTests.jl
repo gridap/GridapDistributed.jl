@@ -16,8 +16,6 @@ domain = (0,1,0,1)
 cells = (4,4)
 model = CartesianDiscreteModel(comm,subdomains,domain,cells)
 
-nsubdoms = prod(subdomains)
-
 V = FESpace(comm,model=model,valuetype=Float64,reffe=:Lagrangian,order=1)
 
 # Define type of vector and matrix
@@ -26,7 +24,7 @@ vector_type = Vector{T}
 matrix_type = SparseMatrixCSC{T,Int}
 
 b = GloballyAddressableVector{T}(
-  comm, nsubdoms, model, V) do part, (model,_), (V, dof_gids)
+  comm, model, V) do part, (model,_), (V, dof_gids)
 
   U = TrialFESpace(V)
 
@@ -56,7 +54,7 @@ end
 @test sum(b.vec) ≈ 1
 
 A = GloballyAddressableMatrix{T}(
-  comm, nsubdoms, model, V) do part, (model,_), (V, dof_gids)
+  comm, model, V) do part, (model,_), (V, dof_gids)
 
   U = TrialFESpace(V)
 
