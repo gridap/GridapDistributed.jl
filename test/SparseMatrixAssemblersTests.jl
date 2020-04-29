@@ -9,9 +9,9 @@ using GridapDistributed: SparseMatrixAssemblerX
 using GridapDistributed: RowsComputedLocally
 using SparseArrays
 
-comm = SequentialCommunicator()
-
 subdomains = (2,2)
+comm = SequentialCommunicator(subdomains)
+
 domain = (0,1,0,1)
 cells = (4,4)
 model = CartesianDiscreteModel(comm,subdomains,domain,cells)

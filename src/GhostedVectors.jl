@@ -77,18 +77,19 @@ function GhostedVector{T}(
 end
 
 struct SequentialGhostedVector{T} <: GhostedVector{T}
+  comm::SequentialCommunicator
   parts::Vector{GhostedVectorPart{T}}
 end
 
-get_comm(a::SequentialGhostedVector) = SequentialCommunicator()
+get_comm(a::SequentialGhostedVector) = a.comm
 
 num_parts(a::SequentialGhostedVector) = length(a.parts)
 
 function GhostedVector{T}(
-  initializer::Function,::SequentialCommunicator,nparts::Integer,args...) where T
+  initializer::Function,comm::SequentialCommunicator,nparts::Integer,args...) where T
 
   parts = [ initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts ]
-  SequentialGhostedVector{T}(parts)
+  SequentialGhostedVector{T}(comm,parts)
 end
 
 function GhostedVector{T}(
@@ -103,7 +104,7 @@ function GhostedVector{T}(
     a.parts[i].lid_to_owner,
     a.parts[i].gid_to_lid)
     for i in 1:nparts ]
-  SequentialGhostedVector{T}(parts)
+  SequentialGhostedVector{T}(a.comm,parts)
 end
 
 function exchange!(a::SequentialGhostedVector)

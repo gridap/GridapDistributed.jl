@@ -106,11 +106,12 @@ function Gridap.Algebra.copy_entries!(
 end
 
 struct SequentialGloballyAddressableVector{T} <: GloballyAddressableVector{T}
+  comm::SequentialCommunicator
   parts::Vector{Vector{T}}
   vec::Vector{T}
 end
 
-get_comm(a::SequentialGloballyAddressableVector) = SequentialCommunicator()
+get_comm(a::SequentialGloballyAddressableVector) = a.comm
 
 num_parts(a::SequentialGloballyAddressableVector) = length(a.parts)
 
@@ -119,7 +120,7 @@ function GloballyAddressableVector{T}(
   parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
   vec = sum(parts)
   parts = [vec for i in 1:nparts]
-  SequentialGloballyAddressableVector(parts,vec)
+  SequentialGloballyAddressableVector(comm,parts,vec)
 end
 
 #TODO move to Gridap
@@ -134,11 +135,12 @@ function Gridap.FESpaces.allocate_vector(
 end
 
 struct SequentialGloballyAddressableMatrix{T,M<:AbstractMatrix{T}} <: GloballyAddressableMatrix{T}
+  comm::SequentialCommunicator
   parts::Vector{M}
   mat::M
 end
 
-get_comm(a::SequentialGloballyAddressableMatrix) = SequentialCommunicator()
+get_comm(a::SequentialGloballyAddressableMatrix) = a.comm
 
 num_parts(a::SequentialGloballyAddressableMatrix) = length(a.parts)
 
@@ -147,7 +149,7 @@ function GloballyAddressableMatrix{T}(
   parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
   mat = sum(parts)
   parts = [mat for i in 1:nparts]
-  SequentialGloballyAddressableMatrix(parts,mat)
+  SequentialGloballyAddressableMatrix(comm,parts,mat)
 end
 
 # TODO the following have to be implemented for AbstractMatrix

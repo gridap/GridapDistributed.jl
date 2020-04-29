@@ -3,9 +3,9 @@ module DistributedTriangulationsTests
 using Gridap
 using GridapDistributed
 
-comm = SequentialCommunicator()
-
 subdomains = (2,3)
+comm = SequentialCommunicator(subdomains)
+
 domain = (0,1,0,1)
 cells = (10,10)
 model = CartesianDiscreteModel(comm,subdomains,domain,cells)

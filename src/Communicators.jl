@@ -1,10 +1,14 @@
 abstract type Communicator end
 
-function do_on_parts(task::Function,::Communicator,args...)
+function num_parts(::Communicator)
   @abstractmethod
 end
 
-function i_am_master(::Communicator)
+function num_workers(::Communicator)
+  @abstractmethod
+end
+
+function do_on_parts(task::Function,::Communicator,args...)
   @abstractmethod
 end
 
@@ -13,20 +17,47 @@ function do_on_parts(task::Function,args...)
   do_on_parts(task,comm,args...)
 end
 
-struct SequentialCommunicator <: Communicator end
+function i_am_master(::Communicator)
+  @abstractmethod
+end
 
-function do_on_parts(task::Function,::SequentialCommunicator,args...)
-  for part in 1:num_parts(get_distributed_data(first(args)))
+# All communicators that are to be executed in the master to workers
+# model inherit from these one
+abstract type OrchestratedCommunicator <: Communicator end
+
+function i_am_master(::OrchestratedCommunicator)
+  true
+end
+
+# This is for the communicators to be executed in MPI mode
+abstract type CollaborativeCommunicator <: Communicator end
+
+# Specializations
+
+struct SequentialCommunicator <: OrchestratedCommunicator
+  nparts::Int
+end
+
+function SequentialCommunicator(nparts::Tuple)
+  SequentialCommunicator(prod(nparts))
+end
+
+function num_parts(a::SequentialCommunicator)
+  a.nparts
+end
+
+function num_workers(a::SequentialCommunicator)
+  1
+end
+
+function do_on_parts(task::Function,a::SequentialCommunicator,args...)
+  for part in 1:num_parts(a)
     largs = map(a->get_distributed_data(a).parts[part],args)
     task(part,largs...)
   end
 end
 
-function i_am_master(::SequentialCommunicator)
-  true
-end
-
-struct MPICommunicator <: Communicator
+struct MPICommunicator <: CollaborativeCommunicator
   comm::MPI.Comm
   master_rank::Int
   function MPICommunicator(comm::MPI.Comm,master_rank::Int=0)
@@ -54,7 +85,12 @@ function num_parts(comm::MPICommunicator)
   MPI.Comm_size(comm.comm)
 end
 
+function num_workers(comm::MPICommunicator)
+  MPI.Comm_size(comm.comm)
+end
+
 function get_part(comm::MPICommunicator)
   @notimplementedif comm.comm !== MPI.COMM_WORLD
   MPI.Comm_rank(comm.comm) + 1
 end
+

@@ -42,14 +42,15 @@ function scatter(comm::Communicator,v,nparts::Integer)
 end
 
 struct SequentialScatteredVector{T} <: ScatteredVector{T}
+  comm::SequentialCommunicator
   parts::Vector{T}
 end
 
-get_comm(a::SequentialScatteredVector) = SequentialCommunicator()
+get_comm(a::SequentialScatteredVector) = a.comm
 
-function ScatteredVector{T}(initializer::Function,::SequentialCommunicator,nparts::Integer,args...) where T
+function ScatteredVector{T}(initializer::Function,comm::SequentialCommunicator,nparts::Integer,args...) where T
   parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
-  SequentialScatteredVector(parts)
+  SequentialScatteredVector(comm,parts)
 end
 
 num_parts(a::SequentialScatteredVector) = length(a.parts)
@@ -59,7 +60,7 @@ function gather!(a::AbstractVector,b::SequentialScatteredVector)
 end
 
 function scatter(comm::SequentialCommunicator,b::AbstractVector)
-  SequentialScatteredVector(b)
+  SequentialScatteredVector(comm,b)
 end
 
 struct MPIScatteredVector{T} <: ScatteredVector{T}

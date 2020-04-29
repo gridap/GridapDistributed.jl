@@ -2,11 +2,12 @@ module GloballyAddressableArraysTests
 
 using GridapDistributed
 
-comm = SequentialCommunicator()
 
 T = Float64
 nparts = 4
 n = 10
+
+comm = SequentialCommunicator(nparts)
 
 v = GloballyAddressableVector{T}(comm,nparts) do part
   rand(T,n)

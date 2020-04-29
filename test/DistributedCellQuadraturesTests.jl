@@ -5,9 +5,9 @@ using Gridap.Geometry: get_cell_id
 using GridapDistributed
 using Test
 
-comm = SequentialCommunicator()
-
 subdomains = (2,3)
+comm = SequentialCommunicator(subdomains)
+
 domain = (0,1,0,1)
 cells = (10,10)
 model = CartesianDiscreteModel(comm,subdomains,domain,cells)
