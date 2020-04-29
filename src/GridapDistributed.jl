@@ -14,6 +14,10 @@ export MPICommunicator
 export do_on_parts
 export GloballyAddressableVector
 export GloballyAddressableMatrix
+export ScatteredVector
+export scatter
+export gather
+export i_am_master
 
 include("Communicators.jl")
 
@@ -27,9 +31,11 @@ include("GloballyAddressableArrays.jl")
 
 include("DistributedDiscreteModels.jl")
 
+include("CartesianDiscreteModels.jl")
+
 include("DistributedTriangulations.jl")
 
-include("CartesianDiscreteModels.jl")
+include("DistributedCellQuadratures.jl")
 
 include("DistributedFESpaces.jl")
 

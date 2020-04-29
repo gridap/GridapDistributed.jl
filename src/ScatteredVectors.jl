@@ -25,6 +25,15 @@ function scatter(comm::Communicator,b::AbstractVector)
   @abstractmethod
 end
 
+function scatter(comm::Communicator,v,nparts::Integer)
+  if i_am_master(comm)
+    part_to_v = fill(v,nparts)
+  else
+    T = eltype(v)
+    part_to_v = T[]
+  end
+  scatter(comm,part_to_v)
+end
 
 struct SequentialScatteredVector{T} <: ScatteredVector{T}
   parts::Vector{T}
