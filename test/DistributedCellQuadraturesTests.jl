@@ -1,7 +1,6 @@
 module DistributedCellQuadraturesTests
 
 using Gridap
-using Gridap.Geometry: get_cell_id
 using GridapDistributed
 using Test
 
@@ -14,23 +13,35 @@ model = CartesianDiscreteModel(comm,subdomains,domain,cells)
 
 trian = Triangulation(model)
 
+trian = remove_ghost_cells(trian,model)
+#trian = include_ghost_cells(trian)
+
 degree = 1
 quad = CellQuadrature(trian,degree)
 
 integral = integrate( 1 ,trian, quad)
 
-# TODO a more elegant way to filter contributions of ghost cells
-sums = ScatteredVector{Float64}(
-  comm, integral, model, trian) do part, integral, (model,gids), trian
-  i = collect(integral)
-  lids = get_cell_id(trian)
-  mask = gids.lid_to_owner[lids] .== part
-  sum(i[mask])
+# TODO better API?
+sums = ScatteredVector(integral) do part, integral
+  sum(integral)
 end
 
 v = sum(gather(sums))
 if i_am_master(comm)
   @test v ≈ 1
+end
+
+u(x) = x[2]
+integral = integrate( u ,trian, quad)
+
+# TODO better API?
+sums = ScatteredVector(integral) do part, integral
+  sum(integral)
+end
+
+v = sum(gather(sums))
+if i_am_master(comm)
+  @test v ≈ 0.5
 end
 
 end # module

@@ -18,6 +18,8 @@ export ScatteredVector
 export scatter
 export gather
 export i_am_master
+export remove_ghost_cells
+export include_ghost_cells
 
 include("Communicators.jl")
 

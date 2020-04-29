@@ -49,3 +49,34 @@ function Gridap.SkeletonTriangulation(dmodel::DistributedDiscreteModel,args...)
   DistributedTriangulation(trians)
 end
 
+
+function remove_ghost_cells(dtrian::DistributedTriangulation,dmodel)
+
+  trians = ScatteredVector(dtrian,dmodel.gids) do part, trian, gids
+
+    tcell_to_mcell = get_cell_id(trian)
+    mcell_to_isowned = gids.lid_to_owner .== part
+    tcell_to_isowned = reindex(mcell_to_isowned,tcell_to_mcell)
+    ocell_to_tcell = findall(tcell_to_isowned)
+    TriangulationPortion(trian,ocell_to_tcell)
+  end
+
+  DistributedTriangulation(trians)
+
+end
+
+function include_ghost_cells(dtrian::DistributedTriangulation)
+
+  trians = ScatteredVector(dtrian) do part, trian
+    trian.oldtrian
+  end
+
+  DistributedTriangulation(trians)
+end
+
+#TODO move to Gridap
+
+function Gridap.Geometry.get_cell_id(trian::TriangulationPortion)
+  reindex(get_cell_id(trian.oldtrian),trian.cell_to_oldcell)
+end
+
