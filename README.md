@@ -17,7 +17,9 @@ It turns out that, in Ubuntu v16.04 + OpenMPI (I did not check with other Ubuntu
 
 The solution for 2. that I found is to add the following environment variable definition to the `.bashrc` file: `export JULIA_MPI_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/openmpi/lib/`, and then, with this variable already set up on the shell, run `julia` and re-install `MPI.jl` again (see note below).
 
-**NOTE**: If you have already a "broken" installation of `MPI.jl` within your julia Pkg environment, i.e., a previous installation failure that did not succeed, I recommend that you perform in sequence the following steps before trying to add `MPI.jl` again: (1) remove the `MPI.jl` package explicitly from the current environment (e.g., using `rm MPI` in the Pkg REPL); (2) remove the package installation directory from the file system, in my case under `~/.julia/packages/MPI/ZfFyE`. Using (1)+(2) you force that all build steps of `MPI.jl` are triggered when you add it again, and that the new files generated do not clash with the ones previously generated. @santiagobadia: I didn't need to remove the package installation directory or touch the `.bashrc`. Summarizing (?)
+**NOTE**: If you have already a "broken" installation of `MPI.jl` within your julia Pkg environment, i.e., a previous installation failure that did not succeed, I recommend that you perform in sequence the following steps before trying to add `MPI.jl` again: (1) remove the `MPI.jl` package explicitly from the current environment (e.g., using `rm MPI` in the Pkg REPL); (2) remove the package installation directory from the file system, in my case under `~/.julia/packages/MPI/ZfFyE`. Using (1)+(2) you force that all build steps of `MPI.jl` are triggered when you add it again, and that the new files generated do not clash with the ones previously generated. 
+
+**[@santiagobadia]** _I didn't need to remove the package installation directory or touch the `.bashrc`. Summarizing (?)_
 
 ```shell
 $ sudo apt-get install openmpi-bin libopenmpi-dev
