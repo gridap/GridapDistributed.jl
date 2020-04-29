@@ -6,7 +6,9 @@ using Test
 
 @time @testset "DistributedTriangulations" begin include("DistributedTriangulationsTests.jl") end
 
-@time @testset "DistributedCellQuadratures" begin include("DistributedCellQuadratures.jl") end
+@time @testset "DistributedCellQuadratures" begin include("DistributedCellQuadraturesTests.jl") end
+
+@time @testset "DistributedCellFields" begin include("DistributedCellFieldsTests.jl") end
 
 @time @testset "DistributedFESpaces" begin include("DistributedFESpacesTests.jl") end
 

@@ -19,10 +19,7 @@ quad = CellQuadrature(trian,degree)
 
 nsubdoms = prod(subdomains)
 
-integral = integrate( scatter(comm,1,nsubdoms) ,trian, quad)
-
-#TODO we want this API
-# integral = integrate( 1 ,trian, quad)
+integral = integrate( 1 ,trian, quad)
 
 # TODO a more elegant way to filter contributions of ghost cells
 sums = ScatteredVector{Float64}(

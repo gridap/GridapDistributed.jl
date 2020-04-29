@@ -29,3 +29,23 @@ function num_parts(object)
   num_parts(get_distributed_data(object))
 end
 
+#function get_distributed_data(d::Dict)
+#
+#  T = typeof(d)
+#  thekeys = keys(d)
+#  thevals = values(d)
+#
+#  v = first(thevals)
+#  comm = get_comm(get_distributed_data(v))
+#  nparts = num_parts(get_distributed_data(v))
+#
+#  function initializer(part, vals...)
+#    ld = T()
+#    for (i,k) in enumerate(thekeys)
+#      ld[k] = vals[i]
+#    end
+#    ld
+#  end
+#
+#  ScatteredVector{T}(initializer,comm,nparts,values(d)...)
+#end

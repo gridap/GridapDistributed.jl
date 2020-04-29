@@ -29,13 +29,15 @@ include("GhostedVectors.jl")
 
 include("GloballyAddressableArrays.jl")
 
+include("DistributedTriangulations.jl")
+
+include("DistributedCellFields.jl")
+
+include("DistributedCellQuadratures.jl")
+
 include("DistributedDiscreteModels.jl")
 
 include("CartesianDiscreteModels.jl")
-
-include("DistributedTriangulations.jl")
-
-include("DistributedCellQuadratures.jl")
 
 include("DistributedFESpaces.jl")
 

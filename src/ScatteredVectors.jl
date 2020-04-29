@@ -11,6 +11,12 @@ function ScatteredVector{T}(initializer::Function,::Communicator,nparts::Integer
   @abstractmethod
 end
 
+function ScatteredVector{T}(initializer::Function,args...) where T
+  comm = get_comm(get_distributed_data(first(args)))
+  nparts = num_parts(get_distributed_data(first(args)))
+  ScatteredVector{T}(initializer,comm,nparts,args...)
+end
+
 function gather!(a::AbstractVector,b::ScatteredVector)
   @abstractmethod
 end
