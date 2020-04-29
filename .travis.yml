@@ -5,19 +5,17 @@ os:
 julia:
   - 1.0
   - 1.4
- addons:
-  apt:
-    update: true
-    packages:
-    - openmpi-bin
-    - libopenmpi-dev
+addons:
+ apt:
+   update: true
+   packages:
+   - openmpi-bin
+   - libopenmpi-dev
 notifications:
   email: false
 after_success:
   - julia -e 'using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
 jobs:
-  allow_failures:
-    - julia: nightly
   fast_finish: true
   include:
     - stage: Documentation
