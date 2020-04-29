@@ -8,8 +8,7 @@ function get_distributed_data(dmodel::DistributedDiscreteModel)
   gids = dmodel.gids
   comm = get_comm(models)
 
-  T = Tuple{get_part_type(models),get_part_type(gids)}
-  ScatteredVector{T}(comm,models,gids) do part, model, lgids
+  ScatteredVector(comm,models,gids) do part, model, lgids
     model, lgids
   end
 end
@@ -28,7 +27,7 @@ end
 
 function Gridap.Triangulation(dmodel::DistributedDiscreteModel,args...)
   comm = get_comm(dmodel)
-  trians = ScatteredVector{Triangulation}(comm,dmodel.models) do part, model
+  trians = ScatteredVector(comm,dmodel.models) do part, model
     Triangulation(model,args...)
   end
   DistributedTriangulation(trians)
@@ -36,7 +35,7 @@ end
 
 function Gridap.BoundaryTriangulation(dmodel::DistributedDiscreteModel,args...)
   comm = get_comm(dmodel)
-  trians = ScatteredVector{Triangulation}(comm,dmodel.models) do part, model
+  trians = ScatteredVector(comm,dmodel.models) do part, model
     BoundaryTriangulation(model,args...)
   end
   DistributedTriangulation(trians)
@@ -44,7 +43,7 @@ end
 
 function Gridap.SkeletonTriangulation(dmodel::DistributedDiscreteModel,args...)
   comm = get_comm(dmodel)
-  trians = ScatteredVector{Triangulation}(comm,dmodel.models) do part, model
+  trians = ScatteredVector(comm,dmodel.models) do part, model
     SkeletonTriangulation(model,args...)
   end
   DistributedTriangulation(trians)

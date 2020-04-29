@@ -11,9 +11,18 @@ function ScatteredVector{T}(initializer::Function,::Communicator,args...) where 
   @abstractmethod
 end
 
+function ScatteredVector(initializer::Function,::Communicator,args...)
+  @abstractmethod
+end
+
 function ScatteredVector{T}(initializer::Function,args...) where T
   comm = get_comm(get_distributed_data(first(args)))
   ScatteredVector{T}(initializer,comm,args...)
+end
+
+function ScatteredVector(initializer::Function,args...)
+  comm = get_comm(get_distributed_data(first(args)))
+  ScatteredVector(initializer,comm,args...)
 end
 
 function gather!(a::AbstractVector,b::ScatteredVector)
@@ -54,6 +63,12 @@ get_comm(a::SequentialScatteredVector) = a.comm
 function ScatteredVector{T}(initializer::Function,comm::SequentialCommunicator,args...) where T
   nparts = num_parts(comm)
   parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
+  SequentialScatteredVector{T}(comm,parts)
+end
+
+function ScatteredVector(initializer::Function,comm::SequentialCommunicator,args...) where T
+  nparts = num_parts(comm)
+  parts = [initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts]
   SequentialScatteredVector(comm,parts)
 end
 
@@ -83,4 +98,11 @@ function ScatteredVector{T}(initializer::Function,comm::MPICommunicator,args...)
   i = get_part(comm)
   part = initializer(i,largs...)
   MPIScatteredVector{T}(part,comm)
+end
+
+function ScatteredVector(initializer::Function,comm::MPICommunicator,args...) where T
+  largs = map(a->get_distributed_data(a).part,args)
+  i = get_part(comm)
+  part = initializer(i,largs...)
+  MPIScatteredVector(part,comm)
 end

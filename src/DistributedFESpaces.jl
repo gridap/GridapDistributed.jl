@@ -8,8 +8,7 @@ function get_distributed_data(dspace::DistributedFESpace)
   gids = dspace.gids
   comm = get_comm(spaces)
 
-  T = Tuple{get_part_type(spaces),get_part_type(gids)}
-  ScatteredVector{T}(comm,spaces,gids) do part, space, lgids
+  ScatteredVector(comm,spaces,gids) do part, space, lgids
     space, lgids
   end
 end
@@ -26,7 +25,7 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
     lspace = FESpace(;model=model,kwargs...)
   end
 
-  spaces = ScatteredVector{FESpace}(init_local_spaces,comm,model.models)
+  spaces = ScatteredVector(init_local_spaces,comm,model.models)
 
   function init_lid_to_owner(part,lspace,cell_gids)
     nlids = num_free_dofs(lspace)
