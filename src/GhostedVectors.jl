@@ -67,7 +67,7 @@ function exchange!(::GhostedVector)
 end
 
 function GhostedVector{T}(
-  initializer::Function,::Communicator,nparts::Integer,args...) where T
+  initializer::Function,::Communicator,args...) where T
   @abstractmethod
 end
 
@@ -86,8 +86,9 @@ get_comm(a::SequentialGhostedVector) = a.comm
 num_parts(a::SequentialGhostedVector) = length(a.parts)
 
 function GhostedVector{T}(
-  initializer::Function,comm::SequentialCommunicator,nparts::Integer,args...) where T
+  initializer::Function,comm::SequentialCommunicator,args...) where T
 
+  nparts = num_parts(comm)
   parts = [ initializer(i,map(a->get_distributed_data(a).parts[i],args)...) for i in 1:nparts ]
   SequentialGhostedVector{T}(comm,parts)
 end
@@ -95,7 +96,7 @@ end
 function GhostedVector{T}(
   initializer::Function,a::SequentialGhostedVector,args...) where T
 
-  nparts = length(a.parts)
+  nparts = num_parts(a)
   parts = [
     GhostedVectorPart(
     a.parts[i].ngids,
@@ -133,8 +134,7 @@ get_comm(a::MPIGhostedVector) = a.comm
 
 num_parts(a::MPIGhostedVector) = num_parts(a.comm)
 
-function GhostedVector{T}(initializer::Function,comm::MPICommunicator,nparts::Integer,args...) where T
-  @assert nparts == num_parts(comm)
+function GhostedVector{T}(initializer::Function,comm::MPICommunicator,args...) where T
   largs = map(a->get_distributed_data(a).part,args)
   i = get_part(comm)
   part = initializer(i,largs...)

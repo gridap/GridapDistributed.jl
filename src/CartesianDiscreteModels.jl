@@ -18,7 +18,7 @@ function Gridap.CartesianDiscreteModel(
     CartesianDiscreteModel(ldesc)
   end
 
-  gids = GhostedVector{Int}(comm,nsubdoms) do (isubdom)
+  gids = GhostedVector{Int}(comm) do (isubdom)
 
     lid_to_gid, lid_to_owner = local_cartesian_gids(gdesc,subdomains,isubdom)
     GhostedVectorPart(ngcells,lid_to_gid,lid_to_gid,lid_to_owner)

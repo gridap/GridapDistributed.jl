@@ -104,7 +104,7 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
     GhostedVectorPart(ngids,lid_to_gid,lid_to_gid,lid_to_owner)
   end
 
-  gids = GhostedVector{Int}(init_free_gids,comm,nsubdoms,part_to_lid_to_gid,part_to_lid_to_owner,part_to_ngids)
+  gids = GhostedVector{Int}(init_free_gids,comm,part_to_lid_to_gid,part_to_lid_to_owner,part_to_ngids)
 
   DistributedFESpace(spaces,gids)
 end
