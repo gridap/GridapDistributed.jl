@@ -20,14 +20,13 @@ The solution for 2. that I found is to add the following environment variable de
 **NOTE**: If you have already a "broken" installation of `MPI.jl` within your julia Pkg environment, i.e., a previous installation failure that did not succeed, I recommend that you perform in sequence the following steps before trying to add `MPI.jl` again: (1) remove the `MPI.jl` package explicitly from the current environment (e.g., using `rm MPI` in the Pkg REPL); (2) remove the package installation directory from the file system, in my case under `~/.julia/packages/MPI/ZfFyE`. Using (1)+(2) you force that all build steps of `MPI.jl` are triggered when you add it again, and that the new files generated do not clash with the ones previously generated. 
 
 **[@santiagobadia]** _I didn't need to remove the package installation directory or touch the `.bashrc`. Summarizing (?)_
-
 ```shell
 $ sudo apt-get install openmpi-bin libopenmpi-dev
-$ julia
 ```
+and install the package as usual, e.g., in the project directory run `julia` and 
 ```julia
 (@v1.4) pkg> activate
-
+(GridapDistributed) pkg> instantiate
 ```
 
 
