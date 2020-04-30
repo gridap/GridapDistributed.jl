@@ -4,24 +4,22 @@ function Gridap.CartesianDiscreteModel(comm::Communicator,subdomains::Tuple,args
 end
 
 function Gridap.CartesianDiscreteModel(
-  comm::Communicator,subdomains::Tuple,gdesc::CartesianDescriptor{D,T,F}) where {D,T,F}
+  comm::Communicator,subdomains::Tuple,gdesc::CartesianDescriptor)
 
   nsubdoms = prod(subdomains)
   ngcells = prod(Tuple(gdesc.partition))
 
-  S = CartesianDiscreteModel{D,T,F}
-
-  models = ScatteredVector{S}(comm) do (isubdom)
+  models = DistributedData(comm) do isubdom
 
     ldesc = local_cartesian_descriptor(gdesc,subdomains,isubdom)
     #TODO face labeling has wrong ids
     CartesianDiscreteModel(ldesc)
   end
 
-  gids = GhostedVector{Int}(comm) do (isubdom)
+  gids = DistributedIndexSet(comm) do isubdom
 
     lid_to_gid, lid_to_owner = local_cartesian_gids(gdesc,subdomains,isubdom)
-    GhostedVectorPart(ngcells,lid_to_gid,lid_to_gid,lid_to_owner)
+    IndexSet(lid_to_gid,lid_to_owner)
   end
 
   DistributedDiscreteModel(models,gids)

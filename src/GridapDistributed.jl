@@ -2,10 +2,10 @@ module GridapDistributed
 
 using Gridap
 using Gridap.Helpers
-#using Gridap.Geometry
-#using Gridap.FESpaces
-#using Gridap.Arrays
-#using Gridap.Algebra
+using Gridap.Geometry
+using Gridap.FESpaces
+using Gridap.Arrays
+using Gridap.Algebra
 
 #using MPI
 
@@ -47,6 +47,10 @@ include("DistributedData.jl")
 include("DistributedIndexSets.jl")
 
 include("DistributedVectors.jl")
+
+include("DistributedDiscreteModels.jl")
+
+include("CartesianDiscreteModels.jl")
 
 #
 #include("ScatteredVectors.jl")
