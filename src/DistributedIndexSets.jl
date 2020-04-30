@@ -1,8 +1,17 @@
 
-# A, B should be the type of some indexable collection, e.g. ranges or vectors
-struct IndexSet{A,B}
+# A, B, C should be the type of some indexable collection, e.g. ranges or vectors or dicts
+struct IndexSet{A,B,C}
   lid_to_gid::A
   lid_to_owner::B
+  gid_to_lid::C
+end
+
+function IndexSet(lid_to_gid,lid_to_owner)
+  gid_to_lid = Dict{Int,Int32}()
+  for (lid,gid) in enumerate(lid_to_gid)
+    gid_to_lid[gid] = lid
+  end
+  IndexSet(lid_to_gid,lid_to_owner,gid_to_lid)
 end
 
 abstract type DistributedIndexSet end
@@ -24,8 +33,8 @@ end
 
 # Specializations
 
-struct SequentialDistributedIndexSet{A,B} <: DistributedIndexSet
-  parts::SequentialDistributedData{IndexSet{A,B}}
+struct SequentialDistributedIndexSet{A,B,C} <: DistributedIndexSet
+  parts::SequentialDistributedData{IndexSet{A,B,C}}
 end
 
 get_part(

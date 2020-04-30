@@ -2,12 +2,12 @@ module GridapDistributed
 
 using Gridap
 using Gridap.Helpers
-using Gridap.Geometry
-using Gridap.FESpaces
-using Gridap.Arrays
-using Gridap.Algebra
+#using Gridap.Geometry
+#using Gridap.FESpaces
+#using Gridap.Arrays
+#using Gridap.Algebra
 
-using MPI
+#using MPI
 
 export Communicator
 export num_parts
@@ -17,6 +17,7 @@ export i_am_master
 export SequentialCommunicator
 
 export DistributedData
+export get_comm
 export get_part_type
 export gather
 export gather!
@@ -24,6 +25,8 @@ export scatter
 
 export DistributedIndexSet
 export IndexSet
+export DistributedVector
+export exchange!
 
 #export SequentialCommunicator
 #export MPICommunicator
@@ -42,6 +45,9 @@ include("Communicators.jl")
 include("DistributedData.jl")
 
 include("DistributedIndexSets.jl")
+
+include("DistributedVectors.jl")
+
 #
 #include("ScatteredVectors.jl")
 #

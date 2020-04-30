@@ -20,4 +20,7 @@ do_on_parts(indices) do part, indices
   @test indices.lid_to_owner == fill(part,5)
 end
 
+@test get_comm(indices) === comm
+@test num_parts(indices) == nparts
+
 end # module
