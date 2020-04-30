@@ -16,4 +16,6 @@ using Test
 
 @time @testset "SparseMatrixAssemblers" begin include("SparseMatrixAssemblersTests.jl") end
 
+@time @testset "DistributedAssemblers" begin include("DistributedAssemblersTests.jl") end
+
 end # module

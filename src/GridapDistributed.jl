@@ -45,4 +45,8 @@ include("DistributedFESpaces.jl")
 
 include("SparseMatrixAssemblers.jl")
 
+include("DistributedFETerms.jl")
+
+include("DistributedAssemblers.jl")
+
 end # module

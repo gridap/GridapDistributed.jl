@@ -13,6 +13,13 @@ function get_distributed_data(dspace::DistributedFESpace)
   end
 end
 
+function Gridap.TrialFESpace(V::DistributedFESpace,args...)
+  spaces = ScatteredVector(V.spaces) do part, space
+    TrialFESpace(space,args...)
+  end
+  DistributedFESpace(spaces,V.gids)
+end
+
 function Gridap.FESpace(comm::Communicator;model::DistributedDiscreteModel,kwargs...)
   DistributedFESpace(comm;model=model,kwargs...)
 end
