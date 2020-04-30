@@ -6,7 +6,7 @@ function get_comm(a::DistributedData)
   @abstractmethod
 end
 
-function num_parts(a::DistributedData)
+function num_parts(a)
   num_parts(get_comm(a))
 end
 

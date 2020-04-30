@@ -15,7 +15,7 @@ a = DistributedData{Int}(comm) do part
   10*part
 end
 
-b = DistributedData(comm,a) do part, a
+b = DistributedData(a) do part, a
   20*part + a
 end
 

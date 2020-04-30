@@ -22,6 +22,8 @@ export gather
 export gather!
 export scatter
 
+export DistributedIndexSet
+export IndexSet
 
 #export SequentialCommunicator
 #export MPICommunicator
@@ -38,6 +40,8 @@ export scatter
 include("Communicators.jl")
 
 include("DistributedData.jl")
+
+include("DistributedIndexSets.jl")
 #
 #include("ScatteredVectors.jl")
 #

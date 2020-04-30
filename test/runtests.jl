@@ -4,6 +4,8 @@ using Test
 
 @time @testset "DistributedData" begin include("DistributedDataTests.jl") end
 
+@time @testset "DistributedIndexSets" begin include("DistributedIndexSetsTests.jl") end
+
 #@time @testset "CartesianDiscreteModels" begin include("CartesianDiscreteModelsTests.jl") end
 #
 #@time @testset "DistributedTriangulations" begin include("DistributedTriangulationsTests.jl") end
