@@ -52,6 +52,8 @@ include("DistributedDiscreteModels.jl")
 
 include("CartesianDiscreteModels.jl")
 
+include("DistributedFESpaces.jl")
+
 #
 #include("ScatteredVectors.jl")
 #

@@ -15,9 +15,9 @@ using Test
 #@time @testset "DistributedCellQuadratures" begin include("DistributedCellQuadraturesTests.jl") end
 #
 #@time @testset "DistributedCellFields" begin include("DistributedCellFieldsTests.jl") end
-#
-#@time @testset "DistributedFESpaces" begin include("DistributedFESpacesTests.jl") end
-#
+
+@time @testset "DistributedFESpaces" begin include("DistributedFESpacesTests.jl") end
+
 #@time @testset "GloballyAddressableArrays" begin include("GloballyAddressableArraysTests.jl") end
 #
 #@time @testset "SparseMatrixAssemblers" begin include("SparseMatrixAssemblersTests.jl") end

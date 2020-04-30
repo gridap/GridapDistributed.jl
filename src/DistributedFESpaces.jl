@@ -1,20 +1,19 @@
 struct DistributedFESpace
-  spaces::ScatteredVector{<:FESpace}
-  gids::GhostedVector{Int}
+  spaces::DistributedData{<:FESpace}
+  gids::DistributedIndexSet
 end
 
 function get_distributed_data(dspace::DistributedFESpace)
   spaces = dspace.spaces
   gids = dspace.gids
-  comm = get_comm(spaces)
 
-  ScatteredVector(comm,spaces,gids) do part, space, lgids
+  DistributedData(spaces,gids) do part, space, lgids
     space, lgids
   end
 end
 
 function Gridap.TrialFESpace(V::DistributedFESpace,args...)
-  spaces = ScatteredVector(V.spaces) do part, space
+  spaces = DistributedData(V.spaces) do part, space
     TrialFESpace(space,args...)
   end
   DistributedFESpace(spaces,V.gids)
@@ -32,7 +31,7 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
     lspace = FESpace(;model=model,kwargs...)
   end
 
-  spaces = ScatteredVector(init_local_spaces,comm,model.models)
+  spaces = DistributedData(init_local_spaces,comm,model.models)
 
   function init_lid_to_owner(part,lspace,cell_gids)
     nlids = num_free_dofs(lspace)
@@ -43,24 +42,18 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
     lid_to_owner
   end
 
-  part_to_lid_to_owner = ScatteredVector{Vector{Int}}(init_lid_to_owner,comm,spaces,model.gids)
+  part_to_lid_to_owner = DistributedData{Vector{Int}}(init_lid_to_owner,comm,spaces,model.gids)
 
   function count_owned_lids(part,lid_to_owner)
     count(owner -> owner == part,lid_to_owner)
   end
 
-  a = ScatteredVector{Int}(count_owned_lids,comm,part_to_lid_to_owner)
+  a = DistributedData{Int}(count_owned_lids,comm,part_to_lid_to_owner)
   part_to_num_oids = gather(a)
 
   if i_am_master(comm)
-    ngids = sum(part_to_num_oids)
-    ngids_array = fill(ngids,nsubdoms)
     _fill_offsets!(part_to_num_oids)
-  else
-    ngids = -1
   end
-
-  part_to_ngids = scatter(comm,ngids)
 
   offsets = scatter(comm,part_to_num_oids)
 
@@ -71,13 +64,14 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
     cell_to_owners
   end
 
-  part_to_cell_to_owners = GhostedVector{Vector{Int}}(init_cell_to_owners,model.gids,spaces,part_to_lid_to_owner)
+  part_to_cell_to_owners = DistributedVector{Vector{Int}}(
+    init_cell_to_owners,model.gids,spaces,part_to_lid_to_owner)
 
   exchange!(part_to_cell_to_owners)
 
   function update_lid_to_owner(part,lid_to_owner,lspace,cell_to_owners)
     cell_to_lids = Table(get_cell_dofs(lspace))
-    _update_lid_to_owner!(lid_to_owner,cell_to_lids,cell_to_owners.lid_to_item)
+    _update_lid_to_owner!(lid_to_owner,cell_to_lids,cell_to_owners)
   end
 
   do_on_parts(update_lid_to_owner,part_to_lid_to_owner,spaces,part_to_cell_to_owners)
@@ -88,29 +82,33 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
     lid_to_gid
   end
 
-  part_to_lid_to_gid = ScatteredVector{Vector{Int}}(init_lid_to_gids,comm,part_to_lid_to_owner,offsets)
+  part_to_lid_to_gid = DistributedData{Vector{Int}}(
+    init_lid_to_gids,comm,part_to_lid_to_owner,offsets)
 
-  part_to_cell_to_gids = GhostedVector{Vector{Int}}(init_cell_to_owners,model.gids,spaces,part_to_lid_to_gid)
+  part_to_cell_to_gids = DistributedVector{Vector{Int}}(
+    init_cell_to_owners,model.gids,spaces,part_to_lid_to_gid)
 
   exchange!(part_to_cell_to_gids)
 
-  function update_lid_to_gid(part,lid_to_gid,lid_to_owner,lspace,cell_to_gids)
+  function update_lid_to_gid(part,lid_to_gid,lid_to_owner,lspace,cell_to_gids,cell_gids)
     cell_to_lids = Table(get_cell_dofs(lspace))
-    cell_to_owner = cell_to_gids.lid_to_owner
-    _update_lid_to_gid!(lid_to_gid,cell_to_lids,cell_to_gids.lid_to_item,cell_to_owner,lid_to_owner)
+    cell_to_owner = cell_gids.lid_to_owner
+    _update_lid_to_gid!(
+      lid_to_gid,cell_to_lids,cell_to_gids,cell_to_owner,lid_to_owner)
   end
 
-  do_on_parts(update_lid_to_gid,part_to_lid_to_gid,part_to_lid_to_owner,spaces,part_to_cell_to_gids)
+  do_on_parts(
+    update_lid_to_gid,part_to_lid_to_gid,part_to_lid_to_owner,spaces,part_to_cell_to_gids,model.gids)
 
   exchange!(part_to_cell_to_gids)
 
   do_on_parts(update_lid_to_owner,part_to_lid_to_gid,spaces,part_to_cell_to_gids)
 
-  function init_free_gids(part,lid_to_gid,lid_to_owner,ngids)
-    GhostedVectorPart(ngids,lid_to_gid,lid_to_gid,lid_to_owner)
+  function init_free_gids(part,lid_to_gid,lid_to_owner)
+    IndexSet(lid_to_gid,lid_to_owner)
   end
 
-  gids = GhostedVector{Int}(init_free_gids,comm,part_to_lid_to_gid,part_to_lid_to_owner,part_to_ngids)
+  gids = DistributedIndexSet(init_free_gids,comm,part_to_lid_to_gid,part_to_lid_to_owner)
 
   DistributedFESpace(spaces,gids)
 end
