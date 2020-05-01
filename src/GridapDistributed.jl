@@ -31,6 +31,11 @@ export num_gids
 export DistributedVector
 export exchange!
 
+export RowsComputedLocally
+
+export remove_ghost_cells
+export include_ghost_cells
+
 #export SequentialCommunicator
 #export MPICommunicator
 #export do_on_parts
@@ -60,6 +65,8 @@ include("DistributedFESpaces.jl")
 include("SparseMatrixAssemblers.jl")
 
 include("DistributedAssemblers.jl")
+
+include("DistributedTriangulations.jl")
 
 #
 #include("ScatteredVectors.jl")

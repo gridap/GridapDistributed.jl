@@ -4,9 +4,6 @@ using Gridap
 using Gridap.FESpaces
 using GridapDistributed
 using Test
-
-using GridapDistributed: SparseMatrixAssemblerX
-using GridapDistributed: RowsComputedLocally
 using SparseArrays
 
 subdomains = (2,2)
@@ -26,7 +23,7 @@ T = Float64
 vector_type = Vector{T}
 matrix_type = SparseMatrixCSC{T,Int}
 
-assem = SparseMatrixAssemblerX(matrix_type, vector_type, U, V, strategy)
+assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
 
 function setup_terms(part,(model,gids))
 
@@ -49,16 +46,5 @@ b = assemble_vector(assem,terms)
 
 @test sum(b) ≈ 1
 @test ones(1,size(A,1))*A*ones(size(A,2)) ≈ [1]
-
-x = A \ b
-
-uh = FEFunction(U,x)
-
-do_on_parts(model,uh) do part, (model,gids), uh
-
-  trian = Triangulation(model)
-  writevtk(trian,"results_$part",cellfields=["uh"=>uh])
-
-end
 
 end # module

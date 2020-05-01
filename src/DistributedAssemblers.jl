@@ -156,7 +156,7 @@ end
 
 # TODO this assumes that the global matrix type is the same
 # as the local one
-function SparseMatrixAssemblerX(
+function Gridap.FESpaces.SparseMatrixAssembler(
   matrix_type::Type,
   vector_type::Type,
   dtrial::DistributedFESpace,

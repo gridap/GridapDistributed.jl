@@ -24,4 +24,6 @@ using Test
 
 @time @testset "DistributedAssemblers" begin include("DistributedAssemblersTests.jl") end
 
+@time @testset "DistributedPoisson" begin include("DistributedPoissonTests.jl") end
+
 end # module
