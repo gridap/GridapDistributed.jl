@@ -19,6 +19,13 @@ function Gridap.TrialFESpace(V::DistributedFESpace,args...)
   DistributedFESpace(spaces,V.gids)
 end
 
+function Gridap.FESpaces.FEFunction(dV::DistributedFESpace,x)
+  dfree_vals = x[dV.gids]
+  DistributedData(dV.spaces,dfree_vals) do part, V, free_vals
+    FEFunction(V,free_vals)
+  end
+end
+
 function Gridap.FESpace(comm::Communicator;model::DistributedDiscreteModel,kwargs...)
   DistributedFESpace(comm;model=model,kwargs...)
 end
