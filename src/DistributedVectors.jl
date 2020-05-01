@@ -101,14 +101,14 @@ function exchange!(a::Vector)
   a
 end
 
-# Julia vectors are globally indexable when restricted to a part
-function get_part(comm::SequentialCommunicator,a::Vector,part::Integer)
+# By default in the SequentialCommunicator arrays are globally indexable when restricted to a part
+function get_part(comm::SequentialCommunicator,a::AbstractArray,part::Integer)
   a
 end
 
 # Assembly related
 
-function Gridap.FESpaces.allocate_vector(::Type{V},gids::DistributedIndexSet) where V <: Vector
+function Gridap.FESpaces.allocate_vector(::Type{V},gids::DistributedIndexSet) where V <: AbstractVector
   ngids = num_gids(gids)
   allocate_vector(V,ngids)
 end
@@ -122,6 +122,43 @@ end
 function Gridap.Algebra.add_entry!(a,v,i,combine=+)
   ai = a[i]
   a[i] = combine(ai,v)
+end
+
+struct SequentialIJV{A,B}
+  dIJV::A
+  gIJV::B
+end
+
+get_distributed_data(a::SequentialIJV) = a.dIJV
+
+function Gridap.Algebra.allocate_coo_vectors(::Type{M},dn::DistributedData) where M <: AbstractMatrix
+
+  part_to_n = gather(dn)
+  n = sum(part_to_n)
+  gIJV = allocate_coo_vectors(M,n)
+
+  _fill_offsets!(part_to_n)
+  offsets = scatter(get_comm(dn),part_to_n.+1)
+
+  dIJV = DistributedData(offsets) do part, offset
+    map( i -> SubVector(i,offset,n), gIJV)
+  end
+
+  SequentialIJV(dIJV,gIJV)
+end
+
+function Gridap.Algebra.finalize_coo!(
+  ::Type{M},IJV::SequentialIJV,m::DistributedIndexSet,n::DistributedIndexSet) where M <: AbstractMatrix
+  I,J,V = IJV.gIJV
+  finalize_coo!(M,I,J,V,num_gids(m),num_gids(n))
+end
+
+#TODO this should be defined for any matrix. Fix in gridap
+using SparseArrays
+function Gridap.Algebra.sparse_from_coo(
+  ::Type{M},IJV::SequentialIJV,m::DistributedIndexSet,n::DistributedIndexSet) where M <: SparseMatrixCSC
+  I,J,V = IJV.gIJV
+  sparse_from_coo(M,I,J,V,num_gids(m),num_gids(n))
 end
 
 

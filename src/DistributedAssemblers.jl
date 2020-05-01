@@ -47,6 +47,59 @@ function Gridap.FESpaces.assemble_vector(dassem::DistributedAssembler, dterms)
   vec
 end
 
+function Gridap.FESpaces.allocate_matrix(dassem::DistributedAssembler,dterms)
+
+  dmatdata = DistributedData(dassem,dterms) do part, assem, terms
+
+    U = get_trial(assem)
+    V = get_test(assem)
+
+    u = get_cell_basis(U)
+    v = get_cell_basis(V)
+
+    collect_cell_matrix(u,v,terms)
+  end
+
+  dn = DistributedData(dassem,dmatdata) do part, assem, matdata
+    count_matrix_nnz_coo(assem,matdata...)
+  end
+
+  dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
+
+  do_on_parts(dassem,dIJV,dmatdata) do part, assem, IJV, matdata
+    I,J,V = IJV
+    fill_matrix_coo_symbolic!(I,J,assem,matdata...)
+  end
+
+  finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+  sparse_from_coo(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+
+end
+
+function Gridap.FESpaces.assemble_matrix!(dmat,dassem::DistributedAssembler, dterms)
+
+  fill_entries!(dmat,zero(eltype(dmat)))
+
+  do_on_parts(dassem,dterms,dmat) do part, assem, terms, mat
+
+    U = get_trial(assem)
+    V = get_test(assem)
+
+    u = get_cell_basis(U)
+    v = get_cell_basis(V)
+
+    matdata = collect_cell_matrix(u,v,terms)
+    assemble_matrix_add!(mat,assem,matdata...)
+  end
+
+end
+
+function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dterms)
+  mat = allocate_matrix(dassem,dterms)
+  assemble_matrix!(mat,dassem,dterms)
+  mat
+end
+
 
 #function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dterms)
 #

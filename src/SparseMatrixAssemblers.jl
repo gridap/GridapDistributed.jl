@@ -77,7 +77,6 @@ function Gridap.FESpaces.assemble_vector!(b,a::SparseMatrixAssemblerX,term_to_ce
   assemble_vector_add!(b,a,term_to_cellvec,term_to_cellidsrows)
 end
 
-# TODO Add to gridap
 function assemble_vector_add!(b,a::SparseMatrixAssemblerX,term_to_cellvec,term_to_cellidsrows)
   celldofs = get_cell_dofs(a.test)
   for (cellvec, cellids) in zip(term_to_cellvec,term_to_cellidsrows)
@@ -104,6 +103,148 @@ function _assemble_vector!(vec,vals_cache,rows_cache,cell_vals,cell_rows,strateg
   end
 end
 
+function count_matrix_nnz_coo(a::Assembler,term_to_cellmat,term_to_cellidsrows, term_to_cellidscols)
+  count_matrix_nnz_coo(a,term_to_cellidsrows, term_to_cellidscols)
+end
+
+function count_matrix_nnz_coo(a::SparseMatrixAssemblerX,term_to_cellidsrows, term_to_cellidscols)
+  celldofs_rows = get_cell_dofs(a.test)
+  celldofs_cols = get_cell_dofs(a.trial)
+  n = 0
+  for (cellidsrows,cellidscols) in zip(term_to_cellidsrows,term_to_cellidscols)
+    cell_rows = reindex(celldofs_rows,cellidsrows)
+    cell_cols = reindex(celldofs_cols,cellidscols)
+    rows_cache = array_cache(cell_rows)
+    cols_cache = array_cache(cell_cols)
+    @assert length(cell_cols) == length(cell_rows)
+    n += _count_matrix_entries(a.matrix_type,rows_cache,cols_cache,cell_rows,cell_cols,a.strategy)
+  end
+
+  n
+end
+
+@noinline function _count_matrix_entries(::Type{M},rows_cache,cols_cache,cell_rows,cell_cols,strategy) where M
+  n = 0
+  for cell in 1:length(cell_cols)
+    rows = getindex!(rows_cache,cell_rows,cell)
+    cols = getindex!(cols_cache,cell_cols,cell)
+    for gidcol in cols
+      if gidcol > 0 && col_mask(strategy,gidcol)
+        _gidcol = col_map(strategy,gidcol)
+        for gidrow in rows
+          if gidrow > 0 && row_mask(strategy,gidrow)
+            _gidrow = row_map(strategy,gidrow)
+            if is_entry_stored(M,_gidrow,_gidcol)
+              n += 1
+            end
+          end
+        end
+      end
+    end
+  end
+  n
+end
+
+function fill_matrix_coo_symbolic!(I,J,a::Assembler,term_to_cellmat,term_to_cellidsrows, term_to_cellidscols)
+  fill_matrix_coo_symbolic!(I,J,a,term_to_cellidsrows, term_to_cellidscols)
+end
+
+function fill_matrix_coo_symbolic!(I,J,a::SparseMatrixAssemblerX,term_to_cellidsrows, term_to_cellidscols)
+  celldofs_rows = get_cell_dofs(a.test)
+  celldofs_cols = get_cell_dofs(a.trial)
+  nini = 0
+  for (cellidsrows,cellidscols) in zip(term_to_cellidsrows,term_to_cellidscols)
+    cell_rows = reindex(celldofs_rows,cellidsrows)
+    cell_cols = reindex(celldofs_cols,cellidscols)
+    rows_cache = array_cache(cell_rows)
+    cols_cache = array_cache(cell_cols)
+    nini = _allocate_matrix!(a.matrix_type,nini,I,J,rows_cache,cols_cache,cell_rows,cell_cols,a.strategy)
+  end
+end
+
+@noinline function _allocate_matrix!(a::Type{M},nini,I,J,rows_cache,cols_cache,cell_rows,cell_cols,strategy) where M
+  n = nini
+  for cell in 1:length(cell_cols)
+    rows = getindex!(rows_cache,cell_rows,cell)
+    cols = getindex!(cols_cache,cell_cols,cell)
+    for gidcol in cols
+      if gidcol > 0 && col_mask(strategy,gidcol)
+        _gidcol = col_map(strategy,gidcol)
+        for gidrow in rows
+          if gidrow > 0 && row_mask(strategy,gidrow)
+            _gidrow = row_map(strategy,gidrow)
+            if is_entry_stored(M,_gidrow,_gidcol)
+              n += 1
+              @inbounds I[n] = _gidrow
+              @inbounds J[n] = _gidcol
+            end
+          end
+        end
+      end
+    end
+  end
+  n
+end
+
+function Gridap.FESpaces.allocate_matrix(a::SparseMatrixAssemblerX,term_to_cellidsrows, term_to_cellidscols)
+  n = count_matrix_nnz_coo(a,term_to_cellidsrows,term_to_cellidscols)
+  I,J,V = allocate_coo_vectors(a.matrix_type,n)
+  fill_matrix_coo_symbolic!(I,J,a,term_to_cellidsrows,term_to_cellidscols)
+  m = num_free_dofs(a.test)
+  n = num_free_dofs(a.trial)
+  finalize_coo!(a.matrix_type,I,J,V,m,n)
+  sparse_from_coo(a.matrix_type,I,J,V,m,n)
+end
+
+function Gridap.FESpaces.assemble_matrix!(
+  mat,a::SparseMatrixAssemblerX, term_to_cellmat, term_to_cellidsrows, term_to_cellidscols)
+  z = zero(eltype(mat))
+  fill_entries!(mat,z)
+  assemble_matrix_add!(mat,a,term_to_cellmat,term_to_cellidsrows,term_to_cellidscols)
+end
+
+function Gridap.FESpaces.assemble_matrix_add!(
+  mat,a::SparseMatrixAssemblerX, term_to_cellmat, term_to_cellidsrows, term_to_cellidscols)
+  celldofs_rows = get_cell_dofs(a.test)
+  celldofs_cols = get_cell_dofs(a.trial)
+  for (cellmat_rc,cellidsrows,cellidscols) in zip(term_to_cellmat,term_to_cellidsrows,term_to_cellidscols)
+    cell_rows = reindex(celldofs_rows,cellidsrows)
+    cell_cols = reindex(celldofs_cols,cellidscols)
+    cellmat_r = apply_constraints_matrix_cols(a.trial,cellmat_rc,cellidscols)
+    cellmat = apply_constraints_matrix_rows(a.test,cellmat_r,cellidsrows)
+    rows_cache = array_cache(cell_rows)
+    cols_cache = array_cache(cell_cols)
+    vals_cache = array_cache(cellmat)
+    _assemble_matrix!(mat,vals_cache,rows_cache,cols_cache,cellmat,cell_rows,cell_cols,a.strategy)
+  end
+  mat
+end
+
+function _assemble_matrix!(mat,vals_cache,rows_cache,cols_cache,cell_vals,cell_rows,cell_cols,strategy)
+  @assert length(cell_cols) == length(cell_rows)
+  @assert length(cell_vals) == length(cell_rows)
+  for cell in 1:length(cell_cols)
+    rows = getindex!(rows_cache,cell_rows,cell)
+    cols = getindex!(cols_cache,cell_cols,cell)
+    vals = getindex!(vals_cache,cell_vals,cell)
+    for (j,gidcol) in enumerate(cols)
+      if gidcol > 0 && col_mask(strategy,gidcol)
+        _gidcol = col_map(strategy,gidcol)
+        for (i,gidrow) in enumerate(rows)
+          if gidrow > 0 && row_mask(strategy,gidrow)
+            _gidrow = row_map(strategy,gidrow)
+            v = vals[i,j]
+            add_entry!(mat,v,_gidrow,_gidcol)
+          end
+        end
+      end
+    end
+  end
+end
+
+# TODO efficient version of assemble_matrix directly from coo
+
+
 #function Gridap.FESpaces.allocate_matrix(a::SparseMatrixAssemblerX,term_to_cellidsrows, term_to_cellidscols)
 #  celldofs_rows = get_cell_dofs(a.test)
 #  celldofs_cols = get_cell_dofs(a.trial)
@@ -129,27 +270,6 @@ end
 #  sparse_from_coo(a.matrix_type,I,J,V,a.test_alloc,a.trial_alloc)
 #end
 #
-#@noinline function _count_matrix_entries(::Type{M},rows_cache,cols_cache,cell_rows,cell_cols,strategy) where M
-#  n = 0
-#  for cell in 1:length(cell_cols)
-#    rows = getindex!(rows_cache,cell_rows,cell)
-#    cols = getindex!(cols_cache,cell_cols,cell)
-#    for gidcol in cols
-#      if gidcol > 0 && col_mask(strategy,gidcol)
-#        _gidcol = col_map(strategy,gidcol)
-#        for gidrow in rows
-#          if gidrow > 0 && row_mask(strategy,gidrow)
-#            _gidrow = row_map(strategy,gidrow)
-#            if is_entry_stored(M,_gidrow,_gidcol)
-#              n += 1
-#            end
-#          end
-#        end
-#      end
-#    end
-#  end
-#  n
-#end
 #
 #@noinline function _allocate_matrix!(a::Type{M},nini,I,J,rows_cache,cols_cache,cell_rows,cell_cols,strategy) where M
 #  n = nini

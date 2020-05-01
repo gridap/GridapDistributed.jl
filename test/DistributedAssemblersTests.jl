@@ -45,11 +45,10 @@ end
 terms = DistributedData(setup_terms,model)
 
 #A = assemble_matrix(assem,terms)
+A = assemble_matrix(assem,terms)
 b = assemble_vector(assem,terms)
 
 @test sum(b) ≈ 1
-#mat = A.mat
-#@test ones(1,size(mat,1))*mat*ones(size(mat,2)) ≈ [1]
-
+@test ones(1,size(A,1))*A*ones(size(A,2)) ≈ [1]
 
 end # module
