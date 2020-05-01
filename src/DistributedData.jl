@@ -53,7 +53,7 @@ function scatter(comm::Communicator,b::AbstractVector)
   @abstractmethod
 end
 
-function scatter(comm::Communicator,v)
+function scatter_value(comm::Communicator,v)
   if i_am_master(comm)
     part_to_v = fill(v,num_parts(comm))
   else

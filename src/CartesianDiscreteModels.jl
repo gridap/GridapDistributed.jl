@@ -16,10 +16,10 @@ function Gridap.CartesianDiscreteModel(
     CartesianDiscreteModel(ldesc)
   end
 
-  gids = DistributedIndexSet(comm) do isubdom
+  gids = DistributedIndexSet(comm,ngcells) do isubdom
 
     lid_to_gid, lid_to_owner = local_cartesian_gids(gdesc,subdomains,isubdom)
-    IndexSet(lid_to_gid,lid_to_owner)
+    IndexSet(ngcells,lid_to_gid,lid_to_owner)
   end
 
   DistributedDiscreteModel(models,gids)

@@ -22,9 +22,12 @@ export get_part_type
 export gather
 export gather!
 export scatter
+export scatter_value
 
 export DistributedIndexSet
 export IndexSet
+export num_gids
+
 export DistributedVector
 export exchange!
 
@@ -53,6 +56,10 @@ include("DistributedDiscreteModels.jl")
 include("CartesianDiscreteModels.jl")
 
 include("DistributedFESpaces.jl")
+
+#include("SparseMatrixAssemblers.jl")
+#
+#include("DistributedAssemblers.jl")
 
 #
 #include("ScatteredVectors.jl")

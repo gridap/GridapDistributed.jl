@@ -29,7 +29,7 @@ end
 
 @test gather(b) == 30*collect(1:nparts)
 
-c = scatter(comm,2)
+c = scatter_value(comm,2)
 @test c.parts == fill(2,nparts)
 
 end # module

@@ -52,10 +52,14 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
   part_to_num_oids = gather(a)
 
   if i_am_master(comm)
+    ngids = sum(part_to_num_oids)
     _fill_offsets!(part_to_num_oids)
+  else
+    ngids = -1
   end
 
   offsets = scatter(comm,part_to_num_oids)
+  part_to_ngids = scatter_value(comm,ngids)
 
   function init_cell_to_owners(part,lspace,lid_to_owner)
     cell_to_lids = get_cell_dofs(lspace)
@@ -104,11 +108,11 @@ function DistributedFESpace(comm::Communicator;model::DistributedDiscreteModel,k
 
   do_on_parts(update_lid_to_owner,part_to_lid_to_gid,spaces,part_to_cell_to_gids)
 
-  function init_free_gids(part,lid_to_gid,lid_to_owner)
-    IndexSet(lid_to_gid,lid_to_owner)
+  function init_free_gids(part,lid_to_gid,lid_to_owner,ngids)
+    IndexSet(ngids,lid_to_gid,lid_to_owner)
   end
 
-  gids = DistributedIndexSet(init_free_gids,comm,part_to_lid_to_gid,part_to_lid_to_owner)
+  gids = DistributedIndexSet(init_free_gids,comm,ngids, part_to_lid_to_gid,part_to_lid_to_owner,part_to_ngids)
 
   DistributedFESpace(spaces,gids)
 end
