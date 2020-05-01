@@ -21,7 +21,7 @@ using Test
 #@time @testset "GloballyAddressableArrays" begin include("GloballyAddressableArraysTests.jl") end
 #
 #@time @testset "SparseMatrixAssemblers" begin include("SparseMatrixAssemblersTests.jl") end
-#
-#@time @testset "DistributedAssemblers" begin include("DistributedAssemblersTests.jl") end
+
+@time @testset "DistributedAssemblers" begin include("DistributedAssemblersTests.jl") end
 
 end # module

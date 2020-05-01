@@ -8,7 +8,7 @@ comm = SequentialCommunicator(nparts)
 
 n = 10
 
-indices = DistributedIndexSet(comm) do part
+indices = DistributedIndexSet(comm,n) do part
   lid_to_owner = fill(part,6)
   if part == 1
     lid_to_gid = 1:6
@@ -17,7 +17,7 @@ indices = DistributedIndexSet(comm) do part
     lid_to_gid = 5:10
     lid_to_owner[1] = 1
   end
-  IndexSet(lid_to_gid,lid_to_owner)
+  IndexSet(n,lid_to_gid,lid_to_owner)
 end
 
 a = DistributedVector(indices) do part

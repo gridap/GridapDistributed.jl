@@ -106,3 +106,22 @@ function get_part(comm::SequentialCommunicator,a::Vector,part::Integer)
   a
 end
 
+# Assembly related
+
+function Gridap.FESpaces.allocate_vector(::Type{V},gids::DistributedIndexSet) where V <: Vector
+  ngids = num_gids(gids)
+  allocate_vector(V,ngids)
+end
+
+#TODO move to gridap
+function Gridap.FESpaces.allocate_vector(::Type{<:AbstractVector{T}},n::Integer) where T
+  zeros(T,n)
+end
+
+#TODO move to Gridap
+function Gridap.Algebra.add_entry!(a,v,i,combine=+)
+  ai = a[i]
+  a[i] = combine(ai,v)
+end
+
+
