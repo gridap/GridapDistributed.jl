@@ -188,9 +188,10 @@ function adjust_local_labels_to_reflect_global_facelabeling!(
   topo = model.grid_topology
   polytope = first(get_polytopes(topo))
   face_labeling = model.face_labeling
+  offsets = Gridap.ReferenceFEs.get_offsets(polytope)
 
   # NOTE: The next loop is a generalized version of its (serial)
-  #       counter part in Gridap.Geometry.
+  #       counterpart in Gridap.Geometry.
   # TODO: Reduce code replication? Any strategy towards
   #       code replication implies modifications into Gridap.
   interior_id = Gridap.ReferenceFEs.num_faces(polytope)
@@ -202,50 +203,56 @@ function adjust_local_labels_to_reflect_global_facelabeling!(
     face_to_geolabel = face_labeling.d_to_dface_to_entity[d+1]
     nfaces = length(face_to_geolabel)
     for face_gid = 1:nfaces
-       # Restrict traversal to those d-faces which
-       # are on the subdomain boundary
-       if (face_to_geolabel[face_gid] != interior_id)
-         cell_gid = face_to_cells.data[face_to_cells.ptrs[face_gid]]
-         a = cell_to_faces.ptrs[cell_gid]
-         b = cell_to_faces.ptrs[cell_gid+1]-1
-         face_lid = findfirst((a)->a==face_gid, view(cell_to_faces.data, a:b))
-         # Check whether cell neighbour across face face_lid belongs to the
-         # global grid. If yes, the current face is actually at the interior
-         if (isassigned(face_deltas,face_lid))
-           gci = gcis[cell_gid]
-           if ( (gci+face_deltas[face_lid]) in gcis )
-              face_to_geolabel[face_gid]=interior_id
-           end
-         elseif (face_to_geolabel[face_gid] != face_lid)
-           face_to_geolabel[face_gid]=boundary_id
-         else
-            # If the entity label of the current face reflects that of the global grid,
-            # then there must be only one cell around in the global mesh as well
-            cell_found = false
-            for j = d+1:D-1
-              dface_to_jfaces = Gridap.ReferenceFEs.get_faces(polytope, d, j)[face_lid-offsets[d+1]]
-              if (isassigned(face_deltas,face_lid))
-                gci = gcis[cell_gid]
-                if ( (gci+face_deltas[face_lid]) in gcis )
-                   cell_found = true
-                   break
-                end
+      # Restrict traversal to those d-faces which
+      # are on the subdomain boundary
+      if (face_to_geolabel[face_gid] != interior_id)
+        cell_gid = face_to_cells.data[face_to_cells.ptrs[face_gid]]
+        a = cell_to_faces.ptrs[cell_gid]
+        b = cell_to_faces.ptrs[cell_gid+1] - 1
+        face_lid =
+          findfirst((a) -> a == face_gid, view(cell_to_faces.data, a:b))
+        face_lid += offsets[d+1]
+        # Check whether cell neighbour across face face_lid belongs to the
+        # global grid. If yes, the current face is actually at the interior
+        is_assigned_face_delta=isassigned(face_deltas, face_lid)
+        if ( is_assigned_face_delta &&
+             (gcis[gid.lid_to_gid[cell_gid]] + face_deltas[face_lid]) in gcis)
+          face_to_geolabel[face_gid] = interior_id
+        elseif (face_to_geolabel[face_gid] != face_lid)
+          face_to_geolabel[face_gid] = boundary_id
+        else
+          # If the entity label of the current face reflects that of the global grid,
+          # then there must be only one cell around in the global mesh as well
+          cell_found = false
+          for j = d+1:D-1
+            dface_to_jfaces =
+              Gridap.ReferenceFEs.get_faces(polytope, d, j)[face_lid-offsets[d+1]]
+            for k in dface_to_jfaces
+             jface_lid = k+offsets[j+1]
+             if (isassigned(face_deltas, jface_lid))
+              gci = gcis[gid.lid_to_gid[cell_gid]]
+              if ((gci + face_deltas[jface_lid]) in gcis)
+                cell_found = true
+                @goto end_j
               end
-            end
-            if (cell_found)
-              face_to_geolabel[face_gid]=boundary_id
-            end
-         end
-       end
+             end
+           end
+          end
+          @label end_j
+          if (cell_found)
+            face_to_geolabel[face_gid] = boundary_id
+          end
+        end
+      end
     end
   end
 
   # NOTE: The following nested loop was copied "as-is" from Gridap.geometry
   # TODO: Reduce code replication. Any strategy towards
   #       code replication implies modifications into Gridap.
-  for d in 0:(D-2)
-    for j in (d+1):(D-1)
-      dface_to_jfaces = Gridap.ReferenceFEs.get_faces(topo,d,j)
+  for d = 0:(D-2)
+    for j = (d+1):(D-1)
+      dface_to_jfaces = Gridap.ReferenceFEs.get_faces(topo, d, j)
       dface_to_geolabel = face_labeling.d_to_dface_to_entity[d+1]
       jface_to_geolabel = face_labeling.d_to_dface_to_entity[j+1]
       Gridap.Geometry._fix_dface_geolabels!(
@@ -253,7 +260,9 @@ function adjust_local_labels_to_reflect_global_facelabeling!(
         jface_to_geolabel,
         dface_to_jfaces.data,
         dface_to_jfaces.ptrs,
-        interior_id,boundary_id)
+        interior_id,
+        boundary_id,
+      )
     end
   end
 end
