@@ -41,8 +41,24 @@ end
 
 terms = DistributedData(setup_terms,model)
 
-A = assemble_matrix(assem,terms)
-b = assemble_vector(assem,terms)
+vecdata = DistributedData(assem,terms) do part, assem, terms
+  U = get_trial(assem)
+  V = get_test(assem)
+  u0 = zero(U)
+  v = get_cell_basis(V)
+  collect_cell_vector(u0,v,terms)
+end
+
+matdata = DistributedData(assem,terms) do part, assem, terms
+  U = get_trial(assem)
+  V = get_test(assem)
+  u = get_cell_basis(U)
+  v = get_cell_basis(V)
+  collect_cell_matrix(u,v,terms)
+end
+
+A = assemble_matrix(assem,matdata)
+b = assemble_vector(assem,vecdata)
 
 @test sum(b) ≈ 1
 @test ones(1,size(A,1))*A*ones(size(A,2)) ≈ [1]

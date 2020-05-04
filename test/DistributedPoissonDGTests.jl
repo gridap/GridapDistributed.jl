@@ -1,4 +1,4 @@
-module DistributedPoissonTests
+module DistributedPoissonDGTests
 
 using Test
 using Gridap
@@ -10,9 +10,9 @@ using GridapDistributed: RowsComputedLocally
 using SparseArrays
 
 # Manufactured solution
-u(x) = x[1] + x[2]
-#f(x) = - Δ(u)(x)
-f(x) = u(x)
+u(x) = x[1]*(x[1]-1)*x[2]*(x[2]-1)
+f(x) = - Δ(u)(x)
+ud(x) = zero(x[1])
 
 # Discretization
 subdomains = (2,2)
@@ -20,29 +20,45 @@ domain = (0,1,0,1)
 cells = (4,4)
 comm = SequentialCommunicator(subdomains)
 model = CartesianDiscreteModel(comm,subdomains,domain,cells)
+const h = (domain[2]-domain[1]) / cells[1]
 
 # FE Spaces
-order = 1
+order = 2
 V = FESpace(
-  comm, valuetype=Float64, reffe=:Lagrangian, order=1,
-  model=model, conformity=:H1)# TODO, dirichlet_tags="boundary") for the moment we solve a l2 problem
+  comm, valuetype=Float64, reffe=:Lagrangian, order=order,
+  model=model, conformity=:L2)
 
-U = TrialFESpace(V,u)
+U = TrialFESpace(V)
 
 # Terms in the weak form
 terms = DistributedData(model) do part, (model,gids)
 
-  trian = Triangulation(model)
-  
+  γ = 10
   degree = 2*order
+
+  trian = get_triangulation(model)
+  btrian = BoundaryTriangulation(model)
+  strian = SkeletonTriangulation(model)
+
   quad = CellQuadrature(trian,degree)
+  bquad = CellQuadrature(btrian,degree)
+  squad = CellQuadrature(strian,degree)
+  
+  bn = get_normal_vector(btrian)
+  sn = get_normal_vector(strian)
 
-  #a(u,v) = ∇(v)*∇(u)
-  a(u,v) = v*u
+  a(u,v) = inner(∇(v),∇(u))
   l(v) = v*f
-  t1 = AffineFETerm(a,l,trian,quad)
+  t_Ω = AffineFETerm(a,l,trian,quad)
+  
+  a_Γd(u,v) = (γ/h)*v*u  - v*(bn*∇(u)) - (bn*∇(v))*u
+  l_Γd(v) = (γ/h)*v*ud - (bn*∇(v))*ud
+  t_Γd = AffineFETerm(a_Γd,l_Γd,btrian,bquad)
+  
+  a_Γ(u,v) = (γ/h)*jump(v*sn)*jump(u*sn) - jump(v*sn)*mean(∇(u)) -  mean(∇(v))*jump(u*sn)
+  t_Γ = LinearFETerm(a_Γ,strian,squad)
 
-  (t1,)
+  (t_Ω,t_Γ,t_Γd)
 end
 
 # Select matrix and vector types for discrete problem
@@ -79,15 +95,22 @@ sums = DistributedData(model,uh) do part, (model,gids), uh
   e = u - owned_uh
 
   l2(u) = u*u
+  h1(u) = u*u + ∇(u)*∇(u)
 
-  sum(integrate(l2(e),owned_trian,owned_quad))
+  e_l2 = sum(integrate(l2(e),owned_trian,owned_quad))
+  e_h1 = sum(integrate(h1(e),owned_trian,owned_quad))
 
+  e_l2, e_h1
 end
 
-e_l2 = sum(gather(sums))
+e_l2_h1 = gather(sums)
+
+e_l2 = sum(map(i->i[1],e_l2_h1))
+e_h1 = sum(map(i->i[2],e_l2_h1))
 
 tol = 1.0e-9
 @test e_l2 < tol
+@test e_h1 < tol
 
 
 end # module

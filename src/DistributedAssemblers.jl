@@ -18,47 +18,25 @@ function get_distributed_data(dassem::DistributedAssembler)
   dassem.assems
 end
 
-function Gridap.FESpaces.allocate_vector(a::DistributedAssembler,dterms)
+function Gridap.FESpaces.allocate_vector(a::DistributedAssembler,dvecdata)
   gids = a.test.gids
   allocate_vector(a.vector_type,gids)
 end
 
-function Gridap.FESpaces.assemble_vector!(dvec,dassem::DistributedAssembler, dterms)
-
+function Gridap.FESpaces.assemble_vector!(dvec,dassem::DistributedAssembler, dvecdata)
   fill_entries!(dvec,zero(eltype(dvec)))
-
-  do_on_parts(dassem,dterms,dvec) do part, assem, terms, vec
-
-    U = get_trial(assem)
-    V = get_test(assem)
-
-    u0 = zero(U)
-    v = get_cell_basis(V)
-
-    vecdata = collect_cell_vector(u0,v,terms)
+  do_on_parts(dassem,dvecdata,dvec) do part, assem, vecdata, vec
     assemble_vector_add!(vec,assem,vecdata...)
   end
-
 end
 
-function Gridap.FESpaces.assemble_vector(dassem::DistributedAssembler, dterms)
-  vec = allocate_vector(dassem,dterms)
-  assemble_vector!(vec,dassem,dterms)
+function Gridap.FESpaces.assemble_vector(dassem::DistributedAssembler, dvecdata)
+  vec = allocate_vector(dassem,dvecdata)
+  assemble_vector!(vec,dassem,dvecdata)
   vec
 end
 
-function Gridap.FESpaces.allocate_matrix(dassem::DistributedAssembler,dterms)
-
-  dmatdata = DistributedData(dassem,dterms) do part, assem, terms
-
-    U = get_trial(assem)
-    V = get_test(assem)
-
-    u = get_cell_basis(U)
-    v = get_cell_basis(V)
-
-    collect_cell_matrix(u,v,terms)
-  end
+function Gridap.FESpaces.allocate_matrix(dassem::DistributedAssembler,dmatdata)
 
   dn = DistributedData(dassem,dmatdata) do part, assem, matdata
     count_matrix_nnz_coo(assem,matdata...)
@@ -76,72 +54,20 @@ function Gridap.FESpaces.allocate_matrix(dassem::DistributedAssembler,dterms)
 
 end
 
-function Gridap.FESpaces.assemble_matrix!(dmat,dassem::DistributedAssembler, dterms)
-
+function Gridap.FESpaces.assemble_matrix!(dmat,dassem::DistributedAssembler, dmatdata)
   fill_entries!(dmat,zero(eltype(dmat)))
-
-  do_on_parts(dassem,dterms,dmat) do part, assem, terms, mat
-
-    U = get_trial(assem)
-    V = get_test(assem)
-
-    u = get_cell_basis(U)
-    v = get_cell_basis(V)
-
-    matdata = collect_cell_matrix(u,v,terms)
+  do_on_parts(dassem,dmatdata,dmat) do part, assem, matdata, mat
     assemble_matrix_add!(mat,assem,matdata...)
   end
-
 end
 
-function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dterms)
-  mat = allocate_matrix(dassem,dterms)
-  assemble_matrix!(mat,dassem,dterms)
+function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dmatdata)
+  mat = allocate_matrix(dassem,dmatdata)
+  assemble_matrix!(mat,dassem,dmatdata)
   mat
 end
 
 
-#function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dterms)
-#
-#  comm = get_comm(dassem)
-#  #TODO Float64
-#  GloballyAddressableMatrix{Float64}(comm,dassem,dterms) do part, assem, terms
-#
-#    U = get_trial(assem)
-#    V = get_test(assem)
-#
-#    u = get_cell_basis(U)
-#    v = get_cell_basis(V)
-#
-#    matdata = collect_cell_matrix(u,v,terms)
-#    assemble_matrix(assem,matdata...)
-#  end
-#
-#end
-#
-#function Gridap.FESpaces.assemble_vector(dassem::DistributedAssembler, dterms)
-#
-#  comm = get_comm(dassem)
-#  #TODO Float64
-#  GloballyAddressableVector{Float64}(comm,dassem,dterms) do part, assem, terms
-#
-#    U = get_trial(assem)
-#    V = get_test(assem)
-#
-#    u0 = zero(U)
-#    v = get_cell_basis(V)
-#
-#    vecdata = collect_cell_vector(u0,v,terms)
-#    assemble_vector(assem,vecdata...)
-#  end
-#
-#end
-#
-#function Gridap.FESpaces.assemble_matrix_and_vector(
-#  dassem::DistributedAssembler, dterms::DistributedFETerm...)
-#  @notimplemented
-#  #TODO
-#end
 #
 # Specializations
 
