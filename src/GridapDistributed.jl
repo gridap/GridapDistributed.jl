@@ -75,22 +75,12 @@ include("DistributedTriangulations.jl")
 #
 #include("GloballyAddressableArrays.jl")
 #
-#include("DistributedTriangulations.jl")
-#
 #include("DistributedCellFields.jl")
 #
 #include("DistributedCellQuadratures.jl")
 #
-#include("DistributedDiscreteModels.jl")
-#
 #include("CartesianDiscreteModels.jl")
 #
-#include("DistributedFESpaces.jl")
-#
-#include("SparseMatrixAssemblers.jl")
-#
 #include("DistributedFETerms.jl")
-#
-#include("DistributedAssemblers.jl")
 
 end # module
