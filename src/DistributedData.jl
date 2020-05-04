@@ -41,9 +41,9 @@ end
 
 function gather(b::DistributedData{T}) where T
   if i_am_master(get_comm(b))
-    a = zeros(T,num_parts(b))
+    a = Vector{T}(undef,num_parts(b))
   else
-    a = zeros(T,0)
+    a = Vector{T}(undef,0)
   end
   gather!(a,b)
   a

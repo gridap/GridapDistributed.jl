@@ -16,4 +16,6 @@ using Test
 
 @time @testset "DistributedPoisson" begin include("DistributedPoissonTests.jl") end
 
+@time @testset "DistributedPoissonDG" begin include("DistributedPoissonDGTests.jl") end
+
 end # module
