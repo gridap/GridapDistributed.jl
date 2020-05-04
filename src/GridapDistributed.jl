@@ -54,6 +54,8 @@ include("SparseMatrixAssemblers.jl")
 
 include("DistributedAssemblers.jl")
 
+include("DistributedFEOperators.jl")
+
 include("DistributedTriangulations.jl")
 
 end # module

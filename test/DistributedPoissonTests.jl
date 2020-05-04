@@ -57,8 +57,9 @@ strategy = RowsComputedLocally(V)
 
 # Assembly
 assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
-A = assemble_matrix(assem,terms)
-b = assemble_vector(assem,terms)
+op = AffineFEOperator(assem,terms)
+A = get_matrix(op)
+b = get_vector(op)
 
 # FE solution
 x = A \ b
