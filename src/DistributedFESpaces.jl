@@ -30,7 +30,7 @@ end
 function Gridap.FESpaces.EvaluationFunction(dV::DistributedFESpace,x)
   dfree_vals = x[dV.gids]
   funs = DistributedData(dV.spaces,dfree_vals) do part, V, free_vals
-    EvaluationFunction(V,free_vals)
+    Gridap.FESpaces.EvaluationFunction(V,free_vals)
   end
   DistributedFEFunction(funs,x,dV)
 end
