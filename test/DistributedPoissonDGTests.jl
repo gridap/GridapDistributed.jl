@@ -9,6 +9,13 @@ using GridapDistributed: SparseMatrixAssemblerX
 using GridapDistributed: RowsComputedLocally
 using SparseArrays
 
+# Select matrix and vector types for discrete problem
+# Note that here we use serial vectors and matrices
+# but the assembly is distributed
+T = Float64
+vector_type = Vector{T}
+matrix_type = SparseMatrixCSC{T,Int}
+
 # Manufactured solution
 u(x) = x[1]*(x[1]-1)*x[2]*(x[2]-1)
 f(x) = - Δ(u)(x)
@@ -25,7 +32,7 @@ const h = (domain[2]-domain[1]) / cells[1]
 # FE Spaces
 order = 2
 V = FESpace(
-  comm, valuetype=Float64, reffe=:Lagrangian, order=order,
+  vector_type, valuetype=Float64, reffe=:Lagrangian, order=order,
   model=model, conformity=:L2)
 
 U = TrialFESpace(V)
@@ -61,25 +68,16 @@ terms = DistributedData(model) do part, (model,gids)
   (t_Ω,t_Γ,t_Γd)
 end
 
-# Select matrix and vector types for discrete problem
-# Note that here we use serial vectors and matrices
-# but the assembly is distributed
-T = Float64
-vector_type = Vector{T}
-matrix_type = SparseMatrixCSC{T,Int}
-
 # Chose parallel assembly strategy
 strategy = RowsComputedLocally(V)
 
 # Assembly
 assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
 op = AffineFEOperator(assem,terms)
-A = get_matrix(op)
-b = get_vector(op)
 
 # FE solution
-x = A \ b
-uh = FEFunction(U,x)
+op = AffineFEOperator(assem,terms)
+uh = solve(op)
 
 # Error norms and print solution
 sums = DistributedData(model,uh) do part, (model,gids), uh
@@ -111,6 +109,5 @@ e_h1 = sum(map(i->i[2],e_l2_h1))
 tol = 1.0e-9
 @test e_l2 < tol
 @test e_h1 < tol
-
 
 end # module

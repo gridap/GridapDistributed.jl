@@ -72,6 +72,8 @@ function get_distributed_data(object)
   object
 end
 
+get_comm(a) = get_comm(get_distributed_data(a))
+
 # Specializations
 
 struct SequentialDistributedData{T} <: DistributedData{T}
