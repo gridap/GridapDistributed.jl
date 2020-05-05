@@ -172,10 +172,12 @@ function _update_lid_to_gid!(lid_to_gid,cell_to_lids,cell_to_gids,cell_to_owner,
     cellowner = cell_to_owner[cell]
     for (i,p) in enumerate(pini:pend)
       lid = cell_to_lids.data[p]
-      owner = lid_to_owner[lid]
-      if owner == cellowner
-        gid = i_to_gid[i]
-        lid_to_gid[lid] = gid
+      if lid > 0
+        owner = lid_to_owner[lid]
+        if owner == cellowner
+          gid = i_to_gid[i]
+          lid_to_gid[lid] = gid
+        end
       end
     end
   end
@@ -188,8 +190,10 @@ function _update_lid_to_owner!(lid_to_owner,cell_to_lids,cell_to_owners)
     pend = cell_to_lids.ptrs[cell+1]-1
     for (i,p) in enumerate(pini:pend)
       lid = cell_to_lids.data[p]
-      owner = i_to_owner[i]
-      lid_to_owner[lid] = owner
+      if lid > 0
+        owner = i_to_owner[i]
+        lid_to_owner[lid] = owner
+      end
     end
   end
 end

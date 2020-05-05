@@ -18,8 +18,7 @@ matrix_type = SparseMatrixCSC{T,Int}
 
 # Manufactured solution
 u(x) = x[1] + x[2]
-#f(x) = - Δ(u)(x)
-f(x) = u(x)
+f(x) = - Δ(u)(x)
 
 # Discretization
 subdomains = (2,2)
@@ -31,8 +30,8 @@ model = CartesianDiscreteModel(comm,subdomains,domain,cells)
 # FE Spaces
 order = 1
 V = FESpace(
-  vector_type, valuetype=Float64, reffe=:Lagrangian, order=1,
-  model=model, conformity=:H1)# TODO, dirichlet_tags="boundary") for the moment we solve a l2 problem
+  vector_type, valuetype=Float64, reffe=:Lagrangian, order=order,
+  model=model, conformity=:H1, dirichlet_tags="boundary")
 
 U = TrialFESpace(V,u)
 
@@ -44,8 +43,7 @@ terms = DistributedData(model) do part, (model,gids)
   degree = 2*order
   quad = CellQuadrature(trian,degree)
 
-  #a(u,v) = ∇(v)*∇(u)
-  a(u,v) = v*u
+  a(u,v) = ∇(v)*∇(u)
   l(v) = v*f
   t1 = AffineFETerm(a,l,trian,quad)
 
