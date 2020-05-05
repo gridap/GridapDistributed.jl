@@ -55,13 +55,15 @@ matrix_type = SparseMatrixCSC{T,Int}
 # Chose parallel assembly strategy
 strategy = RowsComputedLocally(V)
 
-# Assembly
+# Assembler
 assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
 op = AffineFEOperator(assem,terms)
-A = get_matrix(op)
-b = get_vector(op)
+
 
 # FE solution
+# TODO make use of a FE solver
+A = get_matrix(op)
+b = get_vector(op)
 x = A \ b
 uh = FEFunction(U,x)
 

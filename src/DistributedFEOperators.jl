@@ -1,23 +1,4 @@
 
-struct DistributedAffineOperator{A,B}
-  matrix::A
-  vector::B
-end
-
-Gridap.Algebra.get_matrix(op::DistributedAffineOperator) = op.matrix
-
-Gridap.Algebra.get_vector(op::DistributedAffineOperator) = op.vector
-
-struct DistributedAffineFEOperator
-  trial::DistributedFESpace
-  test::DistributedFESpace
-  op::DistributedAffineOperator
-end
-
-Gridap.Algebra.get_matrix(op::DistributedAffineFEOperator) = get_matrix(op.op)
-
-Gridap.Algebra.get_vector(op::DistributedAffineFEOperator) = get_vector(op.op)
-
 function Gridap.FESpaces.AffineFEOperator(dassem::DistributedAssembler, dterms)
 
   dvecdata = DistributedData(dassem,dterms) do part, assem, terms
@@ -41,8 +22,8 @@ function Gridap.FESpaces.AffineFEOperator(dassem::DistributedAssembler, dterms)
   trial = dassem.trial
   test = dassem.test
 
-  op = DistributedAffineOperator(A,b)
-  DistributedAffineFEOperator(trial,test,op)
+  op = AffineOperator(A,b)
+  AffineFEOperator(trial,test,op)
 
 end
 

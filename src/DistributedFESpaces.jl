@@ -1,4 +1,6 @@
-struct DistributedFESpace
+# TODO we are not completely implementing the FESpace interface since not
+# all methods make sense for the distributed case at the moment
+struct DistributedFESpace <: FESpace
   spaces::DistributedData{<:FESpace}
   gids::DistributedIndexSet
 end
@@ -19,11 +21,25 @@ function Gridap.TrialFESpace(V::DistributedFESpace,args...)
   DistributedFESpace(spaces,V.gids)
 end
 
+# TODO we are not completely implementing the FEFunction interface since not
+# all methods make sense for the distributed case at the moment
+struct DistributedFEFunction
+  funs::DistributedData
+  vals::AbstractVector
+end
+
+Gridap.FESpaces.FEFunctionStyle(::Type{DistributedFEFunction}) = Val{true}()
+
+get_distributed_data(u::DistributedFEFunction) = u.funs
+
+Gridap.FESpaces.get_free_values(a::DistributedFEFunction) = a.vals
+
 function Gridap.FESpaces.FEFunction(dV::DistributedFESpace,x)
   dfree_vals = x[dV.gids]
-  DistributedData(dV.spaces,dfree_vals) do part, V, free_vals
+  funs = DistributedData(dV.spaces,dfree_vals) do part, V, free_vals
     FEFunction(V,free_vals)
   end
+  DistributedFEFunction(funs,x)
 end
 
 function Gridap.FESpace(comm::Communicator;model::DistributedDiscreteModel,kwargs...)
