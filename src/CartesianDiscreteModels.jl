@@ -190,6 +190,15 @@ function adjust_local_labels_to_reflect_global_facelabeling!(
   face_labeling = model.face_labeling
   offsets = Gridap.ReferenceFEs.get_offsets(polytope)
 
+  polytope_d_face_to_jfaces =
+    Matrix{Vector{Vector{Int}}}(undef, (D,D))
+  for d = 0:(D-1)
+    for j = d+1:D-1
+      polytope_d_face_to_jfaces[d+1, j+1] =
+        Gridap.ReferenceFEs.get_faces(polytope, d, j)
+    end
+  end
+
   # NOTE: The next loop is a generalized version of its (serial)
   #       counterpart in Gridap.Geometry.
   # TODO: Reduce code replication? Any strategy towards
@@ -209,14 +218,24 @@ function adjust_local_labels_to_reflect_global_facelabeling!(
         cell_gid = face_to_cells.data[face_to_cells.ptrs[face_gid]]
         a = cell_to_faces.ptrs[cell_gid]
         b = cell_to_faces.ptrs[cell_gid+1] - 1
-        face_lid =
-          findfirst((a) -> a == face_gid, view(cell_to_faces.data, a:b))
+
+        face_lid = -1
+        for j = a:b
+          if (cell_to_faces.data[j] == face_gid)
+            face_lid = j - a + 1
+            break
+          end
+        end
+        @assert face_lid != -1
+
         face_lid += offsets[d+1]
         # Check whether cell neighbour across face face_lid belongs to the
         # global grid. If yes, the current face is actually at the interior
-        is_assigned_face_delta=isassigned(face_deltas, face_lid)
-        if ( is_assigned_face_delta &&
-             (gcis[gid.lid_to_gid[cell_gid]] + face_deltas[face_lid]) in gcis)
+        is_assigned_face_delta = isassigned(face_deltas, face_lid)
+        if (
+          is_assigned_face_delta &&
+          (gcis[gid.lid_to_gid[cell_gid]] + face_deltas[face_lid]) in gcis
+        )
           face_to_geolabel[face_gid] = interior_id
         elseif (face_to_geolabel[face_gid] != face_lid)
           face_to_geolabel[face_gid] = boundary_id
@@ -226,19 +245,16 @@ function adjust_local_labels_to_reflect_global_facelabeling!(
           cell_found = false
           for j = d+1:D-1
             dface_to_jfaces =
-              Gridap.ReferenceFEs.get_faces(polytope, d, j)[face_lid-offsets[d+1]]
-            for k in dface_to_jfaces
-             jface_lid = k+offsets[j+1]
-             if (isassigned(face_deltas, jface_lid))
-              gci = gcis[gid.lid_to_gid[cell_gid]]
-              if ((gci + face_deltas[jface_lid]) in gcis)
-                cell_found = true
-                @goto end_j
-              end
-             end
-           end
+              polytope_d_face_to_jfaces[d+1, j+1][face_lid-offsets[d+1]]
+            cell_found = _is_there_interior_cell_across_higher_dim_faces(
+              dface_to_jfaces,
+              offsets[j+1],
+              gcis,
+              gid.lid_to_gid[cell_gid],
+              face_deltas,
+            )
+            cell_found && break
           end
-          @label end_j
           if (cell_found)
             face_to_geolabel[face_gid] = boundary_id
           end
@@ -267,6 +283,25 @@ function adjust_local_labels_to_reflect_global_facelabeling!(
   end
 end
 
+function _is_there_interior_cell_across_higher_dim_faces(
+  dface_to_jfaces,
+  offset_j,
+  gcis,
+  cell_gid,
+  face_deltas,
+)
+  for k in dface_to_jfaces
+    jface_lid = k + offset_j
+    if (isassigned(face_deltas, jface_lid))
+      gci = gcis[cell_gid]
+      if ((gci + face_deltas[jface_lid]) in gcis)
+        return true
+      end
+    end
+  end
+  return false
+end
+
 """
   _find_face_neighbour(model::CartesianDiscreteModel{D}, cell_gid, face_lid) where {D}
     -> Union{Nothing,get_data_eltype(eltype(model.grid_topology.n_m_to_nface_to_mfaces))}
@@ -293,11 +328,12 @@ function _find_face_neighbour(
   p = first(model.grid_topology.polytopes)
   num_faces = Gridap.ReferenceFEs.num_faces(p)
   offsets = Gridap.ReferenceFEs.get_offsets(p)
+  topo = model.grid_topology
   @assert 1 <= face_lid <= num_faces
   d = Gridap.ReferenceFEs.get_facedims(p)[face_lid] # Dimension of the face
   @assert 0 <= d < D
-  cells_to_dfaces = model.grid_topology.n_m_to_nface_to_mfaces[D+1, d+1]
-  dfaces_to_cells = model.grid_topology.n_m_to_nface_to_mfaces[d+1, D+1]
+  cells_to_dfaces = Gridap.ReferenceFEs.get_faces(topo, D, d)
+  dfaces_to_cells = Gridap.ReferenceFEs.get_faces(topo, d, D)
   face_gid = cells_to_dfaces[cell_gid][face_lid-offsets[d+1]]
   dface_to_cells = dfaces_to_cells[face_gid]
   dface_to_cells = Set(dface_to_cells)
@@ -306,8 +342,8 @@ function _find_face_neighbour(
     dface_to_jfaces =
       Set(Gridap.ReferenceFEs.get_faces(p, d, j)[face_lid-offsets[d+1]])
     for jface_lid in dface_to_jfaces
-      jfaces_to_cells = model.grid_topology.n_m_to_nface_to_mfaces[j+1, D+1]
-      cells_to_jfaces = model.grid_topology.n_m_to_nface_to_mfaces[D+1, j+1]
+      jfaces_to_cells = Gridap.ReferenceFEs.get_faces(topo, j, D)
+      cells_to_jfaces = Gridap.ReferenceFEs.get_faces(topo, D, j)
       jface_gid = cells_to_jfaces[cell_gid][jface_lid]
       jface_to_cells = jfaces_to_cells[jface_gid]
       setdiff!(dface_to_cells, jface_to_cells)
