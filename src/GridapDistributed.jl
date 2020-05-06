@@ -50,8 +50,6 @@ include("CartesianDiscreteModels.jl")
 
 include("DistributedFESpaces.jl")
 
-include("SparseMatrixAssemblers.jl")
-
 include("DistributedAssemblers.jl")
 
 include("DistributedFEOperators.jl")

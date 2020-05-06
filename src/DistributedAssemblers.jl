@@ -1,3 +1,4 @@
+
 struct DistributedAssemblyStrategy
   strategies::DistributedData{<:AssemblyStrategy}
 end
@@ -71,6 +72,32 @@ end
 #
 # Specializations
 
+# This is one of the usual assembly strategies in parallel FE computations
+# (but not the one we have used in the parallel agfem paper)
+# Each proc owns a set of matrix / vector rows (and all cols in these rows)
+# Each proc computes locally all values in the owned rows
+# This typically requires to loop also over ghost cells
+struct RowsComputedLocally <: AssemblyStrategy
+  part::Int
+  lid_to_gid::Vector{Int}
+  lid_to_owner::Vector{Int}
+end
+
+function Gridap.FESpaces.row_map(a::RowsComputedLocally,row)
+  a.lid_to_gid[row]
+end
+
+function Gridap.FESpaces.col_map(a::RowsComputedLocally,col)
+  a.lid_to_gid[col]
+end
+
+function Gridap.FESpaces.row_mask(a::RowsComputedLocally,row)
+  a.part == a.lid_to_owner[row]
+end
+
+function Gridap.FESpaces.col_mask(a::RowsComputedLocally,col)
+  true
+end
 
 function RowsComputedLocally(V::DistributedFESpace)
   dgids = V.gids
@@ -92,7 +119,7 @@ function Gridap.FESpaces.SparseMatrixAssembler(
   assems = DistributedData(
     dtrial.spaces,dtest.spaces,dstrategy) do part, U, V, strategy
 
-    SparseMatrixAssemblerX(matrix_type,vector_type,U,V,strategy)
+    SparseMatrixAssembler(matrix_type,vector_type,U,V,strategy)
   end
 
   DistributedAssembler(matrix_type,vector_type,dtrial,dtest,assems)
