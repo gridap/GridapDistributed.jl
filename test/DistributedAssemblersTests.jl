@@ -6,6 +6,10 @@ using GridapDistributed
 using Test
 using SparseArrays
 
+T = Float64
+vector_type = Vector{T}
+matrix_type = SparseMatrixCSC{T,Int}
+
 subdomains = (2,2)
 comm = SequentialCommunicator(subdomains)
 
@@ -13,15 +17,12 @@ domain = (0,1,0,1)
 cells = (4,4)
 model = CartesianDiscreteModel(comm,subdomains,domain,cells)
 
-V = FESpace(comm,model=model,valuetype=Float64,reffe=:Lagrangian,order=1)
+V = FESpace(vector_type,model=model,valuetype=Float64,reffe=:Lagrangian,order=1)
 
 U = TrialFESpace(V)
 
 strategy = RowsComputedLocally(V)
 
-T = Float64
-vector_type = Vector{T}
-matrix_type = SparseMatrixCSC{T,Int}
 
 assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
 

@@ -18,4 +18,6 @@ using Test
 
 @time @testset "DistributedPoissonDG" begin include("DistributedPoissonDGTests.jl") end
 
+@time @testset "DistributedPLaplacian" begin include("DistributedPLaplacianTests.jl") end
+
 end # module

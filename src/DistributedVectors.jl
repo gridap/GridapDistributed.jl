@@ -108,20 +108,9 @@ end
 
 # Assembly related
 
-function Gridap.FESpaces.allocate_vector(::Type{V},gids::DistributedIndexSet) where V <: AbstractVector
+function Gridap.Algebra.allocate_vector(::Type{V},gids::DistributedIndexSet) where V <: AbstractVector
   ngids = num_gids(gids)
   allocate_vector(V,ngids)
-end
-
-#TODO move to gridap
-function Gridap.FESpaces.allocate_vector(::Type{<:AbstractVector{T}},n::Integer) where T
-  zeros(T,n)
-end
-
-#TODO move to Gridap
-function Gridap.Algebra.add_entry!(a,v,i,combine=+)
-  ai = a[i]
-  a[i] = combine(ai,v)
 end
 
 struct SequentialIJV{A,B}
@@ -153,10 +142,8 @@ function Gridap.Algebra.finalize_coo!(
   finalize_coo!(M,I,J,V,num_gids(m),num_gids(n))
 end
 
-#TODO this should be defined for any matrix. Fix in gridap
-using SparseArrays
 function Gridap.Algebra.sparse_from_coo(
-  ::Type{M},IJV::SequentialIJV,m::DistributedIndexSet,n::DistributedIndexSet) where M <: SparseMatrixCSC
+  ::Type{M},IJV::SequentialIJV,m::DistributedIndexSet,n::DistributedIndexSet) where M
   I,J,V = IJV.gIJV
   sparse_from_coo(M,I,J,V,num_gids(m),num_gids(n))
 end

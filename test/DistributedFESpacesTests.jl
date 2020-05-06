@@ -6,15 +6,16 @@ using Gridap.FESpaces
 using Test
 
 subdomains = (2,2)
-comm = SequentialCommunicator(subdomains)
-
 domain = (0,1,0,1)
 cells = (4,4)
+comm = SequentialCommunicator(subdomains)
 model = CartesianDiscreteModel(comm,subdomains,domain,cells)
 
 nsubdoms = prod(subdomains)
 
-V = FESpace(comm,model=model,valuetype=Float64,reffe=:Lagrangian,order=1)
+vector_type = Vector{Float64}
+
+V = FESpace(vector_type,model=model,valuetype=Float64,reffe=:Lagrangian,order=1)
 
 do_on_parts(V, model) do part,(space,gids), (model,_)
 

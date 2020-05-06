@@ -1,4 +1,4 @@
-module DistributedPoissonDGTests
+module DistributedPLaplacianTests
 
 using Test
 using Gridap
@@ -8,6 +8,7 @@ using GridapDistributed
 using GridapDistributed: SparseMatrixAssemblerX
 using GridapDistributed: RowsComputedLocally
 using SparseArrays
+using LinearAlgebra: norm
 
 # Select matrix and vector types for discrete problem
 # Note that here we use serial vectors and matrices
@@ -17,9 +18,12 @@ vector_type = Vector{T}
 matrix_type = SparseMatrixCSC{T,Int}
 
 # Manufactured solution
-u(x) = x[1]*(x[1]-1)*x[2]*(x[2]-1)
+u(x) = x[1] + x[2] + 1
 f(x) = - Δ(u)(x)
-ud(x) = zero(x[1])
+
+const p = 3
+@law flux(∇u) = norm(∇u)^(p-2) * ∇u
+@law dflux(∇du,∇u) = (p-2)*norm(∇u)^(p-4)*inner(∇u,∇du)*∇u + norm(∇u)^(p-2)*∇du
 
 # Discretization
 subdomains = (2,2)
@@ -27,57 +31,45 @@ domain = (0,1,0,1)
 cells = (4,4)
 comm = SequentialCommunicator(subdomains)
 model = CartesianDiscreteModel(comm,subdomains,domain,cells)
-const h = (domain[2]-domain[1]) / cells[1]
 
 # FE Spaces
-order = 2
+order = 3
 V = FESpace(
   vector_type, valuetype=Float64, reffe=:Lagrangian, order=order,
-  model=model, conformity=:L2)
+  model=model, conformity=:H1, dirichlet_tags="boundary")
 
-U = TrialFESpace(V)
+U = TrialFESpace(V,u)
 
 # Terms in the weak form
 terms = DistributedData(model) do part, (model,gids)
 
-  γ = 10
+  trian = Triangulation(model)
+  
   degree = 2*order
-
-  trian = get_triangulation(model)
-  btrian = BoundaryTriangulation(model)
-  strian = SkeletonTriangulation(model)
-
   quad = CellQuadrature(trian,degree)
-  bquad = CellQuadrature(btrian,degree)
-  squad = CellQuadrature(strian,degree)
-  
-  bn = get_normal_vector(btrian)
-  sn = get_normal_vector(strian)
 
-  a(u,v) = inner(∇(v),∇(u))
-  l(v) = v*f
-  t_Ω = AffineFETerm(a,l,trian,quad)
-  
-  a_Γd(u,v) = (γ/h)*v*u  - v*(bn*∇(u)) - (bn*∇(v))*u
-  l_Γd(v) = (γ/h)*v*ud - (bn*∇(v))*ud
-  t_Γd = AffineFETerm(a_Γd,l_Γd,btrian,bquad)
-  
-  a_Γ(u,v) = (γ/h)*jump(v*sn)*jump(u*sn) - jump(v*sn)*mean(∇(u)) -  mean(∇(v))*jump(u*sn)
-  t_Γ = LinearFETerm(a_Γ,strian,squad)
+  res(u,v) = inner( ∇(v), flux(∇(u)) ) - inner(v,f)
+  jac(u,du,v) = inner(  ∇(v) , dflux(∇(du),∇(u)) )
+  t_Ω = FETerm(res,jac,trian,quad)
 
-  (t_Ω,t_Γ,t_Γd)
+  (t_Ω,)
 end
 
 # Chose parallel assembly strategy
 strategy = RowsComputedLocally(V)
 
-# Assembly
+# Assembler
 assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
-op = AffineFEOperator(assem,terms)
+
+# Non linear solver
+nls = NLSolver(show_trace=true, method=:newton)
+solver = FESolver(nls)
 
 # FE solution
-op = AffineFEOperator(assem,terms)
-uh = solve(op)
+op = FEOperator(assem,terms)
+x = rand(T,num_free_dofs(U))
+uh0 = FEFunction(U,x)
+uh, = solve!(uh0,solver,op)
 
 # Error norms and print solution
 sums = DistributedData(model,uh) do part, (model,gids), uh
@@ -88,26 +80,20 @@ sums = DistributedData(model,uh) do part, (model,gids), uh
   owned_quad = CellQuadrature(owned_trian,2*order)
   owned_uh = restrict(uh,owned_trian)
 
-  writevtk(owned_trian,"results_$part",cellfields=["uh"=>owned_uh])
+  #writevtk(owned_trian,"results_plaplacian_$part",cellfields=["uh"=>owned_uh])
 
   e = u - owned_uh
 
   l2(u) = u*u
-  h1(u) = u*u + ∇(u)*∇(u)
 
-  e_l2 = sum(integrate(l2(e),owned_trian,owned_quad))
-  e_h1 = sum(integrate(h1(e),owned_trian,owned_quad))
+  sum(integrate(l2(e),owned_trian,owned_quad))
 
-  e_l2, e_h1
 end
 
-e_l2_h1 = gather(sums)
-
-e_l2 = sum(map(i->i[1],e_l2_h1))
-e_h1 = sum(map(i->i[2],e_l2_h1))
+e_l2 = sum(gather(sums))
 
 tol = 1.0e-9
 @test e_l2 < tol
-@test e_h1 < tol
+
 
 end # module
