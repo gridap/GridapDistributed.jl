@@ -52,6 +52,8 @@ include("DistributedFESpaces.jl")
 
 include("DistributedAssemblers.jl")
 
+include("DistributedFETerms.jl")
+
 include("DistributedFEOperators.jl")
 
 include("DistributedTriangulations.jl")

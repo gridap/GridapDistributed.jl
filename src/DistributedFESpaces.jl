@@ -39,6 +39,13 @@ function Gridap.FESpaces.zero_free_values(f::DistributedFESpace)
   allocate_vector(f.vector_type,f.gids)
 end
 
+function Gridap.FESpaces.get_cell_basis(f::DistributedFESpace)
+  bases = DistributedData(f.spaces) do part, space
+    get_cell_basis(space)
+  end
+  DistributedCellBasis(bases)
+end
+
 # FE Function
 
 struct DistributedFEFunction
@@ -54,6 +61,16 @@ get_distributed_data(u::DistributedFEFunction) = u.funs
 Gridap.FESpaces.get_free_values(a::DistributedFEFunction) = a.vals
 
 Gridap.FESpaces.get_fe_space(a::DistributedFEFunction) = a.space
+
+# Cell basis
+
+struct DistributedCellBasis
+  bases::DistributedData
+end
+
+Gridap.FESpaces.FECellBasisStyle(::Type{DistributedCellBasis}) = Val{true}()
+
+get_distributed_data(u::DistributedCellBasis) = u.bases
 
 #  Constructors
 
