@@ -39,35 +39,6 @@ function compute_cmin_cmax(
   return CartesianIndex(Tuple(cmin)), CartesianIndex(Tuple(cmax))
 end
 
-function local_cartesian_descriptor_1d(
-  gdesc::CartesianDescriptor{1},nsubdoms::Integer,isubdom::Integer)
-
-  gcells, = gdesc.partition
-  gorigin, = gdesc.origin
-  h, = gdesc.sizes
-  H = h*gcells/nsubdoms
-
-  orange = uniform_partition_1d(gcells,nsubdoms,isubdom)
-  ocells = length(orange)
-
-  if nsubdoms == 1
-    lcells =  ocells
-    lorigin = gorigin
-  elseif isubdom == 1
-    lcells =  ocells + 1
-    lorigin = gorigin
-  elseif isubdom != nsubdoms
-    lcells = ocells + 2
-    lorigin = gorigin + (first(orange)-2)*h
-  else
-    lcells = ocells + 1
-    lorigin = gorigin + (first(orange)-2)*h
-  end
-
-  CartesianDescriptor(lorigin,h,lcells,gdesc.map)
-
-end
-
 function local_cartesian_gids_1d(
   gdesc::CartesianDescriptor{1},
   nsubdoms::Integer,
