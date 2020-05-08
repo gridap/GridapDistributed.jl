@@ -8,16 +8,12 @@ function Gridap.CartesianDiscreteModel(
 
   nsubdoms = prod(subdomains)
   ngcells = prod(Tuple(gdesc.partition))
-
   models = DistributedData(comm) do isubdom
-
-    ldesc = local_cartesian_descriptor(gdesc,subdomains,isubdom)
-    #TODO face labeling has wrong ids
-    CartesianDiscreteModel(ldesc)
+    cmin, cmax = compute_cmin_cmax(gdesc, subdomains, isubdom)
+    CartesianDiscreteModel(gdesc, cmin, cmax)
   end
 
   gids = DistributedIndexSet(comm,ngcells) do isubdom
-
     lid_to_gid, lid_to_owner = local_cartesian_gids(gdesc,subdomains,isubdom)
     IndexSet(ngcells,lid_to_gid,lid_to_owner)
   end
@@ -25,57 +21,35 @@ function Gridap.CartesianDiscreteModel(
   DistributedDiscreteModel(models,gids)
 end
 
-function local_cartesian_descriptor_1d(
-  gdesc::CartesianDescriptor{1},nsubdoms::Integer,isubdom::Integer)
-
-  gcells, = gdesc.partition
-  gorigin, = gdesc.origin
-  h, = gdesc.sizes
-  H = h*gcells/nsubdoms
-
-  orange = uniform_partition_1d(gcells,nsubdoms,isubdom)
-  ocells = length(orange)
-
-  if nsubdoms == 1
-    lcells =  ocells
-    lorigin = gorigin
-  elseif isubdom == 1
-    lcells =  ocells + 1
-    lorigin = gorigin
-  elseif isubdom != nsubdoms
-    lcells = ocells + 2
-    lorigin = gorigin + (first(orange)-2)*h
-  else
-    lcells = ocells + 1
-    lorigin = gorigin + (first(orange)-2)*h
+function compute_cmin_cmax(
+  gdesc::CartesianDescriptor{D,T},
+  nsubdoms::Tuple,
+  isubdom::Integer,
+) where {D,T}
+  cis = CartesianIndices(nsubdoms)
+  ci = cis[isubdom]
+  cmin = Vector{Int}(undef, D)
+  cmax = Vector{Int}(undef, D)
+  for d = 1:D
+    orange = uniform_partition_1d(gdesc.partition[d], nsubdoms[d], ci[d])
+    lrange = extend_range_with_ghost_cells(orange, nsubdoms[d], ci[d])
+    cmin[d] = first(lrange)
+    cmax[d] = last(lrange)
   end
-
-  CartesianDescriptor(lorigin,h,lcells,gdesc.map)
-
+  return CartesianIndex(Tuple(cmin)), CartesianIndex(Tuple(cmax))
 end
 
 function local_cartesian_gids_1d(
-  gdesc::CartesianDescriptor{1},nsubdoms::Integer,isubdom::Integer)
-
+  gdesc::CartesianDescriptor{1},
+  nsubdoms::Integer,
+  isubdom::Integer,
+)
   gcells, = gdesc.partition
-
-  orange = uniform_partition_1d(gcells,nsubdoms,isubdom)
-  ocells = length(orange)
-
-  if nsubdoms == 1
-    lrange = orange
-  elseif isubdom == 1
-    lrange = orange.start:(orange.stop+1)
-  elseif isubdom != nsubdoms
-    lrange = (orange.start-1):(orange.stop+1)
-  else
-    lrange = (orange.start-1):orange.stop
-  end
-
+  orange = uniform_partition_1d(gcells, nsubdoms, isubdom)
+  lrange = extend_range_with_ghost_cells(orange, nsubdoms, isubdom)
   lcells = length(lrange)
-  lid_to_gid = collect(Int,lrange)
-  lid_to_owner = fill(isubdom,lcells)
-
+  lid_to_gid = collect(Int, lrange)
+  lid_to_owner = fill(isubdom, lcells)
   if nsubdoms == 1
     nothing
   elseif isubdom == 1
@@ -86,31 +60,20 @@ function local_cartesian_gids_1d(
   else
     lid_to_owner[1] = isubdom - 1
   end
-
   lid_to_gid, lid_to_owner
 end
 
-function local_cartesian_descriptor(gdesc::CartesianDescriptor,nsubdoms::Tuple,isubdom::Integer)
-  cis = CartesianIndices(nsubdoms)
-  ci = cis[isubdom]
-  local_cartesian_descriptor(gdesc,nsubdoms,ci)
-end
-
-function local_cartesian_descriptor(
-  gdesc::CartesianDescriptor{D,T},nsubdoms::Tuple,isubdom::CartesianIndex) where {D,T}
-
-  origin = zeros(T,D)
-  sizes = zeros(T,D)
-  partition = zeros(Int,D)
-  for d in 1:D
-    gdesc_d = CartesianDescriptor(gdesc.origin[d],gdesc.sizes[d],gdesc.partition[d])
-    ldesc_d = local_cartesian_descriptor_1d(gdesc_d,nsubdoms[d],isubdom[d])
-    origin[d] = ldesc_d.origin[1]
-    sizes[d] = ldesc_d.sizes[1]
-    partition[d] = ldesc_d.partition[1]
+function extend_range_with_ghost_cells(orange, nsubdoms, isubdom)
+  if nsubdoms == 1
+    lrange = orange
+  elseif isubdom == 1
+    lrange = orange.start:(orange.stop+1)
+  elseif isubdom != nsubdoms
+    lrange = (orange.start-1):(orange.stop+1)
+  else
+    lrange = (orange.start-1):orange.stop
   end
-
-  CartesianDescriptor(origin,sizes,partition,gdesc.map)
+  return lrange
 end
 
 function local_cartesian_gids(
