@@ -4,9 +4,6 @@ using Test
 using Gridap
 using Gridap.FESpaces
 using GridapDistributed
-
-using GridapDistributed: SparseMatrixAssemblerX
-using GridapDistributed: RowsComputedLocally
 using SparseArrays
 
 # Select matrix and vector types for discrete problem
