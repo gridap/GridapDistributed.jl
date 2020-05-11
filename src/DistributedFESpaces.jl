@@ -37,7 +37,7 @@ end
 
 function Gridap.FESpaces.zero_free_values(f::DistributedFESpace)
   fv = allocate_vector(f.vector_type,f.gids)
-  fill_entries!(fv)
+  fill_entries!(fv,zero(eltype(fv)))
   fv
 end
 
