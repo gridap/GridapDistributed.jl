@@ -36,7 +36,9 @@ function Gridap.FESpaces.EvaluationFunction(dV::DistributedFESpace,x)
 end
 
 function Gridap.FESpaces.zero_free_values(f::DistributedFESpace)
-  allocate_vector(f.vector_type,f.gids)
+  fv = allocate_vector(f.vector_type,f.gids)
+  fill_entries!(fv)
+  fv
 end
 
 function Gridap.FESpaces.get_cell_basis(f::DistributedFESpace)
