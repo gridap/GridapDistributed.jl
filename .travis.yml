@@ -15,8 +15,6 @@ notifications:
   email:
     on_success: never
     on_failure: always
-before_script:
-  - julia -e 'using Pkg; Pkg.add(PackageSpec(name="Gridap",rev="GridapDistributed"))'
 after_success:
   - julia -e 'using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
 jobs:
@@ -26,7 +24,6 @@ jobs:
       julia: 1.4
       script: julia --project=docs -e '
           using Pkg;
-          Pkg.add(PackageSpec(name="Gridap",rev="GridapDistributed"));
           Pkg.develop(PackageSpec(path=pwd()));
           Pkg.instantiate();
           include("docs/make.jl");'

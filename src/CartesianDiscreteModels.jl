@@ -89,7 +89,10 @@ function local_cartesian_gids(
   d_to_lid_to_gid = Vector{Int}[]
   d_to_lid_to_owner = Vector{Int}[]
   for d in 1:D
-    gdesc_d = CartesianDescriptor(gdesc.origin[d],gdesc.sizes[d],gdesc.partition[d])
+    origin_d = Point(gdesc.origin[d])
+    sizes_d = (gdesc.sizes[d],)
+    partition_d = (gdesc.partition[d],)
+    gdesc_d = CartesianDescriptor(origin_d,sizes_d,partition_d)
     lid_to_gid_d, lid_to_owner_d = local_cartesian_gids_1d(gdesc_d,nsubdoms[d],isubdom[d])
     push!(d_to_lid_to_gid,lid_to_gid_d)
     push!(d_to_lid_to_owner,lid_to_owner_d)
