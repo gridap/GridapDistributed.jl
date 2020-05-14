@@ -11,17 +11,6 @@ function include_ghost_cells(trian::TriangulationPortion)
     trian.oldtrian
 end
 
-#TODO move to Gridap
-function Gridap.Geometry.get_cell_id(trian::TriangulationPortion)
-  reindex(get_cell_id(trian.oldtrian),trian.cell_to_oldcell)
-end
-
-#TODO move to Gridap
-function Gridap.Geometry.restrict(f::AbstractArray,trian::TriangulationPortion)
-  reindex(f,trian)
-end
-
-
 #
 #
 #
