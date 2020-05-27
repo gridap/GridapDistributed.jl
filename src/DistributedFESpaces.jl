@@ -2,6 +2,7 @@ struct DistributedFESpace{V} <: FESpace
   vector_type::V
   spaces::DistributedData{<:FESpace}
   gids::DistributedIndexSet
+  model::DistributedDiscreteModel
 end
 
 function get_distributed_data(dspace::DistributedFESpace)
@@ -80,7 +81,7 @@ function Gridap.TrialFESpace(V::DistributedFESpace,args...)
   spaces = DistributedData(V.spaces) do part, space
     TrialFESpace(space,args...)
   end
-  DistributedFESpace(V.vector_type,spaces,V.gids)
+  DistributedFESpace(V.vector_type,spaces,V.gids,V.model)
 end
 
 function Gridap.FESpace(::Type{V};model::DistributedDiscreteModel,kwargs...) where V
@@ -180,7 +181,7 @@ function DistributedFESpace(::Type{V}; model::DistributedDiscreteModel,kwargs...
 
   gids = DistributedIndexSet(init_free_gids,comm,ngids, part_to_lid_to_gid,part_to_lid_to_owner,part_to_ngids)
 
-  DistributedFESpace(V,spaces,gids)
+  DistributedFESpace(V,spaces,gids,model)
 end
 
 function _update_lid_to_gid!(lid_to_gid,cell_to_lids,cell_to_gids,cell_to_owner,lid_to_owner)

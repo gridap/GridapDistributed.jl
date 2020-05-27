@@ -32,6 +32,7 @@ export DistributedVector
 export exchange!
 
 export RowsComputedLocally
+export OwnedCellsStrategy
 
 export remove_ghost_cells
 export include_ghost_cells
