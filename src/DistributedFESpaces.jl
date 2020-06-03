@@ -250,5 +250,3 @@ function _fill_max_part_around!(lid_to_owner,cell_to_owner,cell_to_lids)
     end
   end
 end
-
-

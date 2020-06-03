@@ -163,20 +163,19 @@ end
 # This typically requires to loop also over ghost cells
 struct RowsComputedLocally <: AssemblyStrategy
   part::Int
-  lid_to_gid::Vector{Int}
-  lid_to_owner::Vector{Int}
+  gids::IndexSet
 end
 
 function Gridap.FESpaces.row_map(a::RowsComputedLocally,row)
-  a.lid_to_gid[row]
+  a.gids.lid_to_gid[row]
 end
 
 function Gridap.FESpaces.col_map(a::RowsComputedLocally,col)
-  a.lid_to_gid[col]
+  a.gids.lid_to_gid[col]
 end
 
 function Gridap.FESpaces.row_mask(a::RowsComputedLocally,row)
-  a.part == a.lid_to_owner[row]
+  a.part == a.gids.lid_to_owner[row]
 end
 
 function Gridap.FESpaces.col_mask(a::RowsComputedLocally,col)
@@ -186,10 +185,43 @@ end
 function RowsComputedLocally(V::DistributedFESpace)
   dgids = V.gids
   strategies = DistributedData(dgids) do part, gids
-    RowsComputedLocally(part,gids.lid_to_gid,gids.lid_to_owner)
+    RowsComputedLocally(part,gids)
   end
   DistributedAssemblyStrategy(strategies)
 end
+
+
+struct OwnedCellsStrategy <: AssemblyStrategy
+  part::Int
+  dof_gids::IndexSet
+  cell_gids::IndexSet
+end
+
+function Gridap.FESpaces.row_map(a::OwnedCellsStrategy,row)
+  a.dof_gids.lid_to_gid[row]
+end
+
+function Gridap.FESpaces.col_map(a::OwnedCellsStrategy,col)
+  a.dof_gids.lid_to_gid[col]
+end
+
+function Gridap.FESpaces.row_mask(a::OwnedCellsStrategy,row)
+  true
+end
+
+function Gridap.FESpaces.col_mask(a::OwnedCellsStrategy,col)
+  true
+end
+
+function OwnedCellsStrategy(M::DistributedDiscreteModel, V::DistributedFESpace)
+  dcell_gids = M.gids
+  ddof_gids  = V.gids
+  strategies = DistributedData(ddof_gids,dcell_gids) do part, dof_gids, cell_gids
+    OwnedCellsStrategy(part,dof_gids,cell_gids)
+  end
+  DistributedAssemblyStrategy(strategies)
+end
+
 
 # TODO this assumes that the global matrix type is the same
 # as the local one
@@ -208,6 +240,3 @@ function Gridap.FESpaces.SparseMatrixAssembler(
 
   DistributedAssembler(matrix_type,vector_type,dtrial,dtest,assems,dstrategy)
 end
-
-
-
