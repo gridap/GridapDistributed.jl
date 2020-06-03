@@ -41,6 +41,12 @@ function remove_ghost_cells(
     cell_id_left = get_cell_id(trian.left)
     cell_id_right = get_cell_id(trian.right)
     @assert length(cell_id_left) == length(cell_id_right)
+    facets_to_old_facets =
+        _compute_facets_to_old_facets(cell_id_left, cell_id_right, part, gids)
+    TriangulationPortion(trian, facets_to_old_facets)
+end
+
+function _compute_facets_to_old_facets(cell_id_left, cell_id_right, part, gids)
     facets_to_old_facets = eltype(cell_id_right)[]
     for i = 1:length(cell_id_left)
         part_left = gids.lid_to_owner[cell_id_left[i]]
@@ -50,7 +56,7 @@ function remove_ghost_cells(
             push!(facets_to_old_facets, i)
         end
     end
-    TriangulationPortion(trian, facets_to_old_facets)
+    facets_to_old_facets
 end
 
 function include_ghost_cells(trian::TriangulationPortion)
