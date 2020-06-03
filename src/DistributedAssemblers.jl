@@ -213,9 +213,9 @@ function Gridap.FESpaces.col_mask(a::OwnedCellsStrategy,col)
   true
 end
 
-function OwnedCellsStrategy(V::DistributedFESpace)
+function OwnedCellsStrategy(M::DistributedDiscreteModel, V::DistributedFESpace)
+  dcell_gids = M.gids
   ddof_gids  = V.gids
-  dcell_gids = V.model.gids
   strategies = DistributedData(ddof_gids,dcell_gids) do part, dof_gids, cell_gids
     OwnedCellsStrategy(part,dof_gids,cell_gids)
   end
