@@ -91,7 +91,7 @@ function DistributedData{T}(initializer::Function,comm::SequentialCommunicator,a
   SequentialDistributedData{T}(comm,parts)
 end
 
-function DistributedData(initializer::Function,comm::SequentialCommunicator,args...) where T
+function DistributedData(initializer::Function,comm::SequentialCommunicator,args...)
   nparts = num_parts(comm)
   parts = [initializer(i,map(a->get_part(comm,get_distributed_data(a),i),args)...) for i in 1:nparts]
   SequentialDistributedData(comm,parts)

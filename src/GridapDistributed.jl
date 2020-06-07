@@ -7,14 +7,17 @@ using Gridap.FESpaces
 using Gridap.Arrays
 using Gridap.Algebra
 
-#using MPI
+using MPI
+using PETSc
 
 export Communicator
 export num_parts
 export num_workers
+export get_part
 export do_on_parts
 export i_am_master
 export SequentialCommunicator
+export MPIPETScCommunicator
 
 export DistributedData
 export get_comm
@@ -39,9 +42,15 @@ export include_ghost_cells
 
 include("Communicators.jl")
 
+include("MPIPETScCommunicators.jl")
+
 include("DistributedData.jl")
 
+include("MPIPETScDistributedData.jl")
+
 include("DistributedIndexSets.jl")
+
+include("MPIPETScDistributedIndexSets.jl")
 
 include("DistributedVectors.jl")
 
