@@ -20,6 +20,17 @@ function MPIPETScCommunicatorDestroy(comm::MPIPETScCommunicator)
   PETSc.PetscFinalized(Float64) || PETSc.C.chk(PETSc.C.PetscCommDuplicate(Float64,comm.comm))
 end
 
+
+# All objects to be used with this communicator need to implement this
+# function
+function get_part(comm::MPIPETScCommunicator,object,part::Integer)
+  @abstractmethod
+end
+
+function get_part(comm::MPIPETScCommunicator,object::Number,part::Integer)
+  object
+end
+
 function i_am_master(comm::MPIPETScCommunicator)
   MPI.Comm_rank(comm.comm) == comm.master_rank
 end
