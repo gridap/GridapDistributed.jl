@@ -1,7 +1,10 @@
 # Specializations
 struct MPIPETScDistributedIndexSet{A,B,C} <: DistributedIndexSet
   ngids               :: Int
+  # TO-THINK: Do we really need to have a DistributedData for parts?
+  #           Why dont we store part directly?
   parts               :: MPIPETScDistributedData{IndexSet{A,B,C}}
+  # TO-THINK: Should we store these as DistributedData?
   lid_to_gid_petsc    :: Vector{Int64}
   petsc_to_app_locidx :: Vector{Int32}
   app_to_petsc_locidx :: Vector{Int32}
@@ -46,9 +49,6 @@ function _compute_internal_members(comm::MPIPETScCommunicator, is::IndexSet)
       current = current + 1
     end
   end
-
-  println(app_idx, petsc_idx)
-
 
   # build application ordering in order to get lid_to_gid
   # accordingly to PETSc global numbering

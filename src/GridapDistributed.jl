@@ -54,6 +54,8 @@ include("MPIPETScDistributedIndexSets.jl")
 
 include("DistributedVectors.jl")
 
+include("MPIPETScDistributedVectors.jl")
+
 include("DistributedDiscreteModels.jl")
 
 include("CartesianDiscreteModels.jl")
