@@ -1,5 +1,5 @@
 # Specializations
-struct MPIPETScDistributedVector{T<:Union{Number,AbstractVector{K} where K<:Number},V<:AbstractVector{T},A,B,C}
+struct MPIPETScDistributedVector{T<:Union{Number,AbstractVector{<:Number}},V<:AbstractVector{T},A,B,C} <: DistributedVector{T}
   part :: V
   indices :: MPIPETScDistributedIndexSet{A,B,C}
   vecghost :: PETSc.Vec{Float64}
@@ -19,6 +19,11 @@ get_part(
   a::MPIPETScDistributedVector,
   part::Integer) = a.part
 
+get_part(
+  comm::MPIPETScCommunicator,
+  a::PETSc.Vec{Float64},
+  part::Integer) = a
+
 function DistributedVector(
   initializer::Function, indices::MPIPETScDistributedIndexSet, args...)
   comm = get_comm(indices)
@@ -33,6 +38,19 @@ function DistributedVector(
   MPIPETScDistributedVector(part,indices,vecghost)
 end
 
+function DistributedVector{T}(
+  initializer::Function, indices::MPIPETScDistributedIndexSet, args...) where T <: Union{Number,AbstractVector{<:Number}}
+  comm = get_comm(indices)
+  data = DistributedData(initializer, comm, args...)
+  part = data.part
+  if (T <: Number)
+    indices,vecghost = _create_eltype_number_indices_ghost(part,indices)
+  else
+    indices,vecghost = _create_eltype_vector_number_indices_ghost(part,indices)
+  end
+  MPIPETScDistributedVector(part,indices,vecghost)
+end
+
 
 function _create_eltype_number_indices_ghost(
   part::Vector{T},
@@ -40,7 +58,7 @@ function _create_eltype_number_indices_ghost(
 ) where {T<:Number}
   @assert sizeof(eltype(part)) == sizeof(Float64)
   @assert length(part) == length(indices.parts.part.lid_to_owner)
-  vecghost = _create_ghost_vector(indices)
+  vecghost = create_ghost_vector(indices)
   indices, vecghost
 end
 
@@ -68,38 +86,16 @@ indices = DistributedIndexSet(get_comm(indices),n,indices,l,n) do part, indices,
   end
   IndexSet(n, lid_to_gid, lid_to_owner)
 end
-vecghost = _create_ghost_vector(indices)
+vecghost = create_ghost_vector(indices)
 indices, vecghost
-end
-
-
-function _create_ghost_vector(indices::MPIPETScDistributedIndexSet)
-  comm = get_comm(indices)
-  comm_rank = MPI.Comm_rank(comm.comm)
-  ghost_idx=Int[]
-  lid_to_owner = indices.parts.part.lid_to_owner
-  lid_to_gid_petsc  = indices.lid_to_gid_petsc
-  num_local_entries = length(lid_to_owner)
-  for i=1:num_local_entries
-    if (lid_to_owner[i]!==comm_rank+1)
-       push!(ghost_idx, lid_to_gid_petsc[i])
-    end
-  end
-  num_owned_entries = _num_owned_entries(indices)
-  VecGhost(Float64, num_owned_entries, ghost_idx; comm=comm.comm, vtype=PETSc.C.VECMPI)
-end
-
-function _num_owned_entries(indices::MPIPETScDistributedIndexSet)
-  comm = get_comm(indices)
-  comm_rank = MPI.Comm_rank(comm.comm)+1
-  lid_to_owner = indices.parts.part.lid_to_owner
-  count( (a)->(a==comm_rank), lid_to_owner )
 end
 
 function Base.getindex(a::MPIPETScDistributedVector,indices::MPIPETScDistributedIndexSet)
   @notimplementedif a.indices !== indices
   exchange!(a)
-  a
+  DistributedVector(indices,indices,a) do part, indices, a
+      a[indices.lid_to_gid]
+  end
 end
 
 function exchange!(a::MPIPETScDistributedVector{T}) where T
@@ -111,22 +107,24 @@ function exchange!(a::MPIPETScDistributedVector{T}) where T
   comm = get_comm(indices)
   comm_rank = MPI.Comm_rank(comm.comm)
 
+  num_owned = num_owned_entries(a.indices)
+  idxs = Vector{Int}(undef, num_owned)
+  vals = Vector{Float64}(undef, num_owned)
+
   # Pack data
-  lvecghost = PETSc.VecLocal(a.vecghost)
-  lvec      = PETSc.LocalVector(lvecghost)
   k=1
   current=1
   for i=1:length(local_part)
     for j=1:length(local_part[i])
        if ( lid_to_owner[k] == comm_rank+1 )
-           lvec.a[current]=reinterpret(Float64,local_part[i][j])
+           idxs[current]=current-1
+           vals[current]=reinterpret(Float64,local_part[i][j])
            current = current + 1
        end
        k=k+1
     end
   end
-  PETSc.restore(lvec)
-  PETSc.restore(lvecghost)
+  set_values_local!(a.vecghost, idxs, vals, PETSc.C.INSERT_VALUES)
 
   # Send data
   PETSc.scatter!(a.vecghost)
@@ -172,44 +170,3 @@ function _unpack!(
     end
   end
 end
-
-# Assembly related
-# function Gridap.Algebra.allocate_vector(::Type{V},gids::DistributedIndexSet) where V <: AbstractVector
-#   ngids = num_gids(gids)
-#   allocate_vector(V,ngids)
-# end
-#
-# struct MPIPETScIJV{A,B}
-#   dIJV::A
-#   gIJV::B
-# end
-#
-# get_distributed_data(a::MPIPETScIJV) = a.dIJV
-#
-# function Gridap.Algebra.allocate_coo_vectors(::Type{M},dn::DistributedData) where M <: AbstractMatrix
-#
-#   part_to_n = gather(dn)
-#   n = sum(part_to_n)
-#   gIJV = allocate_coo_vectors(M,n)
-#
-#   _fill_offsets!(part_to_n)
-#   offsets = scatter(get_comm(dn),part_to_n.+1)
-#
-#   dIJV = DistributedData(offsets) do part, offset
-#     map( i -> SubVector(i,offset,n), gIJV)
-#   end
-#
-#   MPIPETScIJV(dIJV,gIJV)
-# end
-#
-# function Gridap.Algebra.finalize_coo!(
-#   ::Type{M},IJV::MPIPETScIJV,m::DistributedIndexSet,n::DistributedIndexSet) where M <: AbstractMatrix
-#   I,J,V = IJV.gIJV
-#   finalize_coo!(M,I,J,V,num_gids(m),num_gids(n))
-# end
-#
-# function Gridap.Algebra.sparse_from_coo(
-#   ::Type{M},IJV::MPIPETScIJV,m::DistributedIndexSet,n::DistributedIndexSet) where M
-#   I,J,V = IJV.gIJV
-#   sparse_from_coo(M,I,J,V,num_gids(m),num_gids(n))
-# end

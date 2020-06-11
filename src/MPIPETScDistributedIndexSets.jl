@@ -17,6 +17,35 @@ get_part(
   a::MPIPETScDistributedIndexSet,
   part::Integer) = a.parts.part
 
+function num_owned_entries(indices::MPIPETScDistributedIndexSet)
+    comm = get_comm(indices)
+    comm_rank = MPI.Comm_rank(comm.comm) + 1
+    lid_to_owner = indices.parts.part.lid_to_owner
+    count((a)->(a == comm_rank), lid_to_owner)
+  end
+
+function create_ghost_vector(indices::MPIPETScDistributedIndexSet)
+  comm = get_comm(indices)
+  comm_rank = MPI.Comm_rank(comm.comm)
+  ghost_idx = Int[]
+  lid_to_owner = indices.parts.part.lid_to_owner
+  lid_to_gid_petsc = indices.lid_to_gid_petsc
+  num_local_entries = length(lid_to_owner)
+  for i = 1:num_local_entries
+    if (lid_to_owner[i] !== comm_rank + 1)
+      push!(ghost_idx, lid_to_gid_petsc[i])
+    end
+  end
+  num_owned = num_owned_entries(indices)
+  VecGhost(
+    Float64,
+    num_owned,
+    ghost_idx;
+    comm = comm.comm,
+    vtype = PETSc.C.VECMPI,
+  )
+end
+
 get_comm(a::MPIPETScDistributedIndexSet) = a.parts.comm
 
 function DistributedIndexSet(initializer::Function,comm::MPIPETScCommunicator,ngids::Integer,args...)
@@ -79,25 +108,3 @@ function _compute_internal_members(comm::MPIPETScCommunicator, is::IndexSet)
   end
   return lid_to_gid_petsc, petsc_to_app_locidx, app_to_petsc_locidx
 end
-
-
-# for i=1:num_local_entries
-#   if (lid_to_owner[i]!==comm_rank+1)
-#      push!(ghost_idx, lid_to_gid_petsc[i])
-#   end
-# end
-#
-# vec = VecGhost(Float64, num_owned_entries, ghost_idx)
-# lvec = LocalVector(vec)
-# for i=1:num_owned_entries
-#   lvec.a[i]=reinterpret(Float64,lid_to_gid[petsc_to_app_locidx[i]])
-# end
-#
-# restore(lvec)
-# scatter!(vec)
-#
-# lvecghost = VecLocal(vec)
-# lvec      = LocalVector(lvecghost)
-# println("$(comm_rank): $(reinterpret(Int64,lvec.a))")
-# restore(lvec)
-# restore(lvecghost)

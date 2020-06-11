@@ -14,6 +14,10 @@ function Base.getindex(a,indices::DistributedIndexSet)
   @abstractmethod
 end
 
+Base.eltype(::Type{<:DistributedVector{T}}) where T=T
+Base.eltype(a::DistributedVector)=Base.eltype(typeof(a))
+
+
 # Make the state of the vector globally consistent
 function exchange!(a)
   @abstractmethod
@@ -38,7 +42,7 @@ end
 
 function SequentialDistributedVector{T}(
   parts::Vector{<:AbstractVector{T}},indices::SequentialDistributedIndexSet) where T
-  SequentialDistributedVector(parts,indices) 
+  SequentialDistributedVector(parts,indices)
 end
 
 get_comm(a::SequentialDistributedVector) = get_comm(a.indices)
@@ -97,9 +101,9 @@ function Base.getindex(a::Vector,indices::SequentialDistributedIndexSet)
   end
 end
 
-function exchange!(a::Vector)
-  a
-end
+#function exchange!(a::Vector)
+#  a
+#end
 
 # By default in the SequentialCommunicator arrays are globally indexable when restricted to a part
 function get_part(comm::SequentialCommunicator,a::AbstractArray,part::Integer)
@@ -147,5 +151,3 @@ function Gridap.Algebra.sparse_from_coo(
   I,J,V = IJV.gIJV
   sparse_from_coo(M,I,J,V,num_gids(m),num_gids(n))
 end
-
-

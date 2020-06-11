@@ -1,5 +1,5 @@
 struct DistributedFESpace{V} <: FESpace
-  vector_type::V
+  vector_type::Type{V}
   spaces::DistributedData{<:FESpace}
   gids::DistributedIndexSet
 end
@@ -36,7 +36,7 @@ function Gridap.FESpaces.EvaluationFunction(dV::DistributedFESpace,x)
 end
 
 function Gridap.FESpaces.zero_free_values(f::DistributedFESpace)
-  fv = allocate_vector(f.vector_type,f.gids)
+  fv = Gridap.Algebra.allocate_vector(f.vector_type,f.gids)
   fill_entries!(fv,zero(eltype(fv)))
   fv
 end
@@ -52,7 +52,7 @@ end
 
 struct DistributedFEFunction
   funs::DistributedData
-  vals::AbstractVector
+  vals#::AbstractVector
   space::DistributedFESpace
 end
 
@@ -126,6 +126,10 @@ function DistributedFESpace(::Type{V}; model::DistributedDiscreteModel,kwargs...
 
   offsets = scatter(comm,part_to_num_oids)
   part_to_ngids = scatter_value(comm,ngids)
+
+  do_on_parts(comm,part_to_ngids) do part, lngids
+      ngids=lngids
+  end
 
   function init_cell_to_owners(part,lspace,lid_to_owner)
     cell_to_lids = get_cell_dofs(lspace)

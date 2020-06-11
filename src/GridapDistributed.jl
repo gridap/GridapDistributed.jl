@@ -56,6 +56,8 @@ include("DistributedVectors.jl")
 
 include("MPIPETScDistributedVectors.jl")
 
+include("MPIPETScAlgebraInterfaces.jl")
+
 include("DistributedDiscreteModels.jl")
 
 include("CartesianDiscreteModels.jl")
@@ -63,6 +65,8 @@ include("CartesianDiscreteModels.jl")
 include("DistributedFESpaces.jl")
 
 include("DistributedAssemblers.jl")
+
+include("MPIPETScDistributedAssemblers.jl")
 
 include("DistributedFETerms.jl")
 

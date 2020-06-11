@@ -7,9 +7,11 @@ function get_distributed_data(dstrategy::DistributedAssemblyStrategy)
   dstrategy.strategies
 end
 
-struct DistributedAssembler{M,V} <: Assembler
-  matrix_type::Type{M}
-  vector_type::Type{V}
+struct DistributedAssembler{GM,GV,LM,LV} <: Assembler
+  global_matrix_type::Type{GM}
+  global_vector_type::Type{GV}
+  local_matrix_type ::Type{LM}
+  local_vector_type ::Type{LV}
   trial::DistributedFESpace
   test::DistributedFESpace
   assems::DistributedData{<:Assembler}
@@ -38,21 +40,21 @@ function Gridap.FESpaces.allocate_matrix(dassem::DistributedAssembler,dmatdata)
     count_matrix_nnz_coo(assem,matdata)
   end
 
-  dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
+  dIJV = allocate_coo_vectors(dassem.global_matrix_type,dn)
 
   do_on_parts(dassem,dIJV,dmatdata) do part, assem, IJV, matdata
     I,J,V = IJV
     fill_matrix_coo_symbolic!(I,J,assem,matdata)
   end
 
-  finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-  sparse_from_coo(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+  finalize_coo!(dassem.global_matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+  sparse_from_coo(dassem.global_matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
 
 end
 
 function Gridap.FESpaces.allocate_vector(a::DistributedAssembler,dvecdata)
   gids = a.test.gids
-  allocate_vector(a.vector_type,gids)
+  allocate_vector(a.global_vector_type,gids)
 end
 
 function Gridap.FESpaces.allocate_matrix_and_vector(dassem::DistributedAssembler,ddata)
@@ -61,16 +63,16 @@ function Gridap.FESpaces.allocate_matrix_and_vector(dassem::DistributedAssembler
     count_matrix_and_vector_nnz_coo(assem,data)
   end
 
-  dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
+  dIJV = allocate_coo_vectors(dassem.global_matrix_type,dn)
   do_on_parts(dassem,dIJV,ddata) do part, assem, IJV, data
     I,J,V = IJV
     fill_matrix_and_vector_coo_symbolic!(I,J,assem,data)
   end
-  finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-  A = sparse_from_coo(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+  finalize_coo!(dassem.global_matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+  A = sparse_from_coo(dassem.global_matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
 
   gids = dassem.test.gids
-  b = allocate_vector(dassem.vector_type,gids)
+  b = allocate_vector(dassem.global_vector_type,gids)
 
   A,b
 end
@@ -115,15 +117,15 @@ function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dmatdata)
     count_matrix_nnz_coo(assem,matdata)
   end
 
-  dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
+  dIJV = allocate_coo_vectors(dassem.global_matrix_type,dn)
 
   do_on_parts(dassem,dIJV,dmatdata) do part, assem, IJV, matdata
     I,J,V = IJV
     fill_matrix_coo_numeric!(I,J,V,assem,matdata)
   end
 
-  finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-  sparse_from_coo(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+  finalize_coo!(dassem.global_matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+  sparse_from_coo(dassem.global_matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
 end
 
 function Gridap.FESpaces.assemble_vector(dassem::DistributedAssembler, dvecdata)
@@ -139,15 +141,21 @@ function Gridap.FESpaces.assemble_matrix_and_vector(dassem::DistributedAssembler
   end
 
   gids = dassem.test.gids
-  b = allocate_vector(dassem.vector_type,gids)
+  b = allocate_vector(dassem.global_vector_type,gids)
 
-  dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
+  dIJV = allocate_coo_vectors(dassem.global_matrix_type,dn)
   do_on_parts(dassem,dIJV,ddata,b) do part, assem, IJV, data, b
     I,J,V = IJV
     fill_matrix_and_vector_coo_numeric!(I,J,V,b,assem,data)
   end
-  finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-  A = sparse_from_coo(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+  finalize_coo!(dassem.global_matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+  A = sparse_from_coo(dassem.global_matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+
+  # TO-THINK: Mandatory steps required for PETSc vectors.
+  #           Should we define our own interface? E.g., finalize_vector!(b)?
+  # Note: PETSc.jl provides a fall-back for AbstractArray
+  PETSc.AssemblyBegin(b)
+  PETSc.AssemblyEnd(b)
 
   A,b
 end
@@ -226,17 +234,27 @@ end
 # TODO this assumes that the global matrix type is the same
 # as the local one
 function Gridap.FESpaces.SparseMatrixAssembler(
-  matrix_type::Type,
-  vector_type::Type,
+  global_matrix_type::Type,
+  global_vector_type::Type,
+  local_matrix_type ::Type,
+  local_vector_type ::Type,
   dtrial::DistributedFESpace,
   dtest::DistributedFESpace,
   dstrategy::DistributedAssemblyStrategy)
 
   assems = DistributedData(
     dtrial.spaces,dtest.spaces,dstrategy) do part, U, V, strategy
-
-    SparseMatrixAssembler(matrix_type,vector_type,U,V,strategy)
+    SparseMatrixAssembler(local_matrix_type,local_vector_type,U,V,strategy)
   end
 
-  DistributedAssembler(matrix_type,vector_type,dtrial,dtest,assems,dstrategy)
+  DistributedAssembler(global_matrix_type,global_vector_type,local_matrix_type,local_vector_type,dtrial,dtest,assems,dstrategy)
+end
+
+function Gridap.FESpaces.SparseMatrixAssembler(
+  matrix_type::Type,
+  vector_type::Type,
+  dtrial::DistributedFESpace,
+  dtest::DistributedFESpace,
+  dstrategy::DistributedAssemblyStrategy)
+  Gridap.FESpaces.SparseMatrixAssembler(matrix_type, vector_type, matrix_type, vector_type, dtrial, dtest, dstrategy)
 end
