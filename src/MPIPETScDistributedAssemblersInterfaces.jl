@@ -19,10 +19,10 @@ function Gridap.Algebra.sparse_from_coo(
   ngrows = num_gids(m)
   ngcols = num_gids(n)
   nlrows = num_owned_entries(m)
-  nlcols = ngcols
+  nlcols = nlrows
 
-  # Properly manage PREALLOCATION building the sparsity pattern of the matrix
-  A=Mat(Float64;
+  # TO-DO: Properly manage PREALLOCATION building the sparsity pattern of the matrix
+  A=Mat(Float64, ngrows, ngcols;
         mlocal=nlrows, nlocal=nlcols, nz=100, onz=100,
         comm=get_comm(m).comm, mtype=PETSc.C.MATMPIAIJ)
 

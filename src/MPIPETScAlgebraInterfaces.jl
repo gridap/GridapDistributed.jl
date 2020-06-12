@@ -10,8 +10,13 @@ function Gridap.Algebra.allocate_vector(::Type{<:MPIPETScDistributedVector{Float
   end
 end
 
-function Gridap.Algebra.allocate_vector(::Type{PETSc.Vec{Float64}},indices::MPIPETScDistributedIndexSet)
-  vecghost = create_ghost_vector(indices)
+function Gridap.Algebra.allocate_vector(
+  ::Type{PETSc.Vec{Float64}},
+  indices::MPIPETScDistributedIndexSet,
+)
+  ng = num_gids(indices)
+  nl = num_owned_entries(indices)
+  PETSc.Vec(Float64, ng; mlocal = nl, comm = get_comm(indices).comm)
 end
 
 """

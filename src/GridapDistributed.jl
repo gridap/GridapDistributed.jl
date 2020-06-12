@@ -40,6 +40,8 @@ export OwnedCellsStrategy
 export remove_ghost_cells
 export include_ghost_cells
 
+export PETScLinearSolver
+
 include("Communicators.jl")
 
 include("MPIPETScCommunicators.jl")
@@ -66,12 +68,16 @@ include("DistributedFESpaces.jl")
 
 include("DistributedAssemblers.jl")
 
-include("MPIPETScDistributedAssemblers.jl")
+include("MPIPETScDistributedAssemblersInterfaces.jl")
 
 include("DistributedFETerms.jl")
 
 include("DistributedFEOperators.jl")
 
 include("DistributedTriangulations.jl")
+
+include("MPIPETScLinearSolvers.jl")
+
+include("MPIPETScFELinearSolversInterfaces.jl")
 
 end # module

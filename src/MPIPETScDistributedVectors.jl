@@ -108,6 +108,7 @@ function exchange!(a::MPIPETScDistributedVector{T}) where T
   comm_rank = MPI.Comm_rank(comm.comm)
 
   num_owned = num_owned_entries(a.indices)
+  num_local = length(lid_to_owner)
   idxs = Vector{Int}(undef, num_owned)
   vals = Vector{Float64}(undef, num_owned)
 
@@ -126,15 +127,16 @@ function exchange!(a::MPIPETScDistributedVector{T}) where T
   end
   set_values_local!(a.vecghost, idxs, vals, PETSc.C.INSERT_VALUES)
 
+  AssemblyBegin(a.vecghost, PETSc.C.MAT_FINAL_ASSEMBLY)
+  AssemblyEnd(a.vecghost, PETSc.C.MAT_FINAL_ASSEMBLY)
+
   # Send data
   PETSc.scatter!(a.vecghost)
 
   # Unpack data
-  lvecghost = PETSc.VecLocal(a.vecghost)
-  lvec      = PETSc.LocalVector(lvecghost)
+  lvec = PETSc.LocalVector(a.vecghost,num_local)
   _unpack!(eltype(local_part), local_part, lid_to_owner, comm_rank, app_to_petsc_locidx, lvec)
   PETSc.restore(lvec)
-  PETSc.restore(lvecghost)
 end
 
 function _unpack!(

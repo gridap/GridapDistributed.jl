@@ -9,11 +9,17 @@ using PETSc
 
 function run(assembly_strategy::AbstractString)
   T = Float64
-  fe_space_vector_type  = GridapDistributed.MPIPETScDistributedVector{T,Vector{T},Vector{Int},Vector{Int},Dict{Int,Int32}}
+  fe_space_vector_type = GridapDistributed.MPIPETScDistributedVector{
+    T,
+    Vector{T},
+    Vector{Int},
+    Vector{Int},
+    Dict{Int,Int32},
+  }
   assembler_global_vector_type = PETSc.Vec{T}
   assembler_global_matrix_type = PETSc.Mat{T}
-  assembler_local_vector_type  = Vector{T}
-  assembler_local_matrix_type  = SparseMatrixCSR{1,Float64,Int32}
+  assembler_local_vector_type = Vector{T}
+  assembler_local_matrix_type = SparseMatrixCSR{1,Float64,Int32}
 
   # Manufactured solution
   u(x) = x[1] + x[2]
@@ -42,11 +48,11 @@ function run(assembly_strategy::AbstractString)
 
 
   if (assembly_strategy == "RowsComputedLocally")
-     strategy = RowsComputedLocally(V)
+    strategy = RowsComputedLocally(V)
   elseif (assembly_strategy == "OwnedCellsStrategy")
-     strategy = OwnedCellsStrategy(model,V)
+    strategy = OwnedCellsStrategy(model, V)
   else
-     @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
+    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
   end
 
   # Terms in the weak form
@@ -61,38 +67,46 @@ function run(assembly_strategy::AbstractString)
   end
 
   # # Assembler
-  assem = SparseMatrixAssembler(assembler_global_matrix_type,
-                               assembler_global_vector_type,
-                               assembler_local_matrix_type,
-                               assembler_local_vector_type, U, V, strategy)
+  assem = SparseMatrixAssembler(
+    assembler_global_matrix_type,
+    assembler_global_vector_type,
+    assembler_local_matrix_type,
+    assembler_local_vector_type,
+    U,
+    V,
+    strategy,
+  )
 
   # FE solution
   op = AffineFEOperator(assem, terms)
-  #uh = solve(op)
+  ls = PETScLinearSolver(
+    Float64;
+    ksp_type = "cg",
+    ksp_rtol = 1.0e-06,
+    ksp_atol = 0.0,
+    ksp_monitor = "",
+    pc_type = "jacobi",
+  )
+  fels = LinearFESolver(ls)
+  uh = solve(fels, op)
 
+  PETSc.petscview(uh.vals.vecghost)
 
-  #println(op.op.matrix)
-  #print("$(op.op.matrix)\n")
-  PETSc.petscview(op.op.matrix)
-  print("$(op.op.vector)\n")
+  # Error norms and print solution
+  sums = DistributedData(model, uh) do part, (model, gids), uh
+    trian = Triangulation(model)
+    owned_trian = remove_ghost_cells(trian, part, gids)
+    owned_quad = CellQuadrature(owned_trian, 2 * order)
+    owned_uh = restrict(uh, owned_trian)
+    writevtk(owned_trian, "results_$part", cellfields = ["uh" => owned_uh])
+    e = u - owned_uh
+    l2(u) = u * u
+    sum(integrate(l2(e), owned_trian, owned_quad))
+  end
+  e_l2 = sum(gather(sums))
 
-  # uh = solve(op)
-  #
-  # # Error norms and print solution
-  # sums = DistributedData(model, uh) do part, (model, gids), uh
-  #   trian = Triangulation(model)
-  #   owned_trian = remove_ghost_cells(trian, part, gids)
-  #   owned_quad = CellQuadrature(owned_trian, 2 * order)Cs
-  #   owned_uh = restrict(uh, owned_trian)
-  #   writevtk(owned_trian, "results_$part", cellfields = ["uh" => owned_uh])
-  #   e = u - owned_uh
-  #   l2(u) = u * u
-  #   sum(integrate(l2(e), owned_trian, owned_quad))
-  # end
-  # e_l2 = sum(gather(sums))
-  #
-  # tol = 1.0e-9
-  # @test e_l2 < tol
+  tol = 1.0e-9
+  @test e_l2 < tol
 end
 
 run("RowsComputedLocally")

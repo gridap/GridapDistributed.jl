@@ -37,7 +37,12 @@ end
 
 function do_on_parts(task::Function, comm::MPIPETScCommunicator, args...)
   part = MPI.Comm_rank(comm.comm) + 1
-  largs = map(a->get_part(comm,get_distributed_data(a),part), args)
+  #largs = map(a->get_part(comm,get_distributed_data(a),part), args)
+  largs = []
+  for arg in args
+     current = get_part(comm,get_distributed_data(arg),part)
+     push!(largs,current)
+  end
   task(part, largs...)
 end
 
