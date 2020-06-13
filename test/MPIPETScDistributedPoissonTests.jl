@@ -90,8 +90,6 @@ function run(assembly_strategy::AbstractString)
   fels = LinearFESolver(ls)
   uh = solve(fels, op)
 
-  PETSc.petscview(uh.vals.vecghost)
-
   # Error norms and print solution
   sums = DistributedData(model, uh) do part, (model, gids), uh
     trian = Triangulation(model)
@@ -107,9 +105,10 @@ function run(assembly_strategy::AbstractString)
 
   tol = 1.0e-9
   @test e_l2 < tol
+  if (i_am_master(comm)) println("$(e_l2) < $(tol)\n") end
 end
 
 run("RowsComputedLocally")
-#run("OwnedCellsStrategy")
+run("OwnedCellsStrategy")
 
 end # module

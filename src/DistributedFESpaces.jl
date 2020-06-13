@@ -50,9 +50,9 @@ end
 
 # FE Function
 
-struct DistributedFEFunction
+struct DistributedFEFunction{T}
   funs::DistributedData
-  vals#::AbstractVector
+  vals::T #::AbstractVector
   space::DistributedFESpace
 end
 
@@ -63,6 +63,8 @@ get_distributed_data(u::DistributedFEFunction) = u.funs
 Gridap.FESpaces.get_free_values(a::DistributedFEFunction) = a.vals
 
 Gridap.FESpaces.get_fe_space(a::DistributedFEFunction) = a.space
+
+Gridap.FESpaces.is_a_fe_function(a::DistributedFEFunction) = true
 
 # Cell basis
 

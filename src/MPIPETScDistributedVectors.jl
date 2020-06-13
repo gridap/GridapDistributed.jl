@@ -90,12 +90,23 @@ vecghost = create_ghost_vector(indices)
 indices, vecghost
 end
 
+function unpack_all_entries!(a::MPIPETScDistributedVector{T}) where T
+  num_local = length(a.indices.app_to_petsc_locidx)
+  lvec = PETSc.LocalVector(a.vecghost,num_local)
+  _unpack_all_entries!(T,a.part,a.indices.app_to_petsc_locidx,lvec)
+  PETSc.restore(lvec)
+end
+
 function Base.getindex(a::MPIPETScDistributedVector,indices::MPIPETScDistributedIndexSet)
   @notimplementedif a.indices !== indices
-  exchange!(a)
-  DistributedVector(indices,indices,a) do part, indices, a
-      a[indices.lid_to_gid]
-  end
+  exchange!(a.vecghost)
+  unpack_all_entries!(a)
+  a
+end
+
+function exchange!(a::PETSc.Vec{T}) where T
+  # Send data
+  PETSc.scatter!(a)
 end
 
 function exchange!(a::MPIPETScDistributedVector{T}) where T
@@ -107,11 +118,22 @@ function exchange!(a::MPIPETScDistributedVector{T}) where T
   comm = get_comm(indices)
   comm_rank = MPI.Comm_rank(comm.comm)
 
-  num_owned = num_owned_entries(a.indices)
+  # Pack data
+  _pack_local_entries!(a.vecghost, local_part, lid_to_owner, comm_rank)
+
+  exchange!(a.vecghost)
+
+  # Unpack data
   num_local = length(lid_to_owner)
+  lvec = PETSc.LocalVector(a.vecghost,num_local)
+  _unpack_ghost_entries!(eltype(local_part), local_part, lid_to_owner, comm_rank, app_to_petsc_locidx, lvec)
+  PETSc.restore(lvec)
+end
+
+function _pack_local_entries!(vecghost, local_part, lid_to_owner, comm_rank)
+  num_owned = PETSc.lengthlocal(vecghost)
   idxs = Vector{Int}(undef, num_owned)
   vals = Vector{Float64}(undef, num_owned)
-
   # Pack data
   k=1
   current=1
@@ -125,21 +147,33 @@ function exchange!(a::MPIPETScDistributedVector{T}) where T
        k=k+1
     end
   end
-  set_values_local!(a.vecghost, idxs, vals, PETSc.C.INSERT_VALUES)
-
-  AssemblyBegin(a.vecghost, PETSc.C.MAT_FINAL_ASSEMBLY)
-  AssemblyEnd(a.vecghost, PETSc.C.MAT_FINAL_ASSEMBLY)
-
-  # Send data
-  PETSc.scatter!(a.vecghost)
-
-  # Unpack data
-  lvec = PETSc.LocalVector(a.vecghost,num_local)
-  _unpack!(eltype(local_part), local_part, lid_to_owner, comm_rank, app_to_petsc_locidx, lvec)
-  PETSc.restore(lvec)
+  set_values_local!(vecghost, idxs, vals, PETSc.C.INSERT_VALUES)
+  AssemblyBegin(vecghost, PETSc.C.MAT_FINAL_ASSEMBLY)
+  AssemblyEnd(vecghost, PETSc.C.MAT_FINAL_ASSEMBLY)
 end
 
-function _unpack!(
+function _pack_all_entries!(vecghost, local_part)
+  num_local = prod(size(local_part))
+  idxs = Vector{Int}(undef, num_local)
+  vals = Vector{Float64}(undef, num_local)
+
+  # Pack data
+  k = 1
+  current = 1
+  for i = 1:length(local_part)
+    for j = 1:length(local_part[i])
+      idxs[current] = current - 1
+      vals[current] = reinterpret(Float64, local_part[i][j])
+      current = current + 1
+      k = k + 1
+    end
+  end
+  set_values_local!(vecghost, idxs, vals, PETSc.C.INSERT_VALUES)
+  AssemblyBegin(vecghost, PETSc.C.MAT_FINAL_ASSEMBLY)
+  AssemblyEnd(vecghost, PETSc.C.MAT_FINAL_ASSEMBLY)
+end
+
+function _unpack_ghost_entries!(
   T::Type{<:Number},
   local_part,
   lid_to_owner,
@@ -154,7 +188,7 @@ function _unpack!(
   end
 end
 
-function _unpack!(
+function _unpack_ghost_entries!(
   T::Type{<:AbstractVector{K}},
   local_part,
   lid_to_owner,
@@ -168,6 +202,32 @@ function _unpack!(
       if (lid_to_owner[k] != comm_rank + 1)
         local_part[i][j] = reinterpret(K, lvec.a[app_to_petsc_locidx[k]])
       end
+      k = k + 1
+    end
+  end
+end
+
+function _unpack_all_entries!(
+  T::Type{<:Number},
+  local_part,
+  app_to_petsc_locidx,
+  lvec,
+)
+  for i = 1:length(local_part)
+    local_part[i] = reinterpret(T, lvec.a[app_to_petsc_locidx[i]])
+  end
+end
+
+function _unpack_all_entries!(
+  T::Type{<:AbstractVector{K}},
+  local_part,
+  app_to_petsc_locidx,
+  lvec,
+) where {K<:Number}
+  k = 1
+  for i = 1:length(local_part)
+    for j = 1:length(local_part[i])
+      local_part[i][j] = reinterpret(K, lvec.a[app_to_petsc_locidx[k]])
       k = k + 1
     end
   end
