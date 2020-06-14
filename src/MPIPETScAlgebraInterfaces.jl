@@ -16,7 +16,9 @@ function Gridap.Algebra.allocate_vector(
 )
   ng = num_gids(indices)
   nl = num_owned_entries(indices)
-  PETSc.Vec(Float64, ng; mlocal = nl, comm = get_comm(indices).comm)
+  vec=PETSc.Vec(Float64, ng; mlocal = nl, comm = get_comm(indices).comm)
+  vec.insertmode = PETSc.C.ADD_VALUES
+  vec
 end
 
 """

@@ -17,7 +17,8 @@ function MPIPETScCommunicator()
 end
 
 function MPIPETScCommunicatorDestroy(comm::MPIPETScCommunicator)
-  PETSc.PetscFinalized(Float64) || PETSc.C.chk(PETSc.C.PetscCommDuplicate(Float64,comm.comm))
+  petsc_comm = Ref{MPI.Comm}(comm.comm)
+  PETSc.PetscFinalized(Float64) || PETSc.C.chk(PETSc.C.PetscCommDestroy(Float64,petsc_comm))
 end
 
 
