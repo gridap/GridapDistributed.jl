@@ -48,9 +48,9 @@ function run(assembly_strategy::AbstractString)
 
 
   if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(V)
+    strategy = RowsComputedLocally(V; global_dofs=false)
   elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model, V)
+    strategy = OwnedCellsStrategy(model, V; global_dofs=false)
   else
     @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
   end

@@ -1,21 +1,46 @@
 
-struct DistributedAssemblyStrategy
-  strategies::DistributedData{<:AssemblyStrategy}
+struct DistributedAssemblyStrategy{T<:AssemblyStrategy}
+  strategies::DistributedData{T}
 end
 
 function get_distributed_data(dstrategy::DistributedAssemblyStrategy)
   dstrategy.strategies
 end
 
-struct DistributedAssembler{GM,GV,LM,LV} <: Assembler
-  global_matrix_type::Type{GM}
-  global_vector_type::Type{GV}
-  local_matrix_type ::Type{LM}
-  local_vector_type ::Type{LV}
+struct DistributedAssembler{GM,GV,LM,LV,AS} <: Assembler
+  global_matrix_type      :: Type{GM}
+  global_vector_type      :: Type{GV}
+  local_matrix_type       :: Type{LM}
+  local_vector_type       :: Type{LV}
+  assembly_strategy_type  :: Type{AS}
   trial::DistributedFESpace
   test::DistributedFESpace
   assems::DistributedData{<:Assembler}
-  strategy::DistributedAssemblyStrategy
+  strategy::DistributedAssemblyStrategy{AS}
+end
+
+"""
+    allocate_local_vector(::Type{GV},indices) where GV
+
+Allocate the local vector which holds the local contributions to
+the global vector of type{GV}. The global vector is indexable using
+indices.
+"""
+function allocate_local_vector(::Type{GV}, indices::DistributedIndexSet) where GV
+   @abstractmethod
+end
+
+function assemble_global_matrix(::Type{AS}, ::Type{GM},
+                                ::DistributedData,
+                                ::DistributedIndexSet,
+                                ::DistributedIndexSet) where {AS,GM}
+   @abstractmethod
+end
+
+function assemble_global_vector(::Type{AS}, ::Type{GM},
+                                ::DistributedData,
+                                ::DistributedIndexSet) where {AS,GM}
+   @abstractmethod
 end
 
 function get_distributed_data(dassem::DistributedAssembler)
@@ -141,21 +166,31 @@ function Gridap.FESpaces.assemble_matrix_and_vector(dassem::DistributedAssembler
   end
 
   gids = dassem.test.gids
-  b = allocate_vector(dassem.global_vector_type,gids)
+  db = allocate_local_vector(dassem.global_vector_type,gids)
 
   dIJV = allocate_coo_vectors(dassem.global_matrix_type,dn)
-  do_on_parts(dassem,dIJV,ddata,b) do part, assem, IJV, data, b
+  do_on_parts(dassem,dIJV,ddata,db) do part, assem, IJV, data, b
     I,J,V = IJV
     fill_matrix_and_vector_coo_numeric!(I,J,V,b,assem,data)
   end
   finalize_coo!(dassem.global_matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-  A = sparse_from_coo(dassem.global_matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+
+  A = assemble_global_matrix(dassem.assembly_strategy_type,
+                             dassem.global_matrix_type,
+                             dIJV,
+                             dassem.test.gids,
+                             dassem.trial.gids)
+
+  b = assemble_global_vector(dassem.assembly_strategy_type,
+                             dassem.global_vector_type,
+                             db,
+                             dassem.test.gids)
 
   # TO-THINK: Mandatory steps required for PETSc vectors.
   #           Should we define our own interface? E.g., finalize_vector!(b)?
   # Note: PETSc.jl provides a fall-back for AbstractArray
-  PETSc.AssemblyBegin(b)
-  PETSc.AssemblyEnd(b)
+  #PETSc.AssemblyBegin(b)
+  #PETSc.AssemblyEnd(b)
 
   A,b
 end
@@ -169,17 +204,25 @@ end
 # Each proc owns a set of matrix / vector rows (and all cols in these rows)
 # Each proc computes locally all values in the owned rows
 # This typically requires to loop also over ghost cells
-struct RowsComputedLocally <: AssemblyStrategy
+struct RowsComputedLocally{GlobalDoFs} <: AssemblyStrategy
   part::Int
   gids::IndexSet
 end
 
-function Gridap.FESpaces.row_map(a::RowsComputedLocally,row)
+function Gridap.FESpaces.row_map(a::RowsComputedLocally{true},row)
   a.gids.lid_to_gid[row]
 end
 
-function Gridap.FESpaces.col_map(a::RowsComputedLocally,col)
+function Gridap.FESpaces.col_map(a::RowsComputedLocally{true},col)
   a.gids.lid_to_gid[col]
+end
+
+function Gridap.FESpaces.row_map(a::RowsComputedLocally{false},row)
+  row
+end
+
+function Gridap.FESpaces.col_map(a::RowsComputedLocally{false},col)
+  col
 end
 
 function Gridap.FESpaces.row_mask(a::RowsComputedLocally,row)
@@ -190,27 +233,34 @@ function Gridap.FESpaces.col_mask(a::RowsComputedLocally,col)
   true
 end
 
-function RowsComputedLocally(V::DistributedFESpace)
-  dgids = V.gids
-  strategies = DistributedData(dgids) do part, gids
-    RowsComputedLocally(part,gids)
-  end
-  DistributedAssemblyStrategy(strategies)
+function RowsComputedLocally(V::DistributedFESpace; global_dofs=true)
+   dgids = V.gids
+   strategies = DistributedData(dgids) do part, gids
+     RowsComputedLocally{global_dofs}(part,gids)
+   end
+   DistributedAssemblyStrategy(strategies)
 end
 
-
-struct OwnedCellsStrategy <: AssemblyStrategy
+struct OwnedCellsStrategy{GlobalDoFs} <: AssemblyStrategy
   part::Int
   dof_gids::IndexSet
   cell_gids::IndexSet
 end
 
-function Gridap.FESpaces.row_map(a::OwnedCellsStrategy,row)
+function Gridap.FESpaces.row_map(a::OwnedCellsStrategy{true},row)
   a.dof_gids.lid_to_gid[row]
 end
 
-function Gridap.FESpaces.col_map(a::OwnedCellsStrategy,col)
+function Gridap.FESpaces.col_map(a::OwnedCellsStrategy{true},col)
   a.dof_gids.lid_to_gid[col]
+end
+
+function Gridap.FESpaces.row_map(a::OwnedCellsStrategy{false},row)
+  row
+end
+
+function Gridap.FESpaces.col_map(a::OwnedCellsStrategy{false},col)
+  col
 end
 
 function Gridap.FESpaces.row_mask(a::OwnedCellsStrategy,row)
@@ -221,11 +271,11 @@ function Gridap.FESpaces.col_mask(a::OwnedCellsStrategy,col)
   true
 end
 
-function OwnedCellsStrategy(M::DistributedDiscreteModel, V::DistributedFESpace)
+function OwnedCellsStrategy(M::DistributedDiscreteModel, V::DistributedFESpace; global_dofs=true)
   dcell_gids = M.gids
   ddof_gids  = V.gids
   strategies = DistributedData(ddof_gids,dcell_gids) do part, dof_gids, cell_gids
-    OwnedCellsStrategy(part,dof_gids,cell_gids)
+    OwnedCellsStrategy{global_dofs}(part,dof_gids,cell_gids)
   end
   DistributedAssemblyStrategy(strategies)
 end
@@ -240,14 +290,22 @@ function Gridap.FESpaces.SparseMatrixAssembler(
   local_vector_type ::Type,
   dtrial::DistributedFESpace,
   dtest::DistributedFESpace,
-  dstrategy::DistributedAssemblyStrategy)
+  dstrategy::DistributedAssemblyStrategy{T}) where T
 
   assems = DistributedData(
     dtrial.spaces,dtest.spaces,dstrategy) do part, U, V, strategy
     SparseMatrixAssembler(local_matrix_type,local_vector_type,U,V,strategy)
   end
 
-  DistributedAssembler(global_matrix_type,global_vector_type,local_matrix_type,local_vector_type,dtrial,dtest,assems,dstrategy)
+  DistributedAssembler(global_matrix_type,
+                       global_vector_type,
+                       local_matrix_type,
+                       local_vector_type,
+                       T,
+                       dtrial,
+                       dtest,
+                       assems,
+                       dstrategy)
 end
 
 function Gridap.FESpaces.SparseMatrixAssembler(
@@ -255,6 +313,13 @@ function Gridap.FESpaces.SparseMatrixAssembler(
   vector_type::Type,
   dtrial::DistributedFESpace,
   dtest::DistributedFESpace,
-  dstrategy::DistributedAssemblyStrategy)
-  Gridap.FESpaces.SparseMatrixAssembler(matrix_type, vector_type, matrix_type, vector_type, dtrial, dtest, dstrategy)
+  dstrategy::DistributedAssemblyStrategy{AS}) where AS
+  Gridap.FESpaces.SparseMatrixAssembler(matrix_type,
+                                        vector_type,
+                                        matrix_type,
+                                        vector_type,
+                                        AS,
+                                        dtrial,
+                                        dtest,
+                                        dstrategy)
 end

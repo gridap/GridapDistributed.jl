@@ -10,12 +10,76 @@ function Gridap.Algebra.allocate_coo_vectors(
   end
 end
 
+function allocate_local_vector(
+  ::Type{PETSc.Vec{Float64}},
+  indices::MPIPETScDistributedIndexSet,
+)
+  DistributedData(indices) do part,index
+   fill(0.0,length(index.lid_to_gid))
+  end
+end
+
 function Gridap.Algebra.finalize_coo!(
   ::Type{PETSc.Mat{Float64}},IJV::MPIPETScDistributedData,m::MPIPETScDistributedIndexSet,n::MPIPETScDistributedIndexSet)
 end
 
-function Gridap.Algebra.sparse_from_coo(
-  ::Type{PETSc.Mat{Float64}},IJV::MPIPETScDistributedData,m::MPIPETScDistributedIndexSet,n::MPIPETScDistributedIndexSet)
+function assemble_global_matrix(
+  ::Type{RowsComputedLocally{false}},
+  ::Type{PETSc.Mat{Float64}},
+  IJV::MPIPETScDistributedData,
+  m::MPIPETScDistributedIndexSet,
+  n::MPIPETScDistributedIndexSet,
+)
+  ngrows = num_gids(m)
+  ngcols = num_gids(n)
+  nlrows = num_owned_entries(m)
+  nlcols = nlrows
+
+  I, J, V = IJV.part
+  ncols_Alocal = maximum(J)
+  for i = 1:length(I)
+    I[i] = m.app_to_petsc_locidx[I[i]]
+  end
+  Alocal = sparse_from_coo(
+    Gridap.Algebra.SparseMatrixCSR{0,Float64,Int64},
+    I,
+    J,
+    V,
+    nlrows,
+    ncols_Alocal,
+  )
+  for i = 1:length(Alocal.colval)
+    Alocal.colval[i] = m.lid_to_gid_petsc[Alocal.colval[i]+1] - 1
+  end
+
+  p = Ref{PETSc.C.Mat{Float64}}()
+  f(buf)= if isempty(buf)
+      Ptr{PETSc.C.PetscInt}(0)
+    else
+      isa(buf,Vector{PETSc.C.PetscInt}) ? buf : PETSc.C.PetscInt[ i for i in buf ]
+    end
+
+  PETSc.C.chk(PETSc.C.MatCreateMPIAIJWithArrays(
+    get_comm(m).comm,
+    nlrows,
+    nlcols,
+    ngrows,
+    ngcols,
+    f(Alocal.rowptr),
+    f(Alocal.colval),
+    Alocal.nzval,
+    p,
+  ))
+  A=PETSc.Mat(p[])
+end
+
+function assemble_global_matrix(
+  ::Type{OwnedCellsStrategy{false}},
+  ::Type{PETSc.Mat{Float64}},
+  IJV::MPIPETScDistributedData,
+  m::MPIPETScDistributedIndexSet,
+  n::MPIPETScDistributedIndexSet,
+)
   ngrows = num_gids(m)
   ngcols = num_gids(n)
   nlrows = num_owned_entries(m)
@@ -29,54 +93,42 @@ function Gridap.Algebra.sparse_from_coo(
   A.insertmode = PETSc.C.ADD_VALUES
 
   # TO-DO: Not efficient!, one call to PETSc function per each injection
-  do_on_parts(get_comm(m),IJV) do part, IJV
-     I,J,V = IJV
-     for (i,j,v) in zip(I,J,V)
-       A[i,j]=v
-     end
+  I,J,V = IJV.part
+  for (i,j,v) in zip(I,J,V)
+    A[m.lid_to_gid_petsc[i],n.lid_to_gid_petsc[j]]=v
   end
 
   PETSc.AssemblyBegin(A, PETSc.C.MAT_FINAL_ASSEMBLY)
   PETSc.AssemblyEnd(A, PETSc.C.MAT_FINAL_ASSEMBLY)
-
   A
-
 end
 
-@noinline function Gridap.FESpaces._assemble_matrix_and_vector_fill!(
-  ::Type{M},nini,I,J,V,b,vals_cache,rows_cache,cols_cache,cell_vals,cell_rows,cell_cols,strategy) where M <: SparseMatrixCSR
-  n = nini
-  for cell in 1:length(cell_cols)
-    rows = getindex!(rows_cache,cell_rows,cell)
-    cols = getindex!(cols_cache,cell_cols,cell)
-    vals = getindex!(vals_cache,cell_vals,cell)
-    matvals, vecvals = vals
-    for (j,gidcol) in enumerate(cols)
-      if gidcol > 0 && col_mask(strategy,gidcol)
-        _gidcol = col_map(strategy,gidcol)
-        for (i,gidrow) in enumerate(rows)
-          if gidrow > 0 && row_mask(strategy,gidrow)
-            _gidrow = row_map(strategy,gidrow)
-            if is_entry_stored(M,gidrow,gidcol)
-              n += 1
-              @inbounds v = matvals[i,j]
-              @inbounds I[n] = _gidrow
-              @inbounds J[n] = _gidcol
-              @inbounds V[n] = v
-            end
-          end
-        end
-      end
-    end
-    for (i,gidrow) in enumerate(rows)
-      if gidrow > 0 && row_mask(strategy,gidrow)
-        _gidrow = row_map(strategy,gidrow)
-        # TO-DO!!!
-        #bi = vecvals[i]
-        #b[_gidrow] += bi
-        b[_gidrow] = vecvals[i]
-      end
-    end
-  end
-  n
+function assemble_global_vector(
+  ::Type{OwnedCellsStrategy{false}},
+  ::Type{PETSc.Vec{Float64}},
+  db::MPIPETScDistributedData,
+  indices::MPIPETScDistributedIndexSet)
+  vec = allocate_vector(PETSc.Vec{Float64},indices)
+  PETSc.setindex0!(vec, db.part, indices.lid_to_gid_petsc .- 1)
+  PETSc.AssemblyBegin(vec)
+  PETSc.AssemblyEnd(vec)
+  vec
+end
+
+function assemble_global_vector(
+  ::Type{RowsComputedLocally{false}},
+  ::Type{PETSc.Vec{Float64}},
+  db::MPIPETScDistributedData,
+  indices::MPIPETScDistributedIndexSet)
+  vec = allocate_vector(PETSc.Vec{Float64},indices)
+
+  part = MPI.Comm_rank(get_comm(indices).comm)+1
+  owned_pos = (indices.parts.part.lid_to_owner .== part)
+  bowned    = db.part[owned_pos]
+  l2g_petsc = indices.lid_to_gid_petsc[owned_pos] .- 1
+
+  PETSc.setindex0!(vec, bowned, l2g_petsc)
+  PETSc.AssemblyBegin(vec)
+  PETSc.AssemblyEnd(vec)
+  vec
 end
