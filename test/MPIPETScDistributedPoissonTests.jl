@@ -9,11 +9,8 @@ using PETSc
 
 function run(assembly_strategy::AbstractString)
   T = Float64
-  fe_space_vector_type = PETSc.Vec{T}
-  assembler_global_vector_type = PETSc.Vec{T}
-  assembler_global_matrix_type = PETSc.Mat{T}
-  assembler_local_vector_type = Vector{T}
-  assembler_local_matrix_type = SparseMatrixCSR{1,Float64,Int32}
+  vector_type = PETSc.Vec{T}
+  matrix_type = PETSc.Mat{T}
 
   # Manufactured solution
   u(x) = x[1] + x[2]
@@ -29,7 +26,7 @@ function run(assembly_strategy::AbstractString)
   # FE Spaces
   order = 1
   V = FESpace(
-    fe_space_vector_type,
+    vector_type,
     valuetype = Float64,
     reffe = :Lagrangian,
     order = order,
@@ -62,10 +59,8 @@ function run(assembly_strategy::AbstractString)
 
   # # Assembler
   assem = SparseMatrixAssembler(
-    assembler_global_matrix_type,
-    assembler_global_vector_type,
-    assembler_local_matrix_type,
-    assembler_local_vector_type,
+    matrix_type,
+    vector_type,
     U,
     V,
     strategy,

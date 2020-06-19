@@ -10,12 +10,23 @@ function Gridap.Algebra.allocate_coo_vectors(
   end
 end
 
+function get_local_vector_type(::Type{PETSc.Vec{Float64}})
+  Vector{Float64}
+end
+
+function get_local_matrix_type(::Type{PETSc.Mat{Float64}})
+  SparseMatrixCSR{1,Float64,Int64}
+end
+
 function allocate_local_vector(
   ::Type{PETSc.Vec{Float64}},
   indices::MPIPETScDistributedIndexSet,
 )
   DistributedData(indices) do part,index
-   fill(0.0,length(index.lid_to_gid))
+   T = get_local_vector_type(PETSc.Vec{Float64})
+   lvec=T(undef,length(index.lid_to_gid))
+   fill!(lvec,zero(eltype(T)))
+   lvec
   end
 end
 
