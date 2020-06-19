@@ -97,11 +97,14 @@ function unpack_all_entries!(a::MPIPETScDistributedVector{T}) where T
   PETSc.restore(lvec)
 end
 
-function Base.getindex(a::MPIPETScDistributedVector,indices::MPIPETScDistributedIndexSet)
-  @notimplementedif a.indices !== indices
-  exchange!(a.vecghost)
-  unpack_all_entries!(a)
-  a
+function Base.getindex(a::PETSc.Vec{Float64},indices::MPIPETScDistributedIndexSet)
+  result= DistributedVector(indices,indices) do part, indices
+    local_part=Vector{Float64}(undef,length(indices.lid_to_owner))
+  end
+  copy!(result.vecghost,a)
+  exchange!(result.vecghost)
+  unpack_all_entries!(result)
+  result
 end
 
 function exchange!(a::PETSc.Vec{T}) where T

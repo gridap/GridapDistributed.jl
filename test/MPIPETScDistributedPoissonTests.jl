@@ -9,13 +9,7 @@ using PETSc
 
 function run(assembly_strategy::AbstractString)
   T = Float64
-  fe_space_vector_type = GridapDistributed.MPIPETScDistributedVector{
-    T,
-    Vector{T},
-    Vector{Int},
-    Vector{Int},
-    Dict{Int,Int32},
-  }
+  fe_space_vector_type = PETSc.Vec{T}
   assembler_global_vector_type = PETSc.Vec{T}
   assembler_global_matrix_type = PETSc.Mat{T}
   assembler_local_vector_type = Vector{T}
