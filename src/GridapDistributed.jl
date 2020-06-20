@@ -45,17 +45,25 @@ export PETScLinearSolver
 
 include("Communicators.jl")
 
+include("SequentialCommunicators.jl")
+
 include("MPIPETScCommunicators.jl")
 
 include("DistributedData.jl")
+
+include("SequentialDistributedData.jl")
 
 include("MPIPETScDistributedData.jl")
 
 include("DistributedIndexSets.jl")
 
+include("SequentialDistributedIndexSets.jl")
+
 include("MPIPETScDistributedIndexSets.jl")
 
 include("DistributedVectors.jl")
+
+include("SequentialDistributedVectors.jl")
 
 include("MPIPETScDistributedVectors.jl")
 
@@ -66,6 +74,8 @@ include("CartesianDiscreteModels.jl")
 include("DistributedFESpaces.jl")
 
 include("DistributedAssemblers.jl")
+
+include("SequentialDistributedAssemblersInterfaces.jl")
 
 include("MPIPETScDistributedAssemblersInterfaces.jl")
 
