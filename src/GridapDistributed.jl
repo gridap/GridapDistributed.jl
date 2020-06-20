@@ -59,8 +59,6 @@ include("DistributedVectors.jl")
 
 include("MPIPETScDistributedVectors.jl")
 
-include("MPIPETScAlgebraInterfaces.jl")
-
 include("DistributedDiscreteModels.jl")
 
 include("CartesianDiscreteModels.jl")
