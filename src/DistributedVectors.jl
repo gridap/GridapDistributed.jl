@@ -124,6 +124,7 @@ end
 
 get_distributed_data(a::SequentialIJV) = a.dIJV
 
+
 function Gridap.Algebra.allocate_coo_vectors(::Type{M},dn::DistributedData) where M <: AbstractMatrix
 
   part_to_n = gather(dn)
@@ -131,10 +132,15 @@ function Gridap.Algebra.allocate_coo_vectors(::Type{M},dn::DistributedData) wher
   gIJV = allocate_coo_vectors(M,n)
 
   _fill_offsets!(part_to_n)
-  offsets = scatter(get_comm(dn),part_to_n.+1)
 
-  dIJV = DistributedData(offsets) do part, offset
-    map( i -> SubVector(i,offset,n), gIJV)
+  dIJV = DistributedData(get_comm(dn), part_to_n) do part, part_to_n
+    spos=part_to_n[part]+1
+    if (part == length(part_to_n))
+      epos=n
+    else
+      epos=part_to_n[part+1]
+    end
+    map( i -> SubVector(i,spos,epos), gIJV)
   end
 
   SequentialIJV(dIJV,gIJV)
@@ -144,10 +150,4 @@ function Gridap.Algebra.finalize_coo!(
   ::Type{M},IJV::SequentialIJV,m::DistributedIndexSet,n::DistributedIndexSet) where M <: AbstractMatrix
   I,J,V = IJV.gIJV
   finalize_coo!(M,I,J,V,num_gids(m),num_gids(n))
-end
-
-function Gridap.Algebra.sparse_from_coo(
-  ::Type{M},IJV::SequentialIJV,m::DistributedIndexSet,n::DistributedIndexSet) where M
-  I,J,V = IJV.gIJV
-  sparse_from_coo(M,I,J,V,num_gids(m),num_gids(n))
 end

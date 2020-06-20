@@ -1,5 +1,3 @@
-__precompile__(false)
-
 module GridapDistributed
 
 using Gridap
@@ -9,6 +7,7 @@ using Gridap.FESpaces
 using Gridap.Arrays
 using Gridap.Algebra
 
+using SparseArrays
 using MPI
 using PETSc
 

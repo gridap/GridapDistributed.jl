@@ -18,13 +18,13 @@ struct DistributedAssembler{M,V,AS} <: Assembler
 end
 
 """
-    allocate_local_vector(::Type{V}, indices) where V
+    allocate_local_vector(::Type{AS}, ::Type{V}, indices) where {AS,V}
 
-Allocate the local vector which holds the local contributions to
-the global vector of type V. The global vector is indexable using
-indices.
+Allocate the local vector required in order to assemble a global vector
+of type V accordingly to the assembly algorithm underlying the assembly strategy
+AS.  The global vector is indexable using indices.
 """
-function allocate_local_vector(::Type{V}, indices::DistributedIndexSet) where V
+function allocate_local_vector(::Type{AS}, ::Type{V}, indices::DistributedIndexSet) where {AS,V}
    @abstractmethod
 end
 
@@ -40,6 +40,10 @@ function get_local_matrix_type(::Type{M}) where M
   @abstractmethod
 end
 
+function get_local_matrix_type(::Type{M}) where M <: Union{<:SparseMatrixCSR,<:SparseMatrixCSC}
+  M
+end
+
 """
     get_local_vector_type(::Type{V}) where V
 
@@ -52,6 +56,10 @@ function get_local_vector_type(::Type{V}) where V
   @abstractmethod
 end
 
+function get_local_vector_type(::Type{V}) where V <: Vector
+  V
+end
+
 function assemble_global_matrix(::Type{AS}, ::Type{M},
                                 ::DistributedData,
                                 ::DistributedIndexSet,
@@ -59,9 +67,9 @@ function assemble_global_matrix(::Type{AS}, ::Type{M},
    @abstractmethod
 end
 
-function assemble_global_vector(::Type{AS}, ::Type{M},
+function assemble_global_vector(::Type{AS}, ::Type{V},
                                 ::DistributedData,
-                                ::DistributedIndexSet) where {AS,M}
+                                ::DistributedIndexSet) where {AS,V}
    @abstractmethod
 end
 
@@ -95,8 +103,11 @@ function Gridap.FESpaces.allocate_matrix(dassem::DistributedAssembler,dmatdata)
   end
 
   finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-  sparse_from_coo(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-
+  A = assemble_global_matrix(dassem.assembly_strategy_type,
+                             dassem.matrix_type,
+                             dIJV,
+                             dassem.test.gids,
+                             dassem.trial.gids)
 end
 
 function Gridap.FESpaces.allocate_vector(a::DistributedAssembler,dvecdata)
@@ -116,8 +127,11 @@ function Gridap.FESpaces.allocate_matrix_and_vector(dassem::DistributedAssembler
     fill_matrix_and_vector_coo_symbolic!(I,J,assem,data)
   end
   finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-  A = sparse_from_coo(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-
+  A = assemble_global_matrix(dassem.assembly_strategy_type,
+                             dassem.matrix_type,
+                             dIJV,
+                             dassem.test.gids,
+                             dassem.trial.gids)
   gids = dassem.test.gids
   b = allocate_vector(dassem.vector_type,gids)
 
@@ -159,20 +173,20 @@ function Gridap.FESpaces.assemble_matrix_and_vector_add!(dmat,dvec,dassem::Distr
 end
 
 function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dmatdata)
-
   dn = DistributedData(dassem,dmatdata) do part, assem, matdata
     count_matrix_nnz_coo(assem,matdata)
   end
-
   dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
-
   do_on_parts(dassem,dIJV,dmatdata) do part, assem, IJV, matdata
     I,J,V = IJV
     fill_matrix_coo_numeric!(I,J,V,assem,matdata)
   end
-
   finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-  sparse_from_coo(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+  A = assemble_global_matrix(dassem.assembly_strategy_type,
+                             dassem.matrix_type,
+                             dIJV,
+                             dassem.test.gids,
+                             dassem.trial.gids)
 end
 
 function Gridap.FESpaces.assemble_vector(dassem::DistributedAssembler, dvecdata)
@@ -187,7 +201,7 @@ function Gridap.FESpaces.assemble_matrix_and_vector(dassem::DistributedAssembler
   end
 
   gids = dassem.test.gids
-  db = allocate_local_vector(dassem.vector_type,gids)
+  db = allocate_local_vector(dassem.assembly_strategy_type,dassem.vector_type,gids)
 
   dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
   do_on_parts(dassem,dIJV,ddata,db) do part, assem, IJV, data, b
@@ -316,4 +330,69 @@ function Gridap.FESpaces.SparseMatrixAssembler(
                        dtest,
                        assems,
                        dstrategy)
+end
+
+function allocate_local_vector(
+  ::Union{Type{RowsComputedLocally{false}},Type{OwnedCellsStrategy{false}}},
+  ::Type{V},
+  indices::SequentialDistributedIndexSet,
+) where V<:Vector
+  DistributedData(indices) do part,index
+   T = get_local_vector_type(V)
+   lvec=T(undef,length(index.lid_to_gid))
+   fill!(lvec,zero(eltype(T)))
+   lvec
+  end
+end
+
+function allocate_local_vector(
+  ::Union{Type{RowsComputedLocally{true}},Type{OwnedCellsStrategy{true}}},
+  ::Type{V},
+  indices::SequentialDistributedIndexSet,
+) where V<:Vector
+   T = get_local_vector_type(V)
+   vec=T(undef,num_gids(indices))
+   fill!(vec,zero(eltype(T)))
+   vec
+end
+
+
+function assemble_global_matrix(::Union{Type{RowsComputedLocally{T}},Type{OwnedCellsStrategy{T}}},
+                                ::Type{M},
+                                IJV::SequentialIJV,
+                                m::DistributedIndexSet,
+                                n::DistributedIndexSet) where {T,M}
+  if (!T)
+     do_on_parts(IJV.dIJV,m,n) do part, IJV, mindexset, nindexset
+        I,J,V = IJV
+        for i=1:length(I)
+          I[i]=mindexset.lid_to_gid[I[i]]
+          J[i]=nindexset.lid_to_gid[J[i]]
+        end
+     end
+  end
+  I,J,V = IJV.gIJV
+  A=sparse_from_coo(M,I,J,V,num_gids(m),num_gids(n))
+end
+
+function assemble_global_vector(::Union{Type{RowsComputedLocally{false}},Type{OwnedCellsStrategy{false}}},
+                                ::Type{M},
+                                db::DistributedData,
+                                m::DistributedIndexSet) where M <: Vector
+  b=allocate_vector(M, num_gids(m))
+  do_on_parts(m, db, b) do part, mindexset, blocal, b
+    for i=1:length(blocal)
+      b[mindexset.lid_to_gid[i]] += blocal[i]
+    end
+  end
+  b
+end
+
+
+
+function assemble_global_vector(::Union{Type{RowsComputedLocally{true}},Type{OwnedCellsStrategy{true}}},
+                                ::Type{M},
+                                b::M,
+                                m::DistributedIndexSet) where M <: Vector
+  b
 end

@@ -6,7 +6,7 @@ using Gridap.FESpaces
 using GridapDistributed
 using SparseArrays
 
-function run(assembly_strategy::AbstractString)
+function run(assembly_strategy::AbstractString, global_dofs::Bool)
   # Select matrix and vector types for discrete problem
   # Note that here we use serial vectors and matrices
   # but the assembly is distributed
@@ -40,9 +40,9 @@ function run(assembly_strategy::AbstractString)
   U = TrialFESpace(V, u)
 
   if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(V)
+    strategy = RowsComputedLocally(V; global_dofs=global_dofs)
   elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model,V)
+    strategy = OwnedCellsStrategy(model,V; global_dofs=global_dofs)
   else
     @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
   end
@@ -82,7 +82,9 @@ function run(assembly_strategy::AbstractString)
   @test e_l2 < tol
 end
 
-run("RowsComputedLocally")
-run("OwnedCellsStrategy")
+run("RowsComputedLocally", false)
+run("OwnedCellsStrategy", false)
+run("RowsComputedLocally", true)
+run("OwnedCellsStrategy", true)
 
 end # module
