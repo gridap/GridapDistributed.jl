@@ -143,10 +143,9 @@ function DistributedFESpace(::Type{V}; model::DistributedDiscreteModel,kwargs...
       ngids=lngids
   end
 
-  num_dofs_x_cell = 0
-  do_on_parts(comm,spaces) do part, lspace
+  num_dofs_x_cell=DistributedData(comm,spaces) do part, lspace
     cell_dofs=get_cell_dofs(lspace)
-    num_dofs_x_cell=length(cell_dofs[1])
+    [length(cell_dofs[i]) for i=1:length(cell_dofs)]
   end
 
   function init_cell_to_owners(part,cell_to_owners,lspace,lid_to_owner)

@@ -80,6 +80,26 @@ function DistributedVector{T}(
   MPIPETScDistributedVector(part,indices,vecghost)
 end
 
+function DistributedVector{T}(
+  indices::MPIPETScDistributedIndexSet, length_entries :: MPIPETScDistributedData ) where T <: AbstractVector{<:Number}
+  num_entries   = length(indices.parts.part.lid_to_owner)
+  @assert num_entries == length(length_entries.part)
+  block_indices = indices
+  indices,vecghost = _create_eltype_vector_number_variable_length_indices_ghost(T,length_entries.part,indices)
+  lvecghost = PETSc.LocalVector(vecghost, length(indices.parts.part.lid_to_owner))
+  a_reint=reinterpret(eltype(T), lvecghost.a)
+  ptrs=Vector{Int32}(undef,num_entries+1)
+  ptrs[1]=1
+  for i=1:num_entries
+    ptrs[i+1]=ptrs[i]+length_entries.part[i]
+  end
+  TSUB=SubArray{eltype(T),1,typeof(a_reint),Tuple{UnitRange{Int64}},true}
+  part=TSUB[ view(a_reint,ptrs[i]:ptrs[i+1]-1) for i=1:num_entries ]
+  part=reindex(part,block_indices.app_to_petsc_locidx)
+  PETSc.restore(lvecghost)
+  MPIPETScDistributedVector(part,indices,vecghost)
+end
+
 
 function _create_eltype_number_indices_ghost(
   eltype::Type{T},
@@ -113,6 +133,69 @@ indices = DistributedIndexSet(get_comm(indices),n,indices,l,n) do part, indices,
         lid_to_gid[k]   = offset + j
         lid_to_owner[k] = indices.lid_to_owner[i]
         k=k+1
+     end
+  end
+  IndexSet(n, lid_to_gid, lid_to_owner)
+end
+vecghost = create_ghost_vector(indices)
+indices, vecghost
+end
+
+function _create_eltype_vector_number_variable_length_indices_ghost(
+  eltype::Type{T},
+  length_entries::AbstractVector{<:Integer},
+  indices::MPIPETScDistributedIndexSet,
+) where T<:AbstractVector{<:Number}
+
+#println(T)
+#println(eltype(T))
+#@assert sizeof(eltype(T)) == sizeof(Float64)
+comm      = get_comm(indices)
+part      = MPI.Comm_rank(comm.comm)+1
+num_owned_entries = 0
+num_local_entries = 0
+lid_to_owner = indices.parts.part.lid_to_owner
+for i = 1:length(lid_to_owner)
+   if (lid_to_owner[i] == part)
+     num_owned_entries = num_owned_entries + length_entries[i]
+   end
+   num_local_entries = num_local_entries + length_entries[i]
+end
+
+sndbuf = Ref{Int64}(num_owned_entries)
+rcvbuf = Ref{Int64}()
+
+MPI.Exscan!(sndbuf, rcvbuf, 1, +, comm.comm)
+(part == 1) ? (offset = 1) : (offset = rcvbuf[] + 1)
+
+sendrecvbuf = Ref{Int64}(num_owned_entries)
+MPI.Allreduce!(sendrecvbuf, +, comm.comm)
+n = sendrecvbuf[]
+
+offsets = DistributedVector{Int}(indices)
+do_on_parts(offsets, indices) do part, offsets, indices
+  for i=1:length(indices.lid_to_owner)
+     if (indices.lid_to_owner[i] == part)
+       offsets[i] = offset
+       for j=1:length_entries[i]
+         offset=offset+1
+       end
+     end
+  end
+end
+exchange!(offsets)
+
+indices = DistributedIndexSet(get_comm(indices),n,indices,offsets) do part, indices, offsets
+  lid_to_gid   = Vector{Int}(undef, num_local_entries)
+  lid_to_owner = Vector{Int}(undef, num_local_entries)
+  k=1
+  for i=1:length(indices.lid_to_owner)
+     offset=offsets[i]
+     for j=1:length_entries[i]
+        lid_to_gid[k]   = offset
+        lid_to_owner[k] = indices.lid_to_owner[i]
+        k=k+1
+        offset=offset+1
      end
   end
   IndexSet(n, lid_to_gid, lid_to_owner)
