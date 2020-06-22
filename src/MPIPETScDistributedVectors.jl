@@ -24,52 +24,83 @@ get_part(
   a::PETSc.Vec{Float64},
   part::Integer) = a
 
-function DistributedVector(
-  initializer::Function, indices::MPIPETScDistributedIndexSet, args...)
-  comm = get_comm(indices)
-  data = DistributedData(initializer, comm, args...)
-  part = data.part
-  if (eltype(part) <: Number)
-    indices,vecghost = _create_eltype_number_indices_ghost(part,indices)
-  else
-    @assert eltype(part) <: AbstractVector{<:Number}
-    indices,vecghost = _create_eltype_vector_number_indices_ghost(part,indices)
-  end
+# function DistributedVector(
+#   initializer::Function, indices::MPIPETScDistributedIndexSet, args...)
+#   comm = get_comm(indices)
+#   data = DistributedData(initializer, comm, args...)
+#   part = data.part
+#   if (eltype(part) <: Number)
+#     indices,vecghost = _create_eltype_number_indices_ghost(part,indices)
+#   else
+#     @assert eltype(part) <: AbstractVector{<:Number}
+#     indices,vecghost = _create_eltype_vector_number_indices_ghost(part,indices)
+#   end
+#   MPIPETScDistributedVector(part,indices,vecghost)
+# end
+#
+# function DistributedVector{T}(
+#   initializer::Function, indices::MPIPETScDistributedIndexSet, args...) where T <: Union{Number,AbstractVector{<:Number}}
+#   comm = get_comm(indices)
+#   data = DistributedData(initializer, comm, args...)
+#   part = data.part
+#   if (T <: Number)
+#     indices,vecghost = _create_eltype_number_indices_ghost(part,indices)
+#   else
+#     indices,vecghost = _create_eltype_vector_number_indices_ghost(part,indices)
+#   end
+#   MPIPETScDistributedVector(part,indices,vecghost)
+# end
+
+function DistributedVector{T}(
+  indices::MPIPETScDistributedIndexSet) where T <: Number
+  indices,vecghost = _create_eltype_number_indices_ghost(T,indices)
+  lvecghost = PETSc.LocalVector(vecghost, length(indices.parts.part.lid_to_owner))
+  a_reint=reinterpret(T,lvecghost.a)
+  part=reindex(a_reint,indices.app_to_petsc_locidx)
+  PETSc.restore(lvecghost)
   MPIPETScDistributedVector(part,indices,vecghost)
 end
 
 function DistributedVector{T}(
-  initializer::Function, indices::MPIPETScDistributedIndexSet, args...) where T <: Union{Number,AbstractVector{<:Number}}
-  comm = get_comm(indices)
-  data = DistributedData(initializer, comm, args...)
-  part = data.part
-  if (T <: Number)
-    indices,vecghost = _create_eltype_number_indices_ghost(part,indices)
-  else
-    indices,vecghost = _create_eltype_vector_number_indices_ghost(part,indices)
+  indices::MPIPETScDistributedIndexSet, length_entry :: Int ) where T <: AbstractVector{<:Number}
+  num_entries   = length(indices.parts.part.lid_to_owner)
+  block_indices = indices
+  indices,vecghost = _create_eltype_vector_number_indices_ghost(T,length_entry,indices)
+  lvecghost = PETSc.LocalVector(vecghost, length(indices.parts.part.lid_to_owner))
+  a_reint=reinterpret(eltype(T), lvecghost.a)
+  ptrs=Vector{Int32}(undef,num_entries+1)
+  ptrs[1]=1
+  for i=1:num_entries
+    ptrs[i+1]=ptrs[i]+length_entry
   end
+  TSUB=SubArray{eltype(T),1,typeof(a_reint),Tuple{UnitRange{Int64}},true}
+  part=TSUB[ view(a_reint,ptrs[i]:ptrs[i+1]-1) for i=1:num_entries ]
+  part=reindex(part,block_indices.app_to_petsc_locidx)
+  PETSc.restore(lvecghost)
   MPIPETScDistributedVector(part,indices,vecghost)
 end
 
 
 function _create_eltype_number_indices_ghost(
-  part::Vector{T},
+  eltype::Type{T},
   indices::MPIPETScDistributedIndexSet,
 ) where {T<:Number}
-  @assert sizeof(eltype(part)) == sizeof(Float64)
-  @assert length(part) == length(indices.parts.part.lid_to_owner)
+  @assert sizeof(T) == sizeof(Float64)
   vecghost = create_ghost_vector(indices)
   indices, vecghost
 end
 
 function _create_eltype_vector_number_indices_ghost(
-  local_part::Vector{T},
+  eltype::Type{T},
+  length_entry::Int,
   indices::MPIPETScDistributedIndexSet,
-) where {T<:AbstractVector{<:Number}}
+) where T<:AbstractVector{<:Number}
 
-@assert sizeof(eltype(T)) == sizeof(Float64)
+#println(T)
+#println(eltype(T))
+#@assert sizeof(eltype(T)) == sizeof(Float64)
 
-l = length(local_part[1])
+l = length_entry
 n = l * indices.ngids
 
 indices = DistributedIndexSet(get_comm(indices),n,indices,l,n) do part, indices, l, n
@@ -98,12 +129,9 @@ function unpack_all_entries!(a::MPIPETScDistributedVector{T}) where T
 end
 
 function Base.getindex(a::PETSc.Vec{Float64},indices::MPIPETScDistributedIndexSet)
-  result= DistributedVector(indices,indices) do part, indices
-    local_part=Vector{Float64}(undef,length(indices.lid_to_owner))
-  end
+  result= DistributedVector{Float64}(indices)
   copy!(result.vecghost,a)
   exchange!(result.vecghost)
-  unpack_all_entries!(result)
   result
 end
 
@@ -122,15 +150,15 @@ function exchange!(a::MPIPETScDistributedVector{T}) where T
   comm_rank = MPI.Comm_rank(comm.comm)
 
   # Pack data
-  _pack_local_entries!(a.vecghost, local_part, lid_to_owner, comm_rank)
+  #_pack_local_entries!(a.vecghost, local_part, lid_to_owner, comm_rank)
 
   exchange!(a.vecghost)
 
-  # Unpack data
-  num_local = length(lid_to_owner)
-  lvec = PETSc.LocalVector(a.vecghost,num_local)
-  _unpack_ghost_entries!(eltype(local_part), local_part, lid_to_owner, comm_rank, app_to_petsc_locidx, lvec)
-  PETSc.restore(lvec)
+  #  Unpack data
+  # num_local = length(lid_to_owner)
+  # lvec = PETSc.LocalVector(a.vecghost,num_local)
+  # _unpack_ghost_entries!(eltype(local_part), local_part, lid_to_owner, comm_rank, app_to_petsc_locidx, lvec)
+  # PETSc.restore(lvec)
 end
 
 function _pack_local_entries!(vecghost, local_part, lid_to_owner, comm_rank)
@@ -234,4 +262,9 @@ function _unpack_all_entries!(
       k = k + 1
     end
   end
+end
+
+function Base.setindex!(a::Gridap.Arrays.Reindexed,v,j::Integer)
+  i = a.j_to_i[j]
+  a.i_to_v[i]=v
 end

@@ -32,6 +32,30 @@ function DistributedVector(
   SequentialDistributedVector(parts,indices)
 end
 
+function DistributedVector{T}(
+  indices::SequentialDistributedIndexSet) where T <: Number
+  comm = get_comm(indices)
+  data = DistributedData(comm,indices) do part, lindices
+    Vector{T}(undef, length(lindices.lid_to_owner))
+  end
+  parts = data.parts
+  SequentialDistributedVector(parts,indices)
+end
+
+function DistributedVector{T}(
+  indices::SequentialDistributedIndexSet, length_entry :: Int ) where T <: AbstractVector{<:Number}
+  comm = get_comm(indices)
+  data = DistributedData(comm,indices) do part, lindices
+    Vector{eltype(T)}[ Vector{eltype(T)}(undef,length_entry) for i=1:length(lindices.lid_to_owner) ]
+  end
+  parts = data.parts
+  SequentialDistributedVector(parts,indices)
+end
+
+
+
+
+
 function Base.getindex(a::SequentialDistributedVector,indices::SequentialDistributedIndexSet)
   @notimplementedif a.indices !== indices
   exchange!(a)

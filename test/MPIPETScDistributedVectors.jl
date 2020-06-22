@@ -3,6 +3,7 @@ module MPIPETScDistributedVectors
 using GridapDistributed
 using Test
 using MPI
+using PETSc
 
 comm = MPIPETScCommunicator()
 @test num_parts(comm) == 2
@@ -16,31 +17,32 @@ indices = DistributedIndexSet(comm,n) do part
   end
 end
 
-vec = DistributedVector(indices,indices) do part, indices
-  local_part=Vector{Int64}(undef,length(indices.lid_to_owner))
+vec = DistributedVector{Int64}(indices)
+do_on_parts(vec,indices) do part, local_part, indices
   for i=1:length(local_part)
     if (indices.lid_to_owner[i] == part)
       local_part[i]=part
     end
   end
-  local_part
 end
 exchange!(vec)
 @test vec.part == indices.parts.part.lid_to_owner
 
-vec = DistributedVector(indices,indices) do part, indices
-  local_part=Vector{Vector{Int64}}(undef,length(indices.lid_to_owner))
+vec = DistributedVector{Vector{Int64}}(indices,4)
+do_on_parts(vec,indices) do part, local_part, indices
   for i=1:length(local_part)
     if (indices.lid_to_owner[i] == part)
-      local_part[i]=[part for j=1:4]
+      for j=1:length(local_part[i])
+        local_part[i][j] = part
+      end
     else
-      local_part[i]=[0 for j=1:4]
+      for j=1:length(local_part[i])
+        local_part[i][j] = 0
+      end
     end
   end
-  local_part
 end
 exchange!(vec)
-
 test_result = true
 for i = 1:length(vec.part)
   for j = 1:length(vec.part[i])
