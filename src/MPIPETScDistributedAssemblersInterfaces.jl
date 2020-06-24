@@ -193,7 +193,6 @@ function compute_subdomain_graph_dIS_and_lst_snd(gids, dI)
 end
 
 
-
 function assemble_global_matrix(
   ::Type{OwnedCellsStrategy{false}},
   ::Type{PETSc.Mat{Float64}},
@@ -207,20 +206,16 @@ function assemble_global_matrix(
   nlrows = length(m.parts.part.lid_to_gid)
   nlcols = nlrows
 
-  Ilocal = IJV.part[1]
-  Jlocal = IJV.part[2]
-  Vlocal = IJV.part[3]
-
   dI = DistributedData(get_comm(m),IJV) do part, IJV
     I,_,_ = IJV
     I
   end
 
-  # 2. Determine communication pattern
+  # 1. Determine communication pattern
   dIS, part_to_lst_snd =
    compute_subdomain_graph_dIS_and_lst_snd(m, dI)
 
-  # 3. Communicate entries
+  # 2. Communicate entries
   length_entries = DistributedVector{Int}(dIS)
   do_on_parts(length_entries, m, dI, part_to_lst_snd) do part, length_entries, gid, I, lst_snd
     fill!(length_entries, zero(eltype(length_entries)))
@@ -259,7 +254,7 @@ function assemble_global_matrix(
   end
   exchange!(exchange_entries_vector)
 
-  #3. Combine local + remote entries
+  # 3. Combine local + remote entries
   part              = MPI.Comm_rank(get_comm(m).comm)+1
   test_lid_to_owner = m.parts.part.lid_to_owner
   test_lid_to_gid   = m.lid_to_gid_petsc
