@@ -17,22 +17,6 @@ get_part(
   part::Integer) = a.parts[part]
 
 function DistributedVector{T}(
-  initializer::Function, indices::SequentialDistributedIndexSet,args...) where T
-  comm = get_comm(indices)
-  data = DistributedData(initializer,comm,args...)
-  parts = data.parts
-  SequentialDistributedVector{T}(parts,indices)
-end
-
-function DistributedVector(
-  initializer::Function, indices::SequentialDistributedIndexSet,args...)
-  comm = get_comm(indices)
-  data = DistributedData(initializer,comm,args...)
-  parts = data.parts
-  SequentialDistributedVector(parts,indices)
-end
-
-function DistributedVector{T}(
   indices::SequentialDistributedIndexSet) where T <: Number
   comm = get_comm(indices)
   data = DistributedData(comm,indices) do part, lindices

@@ -25,10 +25,6 @@ end
 
 # Build a Distributed vector from an index set
 # the resulting object is assumed to be locally indexable when restricted to a part
-function DistributedVector{T}(initializer::Function,indices::DistributedIndexSet,args...) where T
-  @abstractmethod
-end
-
-function DistributedVector(initializer::Function,indices::DistributedIndexSet,args...)
+function DistributedVector{T}(indices::DistributedIndexSet) where T
   @abstractmethod
 end

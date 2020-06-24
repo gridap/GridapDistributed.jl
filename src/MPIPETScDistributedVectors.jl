@@ -24,33 +24,6 @@ get_part(
   a::PETSc.Vec{Float64},
   part::Integer) = a
 
-# function DistributedVector(
-#   initializer::Function, indices::MPIPETScDistributedIndexSet, args...)
-#   comm = get_comm(indices)
-#   data = DistributedData(initializer, comm, args...)
-#   part = data.part
-#   if (eltype(part) <: Number)
-#     indices,vecghost = _create_eltype_number_indices_ghost(part,indices)
-#   else
-#     @assert eltype(part) <: AbstractVector{<:Number}
-#     indices,vecghost = _create_eltype_vector_number_indices_ghost(part,indices)
-#   end
-#   MPIPETScDistributedVector(part,indices,vecghost)
-# end
-#
-# function DistributedVector{T}(
-#   initializer::Function, indices::MPIPETScDistributedIndexSet, args...) where T <: Union{Number,AbstractVector{<:Number}}
-#   comm = get_comm(indices)
-#   data = DistributedData(initializer, comm, args...)
-#   part = data.part
-#   if (T <: Number)
-#     indices,vecghost = _create_eltype_number_indices_ghost(part,indices)
-#   else
-#     indices,vecghost = _create_eltype_vector_number_indices_ghost(part,indices)
-#   end
-#   MPIPETScDistributedVector(part,indices,vecghost)
-# end
-
 function DistributedVector{T}(
   indices::MPIPETScDistributedIndexSet) where T <: Number
   indices,vecghost = _create_eltype_number_indices_ghost(T,indices)
@@ -61,42 +34,42 @@ function DistributedVector{T}(
   MPIPETScDistributedVector(part,indices,vecghost)
 end
 
-function DistributedVector{T}(
-  indices::MPIPETScDistributedIndexSet, length_entry :: Int ) where T <: AbstractVector{<:Number}
-  num_entries   = length(indices.parts.part.lid_to_owner)
-  block_indices = indices
-  indices,vecghost = _create_eltype_vector_number_indices_ghost(T,length_entry,indices)
+function _build_local_part_from_ptrs(::Type{T}, indices, block_indices, vecghost, ptrs) where T
   lvecghost = PETSc.LocalVector(vecghost, length(indices.parts.part.lid_to_owner))
   a_reint=reinterpret(eltype(T), lvecghost.a)
+  TSUB=SubArray{eltype(T),1,typeof(a_reint),Tuple{UnitRange{Int64}},true}
+  part=TSUB[ view(a_reint,ptrs[i]:ptrs[i+1]-1) for i=1:length(ptrs)-1 ]
+  part=reindex(part,block_indices.app_to_petsc_locidx)
+  PETSc.restore(lvecghost)
+  part
+end
+
+function DistributedVector{T}(
+  indices::MPIPETScDistributedIndexSet, length_entry :: Int ) where T <: AbstractVector{<:Number}
+  num_entries = length(indices.parts.part.lid_to_owner)
   ptrs=Vector{Int32}(undef,num_entries+1)
   ptrs[1]=1
   for i=1:num_entries
     ptrs[i+1]=ptrs[i]+length_entry
   end
-  TSUB=SubArray{eltype(T),1,typeof(a_reint),Tuple{UnitRange{Int64}},true}
-  part=TSUB[ view(a_reint,ptrs[i]:ptrs[i+1]-1) for i=1:num_entries ]
-  part=reindex(part,block_indices.app_to_petsc_locidx)
-  PETSc.restore(lvecghost)
+  block_indices = indices
+  indices,vecghost = _create_eltype_vector_number_indices_ghost(T,length_entry,indices)
+  part = _build_local_part_from_ptrs(T, indices, block_indices, vecghost, ptrs)
   MPIPETScDistributedVector(part,indices,vecghost)
 end
 
 function DistributedVector{T}(
   indices::MPIPETScDistributedIndexSet, length_entries :: MPIPETScDistributedData ) where T <: AbstractVector{<:Number}
   num_entries   = length(indices.parts.part.lid_to_owner)
-  @assert num_entries == length(length_entries.part)
-  block_indices = indices
-  indices,vecghost = _create_eltype_vector_number_variable_length_indices_ghost(T,length_entries.part,indices)
-  lvecghost = PETSc.LocalVector(vecghost, length(indices.parts.part.lid_to_owner))
-  a_reint=reinterpret(eltype(T), lvecghost.a)
   ptrs=Vector{Int32}(undef,num_entries+1)
+  @assert num_entries == length(length_entries.part)
   ptrs[1]=1
   for i=1:num_entries
     ptrs[i+1]=ptrs[i]+length_entries.part[i]
   end
-  TSUB=SubArray{eltype(T),1,typeof(a_reint),Tuple{UnitRange{Int64}},true}
-  part=TSUB[ view(a_reint,ptrs[i]:ptrs[i+1]-1) for i=1:num_entries ]
-  part=reindex(part,block_indices.app_to_petsc_locidx)
-  PETSc.restore(lvecghost)
+  block_indices = indices
+  indices,vecghost = _create_eltype_vector_number_variable_length_indices_ghost(T,length_entries.part,indices)
+  part = _build_local_part_from_ptrs(T, indices, block_indices, vecghost, ptrs)
   MPIPETScDistributedVector(part,indices,vecghost)
 end
 

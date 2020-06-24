@@ -97,6 +97,7 @@ function run(assembly_strategy::AbstractString)
   if (i_am_master(comm)) println("$(e_l2) < $(tol)\n") end
 end
 
+
 run("RowsComputedLocally")
 run("OwnedCellsStrategy")
 
