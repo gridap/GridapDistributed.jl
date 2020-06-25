@@ -20,16 +20,20 @@ indices = DistributedIndexSet(comm,n) do part
   IndexSet(n,lid_to_gid,lid_to_owner)
 end
 
-a = DistributedVector(indices) do part
-  fill(10*part,6)
+a = DistributedVector{Int}(indices)
+do_on_parts(a) do part, a
+  for i=1:length(a)
+    a[i]=10*part
+  end
 end
 
 exchange!(a)
 
 @test a.parts == [[10, 10, 10, 10, 10, 20], [10, 20, 20, 20, 20, 20]]
 
-b = DistributedVector{Int}(indices,a) do part, a
-  a .+ part
+b = DistributedVector{Int}(indices)
+do_on_parts(b,a) do part, b, a
+  b .= a .+ part
 end
 
 c = b[indices]

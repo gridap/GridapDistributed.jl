@@ -77,9 +77,13 @@ end
 
 # Julia vectors
 function Base.getindex(a::Vector,indices::SequentialDistributedIndexSet)
-  DistributedVector(indices,indices,a) do part, indices, a
-    a[indices.lid_to_gid]
+  dv = DistributedVector{eltype(a)}(indices)
+  do_on_parts(dv,indices,a) do part, v, indices, a
+    for i=1:length(v)
+      v[i]=a[indices.lid_to_gid[i]]
+    end
   end
+  dv
 end
 
 #function exchange!(a::Vector)

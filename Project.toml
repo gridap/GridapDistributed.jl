@@ -11,7 +11,7 @@ PETSc = "743b6f9b-fae8-55fc-a981-4e9a2885e829"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
-Gridap = "0.10.0"
+Gridap = "~0.10.0"
 julia = "1"
 
 [extras]
