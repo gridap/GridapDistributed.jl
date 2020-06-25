@@ -18,7 +18,7 @@ notifications:
     on_failure: always
 before_script:
   - export JULIA_MPI_BINARY="system"
-  - export JULIA_PETSC_RealDouble_DIR="/usr/lib/petsc/lib"
+  - export JULIA_PETSC_RealDouble_DIR="/usr/lib/petsc/"
   - export JULIA_PETSC_RealDouble_ARCH=""
   - export JULIA_PETSC_RealSingle_NOBUILD="1"
   - export JULIA_PETSC_ComplexDouble_NOBUILD="1"
