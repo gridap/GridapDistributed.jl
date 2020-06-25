@@ -2,6 +2,7 @@
 language: julia
 os:
   - linux
+dist: bionic
 julia:
   - 1.0
   - 1.4
@@ -21,6 +22,7 @@ before_script:
   - export JULIA_MPI_BINARY="system"
   - export JULIA_PETSC_RealDouble_DIR="/usr/lib/petsc/"
   - export JULIA_PETSC_RealDouble_ARCH=""
+  - export JULIA_PETSC_RealDouble_LIBNAME="libpetsc_real"
   - export JULIA_PETSC_RealSingle_NOBUILD="1"
   - export JULIA_PETSC_ComplexDouble_NOBUILD="1"
 after_success:
