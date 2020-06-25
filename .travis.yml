@@ -17,6 +17,7 @@ notifications:
     on_success: never
     on_failure: always
 before_script:
+  - lsb_release -a       
   - export JULIA_MPI_BINARY="system"
   - export JULIA_PETSC_RealDouble_DIR="/usr/lib/petsc/"
   - export JULIA_PETSC_RealDouble_ARCH=""
