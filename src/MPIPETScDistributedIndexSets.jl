@@ -5,7 +5,7 @@ struct MPIPETScDistributedIndexSet{A,B,C} <: DistributedIndexSet
   #           Why dont we store part directly?
   parts               :: MPIPETScDistributedData{IndexSet{A,B,C}}
   # TO-THINK: Should we store these as DistributedData?
-  lid_to_gid_petsc    :: Vector{Int64}
+  lid_to_gid_petsc    :: Vector{PETSc.C.PetscInt}
   petsc_to_app_locidx :: Vector{Int32}
   app_to_petsc_locidx :: Vector{Int32}
 end
@@ -27,7 +27,7 @@ function num_owned_entries(indices::MPIPETScDistributedIndexSet)
 function create_ghost_vector(indices::MPIPETScDistributedIndexSet)
   comm = get_comm(indices)
   comm_rank = MPI.Comm_rank(comm.comm)
-  ghost_idx = Int[]
+  ghost_idx = PETSc.C.PetscInt[]
   lid_to_owner = indices.parts.part.lid_to_owner
   lid_to_gid_petsc = indices.lid_to_gid_petsc
   num_local_entries = length(lid_to_owner)
@@ -65,10 +65,10 @@ function _compute_internal_members(comm::MPIPETScCommunicator, is::IndexSet)
   MPI.Exscan!(sndbuf, rcvbuf, 1, +, comm.comm)
 
 
-  app_idx = Array{Int64}(undef, num_owned_entries)
-  petsc_idx = Array{Int64}(undef, num_owned_entries)
+  app_idx = Array{PETSc.C.PetscInt}(undef, num_owned_entries)
+  petsc_idx = Array{PETSc.C.PetscInt}(undef, num_owned_entries)
 
-  (comm_rank == 0) ? (offset = 1) : (offset = rcvbuf[] + 1)
+  (comm_rank == 0) ? (offset = PETSc.C.PetscInt(1)) : (offset = PETSc.C.PetscInt(rcvbuf[] + 1))
   current = 1
   for i = 1:num_local_entries
     if (is.lid_to_owner[i] == comm_rank + 1)
@@ -82,7 +82,7 @@ function _compute_internal_members(comm::MPIPETScCommunicator, is::IndexSet)
   # build application ordering in order to get lid_to_gid
   # accordingly to PETSc global numbering
   petsc_ao = AO(Float64, app_idx, petsc_idx)
-  lid_to_gid_petsc = collect(is.lid_to_gid)
+  lid_to_gid_petsc = convert(Vector{PETSc.C.PetscInt}, collect(is.lid_to_gid))
   map_app_to_petsc!(petsc_ao, lid_to_gid_petsc)
 
   ghost_idx = Int[]

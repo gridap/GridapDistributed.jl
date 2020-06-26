@@ -92,10 +92,10 @@ function assemble_global_matrix(
   p = Ref{PETSc.C.Mat{Float64}}()
   PETSc.C.chk(PETSc.C.MatCreateMPIAIJWithArrays(
     get_comm(m).comm,
-    nlrows,
-    nlcols,
-    ngrows,
-    ngcols,
+    PETSc.C.PetscInt(nlrows),
+    PETSc.C.PetscInt(nlcols),
+    PETSc.C.PetscInt(ngrows),
+    PETSc.C.PetscInt(ngcols),
     _convert_buf_to_petscint(Alocal.rowptr),
     _convert_buf_to_petscint(Alocal.colval),
     Alocal.nzval,
@@ -334,10 +334,10 @@ function assemble_global_matrix(
    p = Ref{PETSc.C.Mat{Float64}}()
    PETSc.C.chk(PETSc.C.MatCreateMPIAIJWithArrays(
         get_comm(m).comm,
-        n_owned_dofs,
-        n_owned_dofs,
-        ngrows,
-        ngcols,
+        PETSc.C.PetscInt(n_owned_dofs),
+        PETSc.C.PetscInt(n_owned_dofs),
+        PETSc.C.PetscInt(ngrows),
+        PETSc.C.PetscInt(ngcols),
         _convert_buf_to_petscint(Alocal.rowptr),
         _convert_buf_to_petscint(Alocal.colval),
         Alocal.nzval,
@@ -351,7 +351,7 @@ function assemble_global_vector(
   db::MPIPETScDistributedData,
   indices::MPIPETScDistributedIndexSet)
   vec = allocate_vector(PETSc.Vec{Float64},indices)
-  PETSc.setindex0!(vec, db.part, indices.lid_to_gid_petsc .- 1)
+  PETSc.setindex0!(vec, db.part, indices.lid_to_gid_petsc .- PETSc.C.PetscInt(1))
   PETSc.AssemblyBegin(vec)
   PETSc.AssemblyEnd(vec)
   vec
@@ -367,7 +367,7 @@ function assemble_global_vector(
   part = MPI.Comm_rank(get_comm(indices).comm)+1
   owned_pos = (indices.parts.part.lid_to_owner .== part)
   bowned    = db.part[owned_pos]
-  l2g_petsc = indices.lid_to_gid_petsc[owned_pos] .- 1
+  l2g_petsc = indices.lid_to_gid_petsc[owned_pos] .- PETSc.C.PetscInt(1)
 
   PETSc.setindex0!(vec, bowned, l2g_petsc)
   PETSc.AssemblyBegin(vec)

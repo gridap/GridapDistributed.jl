@@ -51,7 +51,7 @@ function run(assembly_strategy::AbstractString)
     trian = Triangulation(strategy, model)
     degree = 2 * order
     quad = CellQuadrature(trian, degree)
-    a(u, v) = ∇(v) * ∇(u)
+    a(u, v) = ∇(v)⋅∇(u)
     l(v) = v * f
     t1 = AffineFETerm(a, l, trian, quad)
     (t1,)
