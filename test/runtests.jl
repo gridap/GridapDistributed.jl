@@ -1,6 +1,8 @@
 module GridapDistributedTests
 
 using Test
+using MPI
+using PETSc
 
 @time @testset "DistributedData" begin include("DistributedDataTests.jl") end
 
@@ -19,5 +21,29 @@ using Test
 @time @testset "DistributedPoissonDG" begin include("DistributedPoissonDGTests.jl") end
 
 @time @testset "DistributedPLaplacian" begin include("DistributedPLaplacianTests.jl") end
+
+
+nprocs_str = get(ENV, "JULIA_GRIDAPDISTRIBUTED_TEST_NPROCS","")
+nprocs = nprocs_str == "" ? clamp(Sys.CPU_THREADS, 2, 4) : parse(Int, nprocs_str)
+mpiexec_args = Base.shell_split("--allow-run-as-root --tag-output") #Base.shell_split(get(ENV, "JULIA_MPIEXEC_TEST_ARGS", ""))
+testdir = @__DIR__
+istest(f) = endswith(f, ".jl") && startswith(f, "MPIPETSc")
+testfiles = sort(filter(istest, readdir(testdir)))
+@testset "$f" for f in testfiles
+  MPI.mpiexec() do cmd
+     println("$(f)")
+     cmd = `$cmd $mpiexec_args`
+     np = nprocs
+     if f in ["MPIPETScDistributedVectorsTests.jl","MPIPETScDistributedIndexSetsTests.jl"]
+       np = 2
+     elseif f == "MPIPETScDistributedPoissonTests.jl"
+       np = 4
+     end
+     cmd = `$cmd -n $(np) $(Base.julia_cmd()) $(joinpath(testdir, f))`
+     @show cmd
+     run(cmd)
+     @test true
+  end
+end
 
 end # module

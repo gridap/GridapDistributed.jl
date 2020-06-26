@@ -182,6 +182,7 @@ function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dmatdata)
     fill_matrix_coo_numeric!(I,J,V,assem,matdata)
   end
   finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
+  
   A = assemble_global_matrix(dassem.assembly_strategy_type,
                              dassem.matrix_type,
                              dIJV,
