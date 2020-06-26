@@ -20,7 +20,7 @@ f(x) = - Δ(u)(x)
 
 const p = 3
 @law flux(∇u) = norm(∇u)^(p-2) * ∇u
-@law dflux(∇du,∇u) = (p-2)*norm(∇u)^(p-4)*inner(∇u,∇du)*∇u + norm(∇u)^(p-2)*∇du
+@law dflux(∇du,∇u) = (p-2)*norm(∇u)^(p-4)*(∇u⋅∇du)*∇u + norm(∇u)^(p-2)*∇du
 
 # Discretization
 subdomains = (2,2)
@@ -41,12 +41,12 @@ U = TrialFESpace(V,u)
 terms = DistributedData(model) do part, (model,gids)
 
   trian = Triangulation(model)
-  
+
   degree = 2*order
   quad = CellQuadrature(trian,degree)
 
-  res(u,v) = inner( ∇(v), flux(∇(u)) ) - inner(v,f)
-  jac(u,du,v) = inner(  ∇(v) , dflux(∇(du),∇(u)) )
+  res(u,v) = ∇(v)⋅flux(∇(u)) - v*f
+  jac(u,du,v) = ∇(v)⋅dflux(∇(du),∇(u))
   t_Ω = FETerm(res,jac,trian,quad)
 
   (t_Ω,)

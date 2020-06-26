@@ -64,16 +64,16 @@ function run(assembly_strategy::AbstractString, global_dofs::Bool)
     bn = get_normal_vector(btrian)
     sn = get_normal_vector(strian)
 
-    a(u, v) = inner(∇(v), ∇(u))
+    a(u, v) = ∇(v)⋅∇(u)
     l(v) = v * f
     t_Ω = AffineFETerm(a, l, trian, quad)
 
-    a_Γd(u, v) = (γ / h) * v * u - v * (bn * ∇(u)) - (bn * ∇(v)) * u
-    l_Γd(v) = (γ / h) * v * ud - (bn * ∇(v)) * ud
+    a_Γd(u, v) = (γ / h) * v * u - v * (bn⋅∇(u)) - (bn⋅∇(v)) * u
+    l_Γd(v) = (γ / h) * v * ud - (bn⋅∇(v)) * ud
     t_Γd = AffineFETerm(a_Γd, l_Γd, btrian, bquad)
 
-    a_Γ(u, v) = (γ / h) * jump(v * sn) * jump(u * sn) - jump(v * sn) * mean(∇(u)) -
-      mean(∇(v)) * jump(u * sn)
+    a_Γ(u, v) = (γ / h) * jump(v * sn)⋅jump(u * sn) - jump(v * sn)⋅mean(∇(u)) -
+      mean(∇(v))⋅jump(u * sn)
     t_Γ = LinearFETerm(a_Γ, strian, squad)
     (t_Ω, t_Γ, t_Γd)
   end
@@ -94,7 +94,7 @@ function run(assembly_strategy::AbstractString, global_dofs::Bool)
     writevtk(owned_trian, "results_$part", cellfields = ["uh" => owned_uh])
     e = u - owned_uh
     l2(u) = u * u
-    h1(u) = u * u + ∇(u) * ∇(u)
+    h1(u) = u * u + ∇(u) ⋅ ∇(u)
     e_l2 = sum(integrate(l2(e), owned_trian, owned_quad))
     e_h1 = sum(integrate(h1(e), owned_trian, owned_quad))
     e_l2, e_h1
