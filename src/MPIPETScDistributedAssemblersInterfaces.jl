@@ -67,46 +67,16 @@ function assemble_global_matrix(
   m::MPIPETScDistributedIndexSet,
   n::MPIPETScDistributedIndexSet,
 )
-  ngrows = num_gids(m)
-  ngcols = num_gids(n)
-  nlrows = num_owned_entries(m)
-  nlcols = nlrows
-
   I, J, V = IJV.part
-  ncols_Alocal = length(m.parts.part.lid_to_owner)
   for i = 1:length(I)
     I[i] = m.app_to_petsc_locidx[I[i]]
   end
-  Alocal = sparse_from_coo(
-    Gridap.Algebra.SparseMatrixCSR{0,Float64,Int64},
-    I,
-    J,
-    V,
-    nlrows,
-    ncols_Alocal,
-  )
-  for i = 1:length(Alocal.colval)
-    Alocal.colval[i] = m.lid_to_gid_petsc[Alocal.colval[i]+1] - 1
-  end
+  # Build fully assembled local portions
+  Alocal =
+    build_fully_assembled_local_portion(m,I,J,V,m.lid_to_gid_petsc)
 
-  p = Ref{PETSc.C.Mat{Float64}}()
-  rowptr = _convert_buf_to_petscint(Alocal.rowptr)
-  colval = _convert_buf_to_petscint(Alocal.colval)
-  PETSc.C.chk(PETSc.C.MatCreateMPIAIJWithArrays(
-    get_comm(m).comm,
-    PETSc.C.PetscInt(nlrows),
-    PETSc.C.PetscInt(nlcols),
-    PETSc.C.PetscInt(ngrows),
-    PETSc.C.PetscInt(ngcols),
-    rowptr,
-    colval,
-    Alocal.nzval,
-    p,
-  ))
-  # NOTE: the triple (rowptr,colval,Alocal.nzval) is passed to the
-  #       constructor of Mat() in order to avoid this Julia arrays
-  #       from being garbage collected.
-  A=PETSc.Mat{Float64}(p[],(rowptr,colval,Alocal.nzval))
+  # Build global matrix from fully assembled local portions
+  build_petsc_matrix_from_local_portion(m,n,Alocal)
 end
 
 function compute_subdomain_graph_dIS_and_lst_snd(gids, dI)
@@ -197,68 +167,50 @@ function compute_subdomain_graph_dIS_and_lst_snd(gids, dI)
                        part_to_lst_snd)
 end
 
-
-function assemble_global_matrix(
-  ::Type{OwnedCellsStrategy{false}},
-  ::Type{PETSc.Mat{Float64}},
-  IJV::MPIPETScDistributedData,
-  m::MPIPETScDistributedIndexSet,
-  n::MPIPETScDistributedIndexSet,
-)
-
-  ngrows = num_gids(m)
-  ngcols = num_gids(n)
-  nlrows = length(m.parts.part.lid_to_gid)
-  nlcols = nlrows
-
-  dI = DistributedData(get_comm(m),IJV) do part, IJV
-    I,_,_ = IJV
-    I
-  end
-
-  # 1. Determine communication pattern
-  dIS, part_to_lst_snd =
-   compute_subdomain_graph_dIS_and_lst_snd(m, dI)
-
-  # 2. Communicate entries
+function pack_and_comm_entries(dIS, dIJV, m, n, part_to_lst_snd)
   length_entries = DistributedVector{Int}(dIS)
-  do_on_parts(length_entries, m, dI, part_to_lst_snd) do part, length_entries, gid, I, lst_snd
+  do_on_parts(length_entries, m, dIJV, part_to_lst_snd) do part, length_entries, gid, IJV, lst_snd
+    I,_,_ = IJV
     fill!(length_entries, zero(eltype(length_entries)))
     for i = 1:length(I)
-        owner = gid.lid_to_owner[I[i]]
-        if (owner != part)
-          edge_lid = findfirst((i) -> (i == owner), lst_snd)
-          length_entries[edge_lid]+=3
-        end
+      owner = gid.lid_to_owner[I[i]]
+      if (owner != part)
+        edge_lid = findfirst((i) -> (i == owner), lst_snd)
+        length_entries[edge_lid]+=3
+      end
     end
   end
   exchange!(length_entries)
   dd_length_entries = DistributedData(length_entries) do part, length_entries
-      collect(length_entries)
+    collect(length_entries)
   end
   exchange_entries_vector = DistributedVector{Vector{Float64}}(dIS, dd_length_entries)
+
   # Pack data to be sent
   do_on_parts(dIS,exchange_entries_vector,
-              m, IJV, part_to_lst_snd) do part, IS, exchange_entries_vector,
-                                             test_gids, IJV, lst_snd
-      current_pack_position = fill(one(Int32), length(IS.lid_to_owner))
-      I,J,V = IJV
-      for i = 1:length(I)
-          owner = test_gids.lid_to_owner[I[i]]
-          if (owner != part)
-            edge_lid = findfirst((i) -> (i == owner), lst_snd)
-            row=m.lid_to_gid_petsc[I[i]]
-            col=n.lid_to_gid_petsc[J[i]]
-            current_pos=current_pack_position[edge_lid]
-            exchange_entries_vector[edge_lid][current_pos  ]=row
-            exchange_entries_vector[edge_lid][current_pos+1]=col
-            exchange_entries_vector[edge_lid][current_pos+2]=V[i]
-            current_pack_position[edge_lid] += 3
-          end
-      end
+              m, dIJV, part_to_lst_snd) do part, IS, exchange_entries_vector,
+                                           test_gids, IJV, lst_snd
+    current_pack_position = fill(one(Int32), length(IS.lid_to_owner))
+    I,J,V = IJV
+    for i = 1:length(I)
+        owner = test_gids.lid_to_owner[I[i]]
+        if (owner != part)
+          edge_lid = findfirst((i) -> (i == owner), lst_snd)
+          row=m.lid_to_gid_petsc[I[i]]
+          col=n.lid_to_gid_petsc[J[i]]
+          current_pos=current_pack_position[edge_lid]
+          exchange_entries_vector[edge_lid][current_pos  ]=row
+          exchange_entries_vector[edge_lid][current_pos+1]=col
+          exchange_entries_vector[edge_lid][current_pos+2]=V[i]
+          current_pack_position[edge_lid] += 3
+        end
+    end
   end
   exchange!(exchange_entries_vector)
+  exchange_entries_vector
+end
 
+function combine_local_and_remote_entries(dIS, dIJV, m, n, exchange_entries_vector)
   # 3. Combine local + remote entries
   part              = MPI.Comm_rank(get_comm(m).comm)+1
   test_lid_to_owner = m.parts.part.lid_to_owner
@@ -288,58 +240,75 @@ function assemble_global_matrix(
   trial_lid_to_gid_extended = copy(trial_lid_to_gid)
   trial_gid_to_lid_extended = copy(trial_gid_to_lid)
 
-  I,J,V = IJV.part
+  I,J,V = dIJV.part
   IS    = dIS.parts.part
   remote_entries = exchange_entries_vector.part
 
-  GI = Int64[]
-  GJ = Int64[]
-  GV = Float64[]
+  length_GI_GJ_GV = count(a->(test_lid_to_owner[a]==part), I)
+  for i=1:length(IS.lid_to_owner)
+    if (IS.lid_to_owner[i] != part)
+      length_GI_GJ_GV += length(remote_entries[i])÷3
+    end
+  end
+
+  GI = Vector{Int64}(undef,length_GI_GJ_GV)
+  GJ = Vector{Int64}(undef,length_GI_GJ_GV)
+  GV = Vector{Float64}(undef,length_GI_GJ_GV)
+
   # Add local entries
+  current = 1
   for i = 1:length(I)
     owner = test_lid_to_owner[I[i]]
     if (owner == part)
-      push!(GI, lid_to_owned_lid[I[i]])
-      push!(GJ, J[i])
-      push!(GV, V[i])
+      GI[current]=lid_to_owned_lid[I[i]]
+      GJ[current]=J[i]
+      GV[current]=V[i]
+      current=current+1
     end
    end
    # Add remote entries
    for edge_lid = 1:length(IS.lid_to_gid)
      if (IS.lid_to_owner[edge_lid] != part)
-      for i = 1:3:length(remote_entries[edge_lid])
+       for i = 1:3:length(remote_entries[edge_lid])
         row=Int64(remote_entries[edge_lid][i])
-        push!(GI, lid_to_owned_lid[test_gid_to_lid[row]])
+        GI[current]=lid_to_owned_lid[test_gid_to_lid[row]]
         col=Int64(remote_entries[edge_lid][i+1])
         if (!(haskey(trial_gid_to_lid_extended,col)))
           trial_gid_to_lid_extended[col]=length(trial_lid_to_gid_extended)+1
           push!(trial_lid_to_gid_extended, col)
         end
-        push!(GJ, trial_gid_to_lid_extended[col])
-        push!(GV, remote_entries[edge_lid][i+2])
-      end
+        GJ[current] = trial_gid_to_lid_extended[col]
+        GV[current] = remote_entries[edge_lid][i+2]
+        current = current + 1
+       end
      end
    end
+   (GI,GJ,GV,trial_lid_to_gid_extended)
+end
 
-   # 4. Build fully assembled local portions
-   n_owned_dofs = num_owned_entries(m)
-   Alocal = sparse_from_coo(
-      Gridap.Algebra.SparseMatrixCSR{0,Float64,Int64},
-      GI,
-      GJ,
-      GV,
-      n_owned_dofs,
-      length(trial_lid_to_gid_extended))
+function build_fully_assembled_local_portion(m,GI,GJ,GV,trial_lid_to_gid_extended)
+  n_owned_dofs = num_owned_entries(m)
+  Alocal = sparse_from_coo(
+    Gridap.Algebra.SparseMatrixCSR{0,Float64,Int64},
+    GI,
+    GJ,
+    GV,
+    n_owned_dofs,
+    length(trial_lid_to_gid_extended))
+  for i = 1:length(Alocal.colval)
+   Alocal.colval[i] = trial_lid_to_gid_extended[Alocal.colval[i]+1] - 1
+  end
+  Alocal
+end
 
-   for i = 1:length(Alocal.colval)
-     Alocal.colval[i] = trial_lid_to_gid_extended[Alocal.colval[i]+1] - 1
-   end
-
-   # 5. Build global matrix from fully assembled local portions
-   p = Ref{PETSc.C.Mat{Float64}}()
-   rowptr = _convert_buf_to_petscint(Alocal.rowptr)
-   colval = _convert_buf_to_petscint(Alocal.colval)
-   PETSc.C.chk(PETSc.C.MatCreateMPIAIJWithArrays(
+function build_petsc_matrix_from_local_portion(m,n,Alocal)
+  ngrows = num_gids(m)
+  ngcols = num_gids(n)
+  n_owned_dofs = num_owned_entries(m)
+  p = Ref{PETSc.C.Mat{Float64}}()
+  rowptr = _convert_buf_to_petscint(Alocal.rowptr)
+  colval = _convert_buf_to_petscint(Alocal.colval)
+  PETSc.C.chk(PETSc.C.MatCreateMPIAIJWithArrays(
         get_comm(m).comm,
         PETSc.C.PetscInt(n_owned_dofs),
         PETSc.C.PetscInt(n_owned_dofs),
@@ -349,10 +318,42 @@ function assemble_global_matrix(
         colval,
         Alocal.nzval,
         p,))
-   # NOTE: the triple (rowptr,colval,Alocal.nzval) is passed to the
-   #       constructor of Mat() in order to avoid this Julia arrays
-   #       from being garbage collected.
-   A=PETSc.Mat{Float64}(p[],(rowptr,colval,Alocal.nzval))
+  # NOTE: the triple (rowptr,colval,Alocal.nzval) is passed to the
+  #       constructor of Mat() in order to avoid this Julia arrays
+  #       from being garbage collected.
+  A=PETSc.Mat{Float64}(p[],(rowptr,colval,Alocal.nzval))
+end
+
+function assemble_global_matrix(
+  ::Type{OwnedCellsStrategy{false}},
+  ::Type{PETSc.Mat{Float64}},
+  IJV::MPIPETScDistributedData,
+  m::MPIPETScDistributedIndexSet,
+  n::MPIPETScDistributedIndexSet,
+)
+  dI = DistributedData(get_comm(m),IJV) do part, IJV
+    I,_,_ = IJV
+    I
+  end
+
+  # 1. Determine communication pattern
+  dIS, part_to_lst_snd =
+    compute_subdomain_graph_dIS_and_lst_snd(m, dI)
+
+  # 2. Communicate entries
+  exchange_entries_vector =
+    pack_and_comm_entries(dIS, IJV, m, n, part_to_lst_snd)
+
+  # 3. Combine local and remote entries
+  GI, GJ, GV, trial_lid_to_gid_extended =
+    combine_local_and_remote_entries(dIS, IJV, m, n, exchange_entries_vector)
+
+  # 4. Build fully assembled local portions
+  Alocal =
+    build_fully_assembled_local_portion(m,GI,GJ,GV,trial_lid_to_gid_extended)
+
+  # 5. Build global matrix from fully assembled local portions
+  build_petsc_matrix_from_local_portion(m,n,Alocal)
 end
 
 function assemble_global_vector(
