@@ -90,18 +90,23 @@ function assemble_global_matrix(
   end
 
   p = Ref{PETSc.C.Mat{Float64}}()
+  rowptr = _convert_buf_to_petscint(Alocal.rowptr)
+  colval = _convert_buf_to_petscint(Alocal.colval)
   PETSc.C.chk(PETSc.C.MatCreateMPIAIJWithArrays(
     get_comm(m).comm,
     PETSc.C.PetscInt(nlrows),
     PETSc.C.PetscInt(nlcols),
     PETSc.C.PetscInt(ngrows),
     PETSc.C.PetscInt(ngcols),
-    _convert_buf_to_petscint(Alocal.rowptr),
-    _convert_buf_to_petscint(Alocal.colval),
+    rowptr,
+    colval,
     Alocal.nzval,
     p,
   ))
-  A=PETSc.Mat(p[])
+  # NOTE: the triple (rowptr,colval,Alocal.nzval) is passed to the
+  #       constructor of Mat() in order to avoid this Julia arrays
+  #       from being garbage collected.
+  A=PETSc.Mat{Float64}(p[],(rowptr,colval,Alocal.nzval))
 end
 
 function compute_subdomain_graph_dIS_and_lst_snd(gids, dI)
@@ -332,17 +337,22 @@ function assemble_global_matrix(
 
    # 5. Build global matrix from fully assembled local portions
    p = Ref{PETSc.C.Mat{Float64}}()
+   rowptr = _convert_buf_to_petscint(Alocal.rowptr)
+   colval = _convert_buf_to_petscint(Alocal.colval)
    PETSc.C.chk(PETSc.C.MatCreateMPIAIJWithArrays(
         get_comm(m).comm,
         PETSc.C.PetscInt(n_owned_dofs),
         PETSc.C.PetscInt(n_owned_dofs),
         PETSc.C.PetscInt(ngrows),
         PETSc.C.PetscInt(ngcols),
-        _convert_buf_to_petscint(Alocal.rowptr),
-        _convert_buf_to_petscint(Alocal.colval),
+        rowptr,
+        colval,
         Alocal.nzval,
         p,))
-   A=PETSc.Mat(p[])
+   # NOTE: the triple (rowptr,colval,Alocal.nzval) is passed to the
+   #       constructor of Mat() in order to avoid this Julia arrays
+   #       from being garbage collected.
+   A=PETSc.Mat{Float64}(p[],(rowptr,colval,Alocal.nzval))
 end
 
 function assemble_global_vector(
