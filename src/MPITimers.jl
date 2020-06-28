@@ -52,21 +52,26 @@ function timer_stop(t::MPITimer{M}) where M
 end
 
 function timer_report(t::MPITimer, show_header::Bool=true)
-  accum_max = t.t_accum
-  accum_min = t.t_accum
-  accum_sum = t.t_accum
   rank = MPI.Comm_rank(t.comm)
-  size = MPI.Comm_size(t.comm)
   if (show_header)
     if (rank==0)
       @printf "%25s   %15s  %15s  %15s\n" "" "Min (secs.)" "Max (secs.)" "Avg (secs.)"
     end
   end
-  accum_max_reduced = MPI.Reduce([accum_max], MPI.MAX, 0, t.comm)
-  accum_min_reduced = MPI.Reduce([accum_min], MPI.MIN, 0, t.comm)
-  accum_sum_reduced = MPI.Reduce([accum_sum], +, 0, t.comm)
+  tmin,tmax,tavg = timer_min_max_avg(t)
   if (rank==0)
-    @printf "%25s   %15.9e  %15.9e  %15.9e\n"  t.message accum_min_reduced[1] accum_max_reduced[1] accum_sum_reduced[1]/size
+    @printf "%25s   %15.9e  %15.9e  %15.9e\n" t.message tmin tmax tavg
   end
+end
+
+function timer_min_max_avg(t::MPITimer)
+  accum_max = t.t_accum
+  accum_min = t.t_accum
+  accum_sum = t.t_accum
+  rank = MPI.Comm_rank(t.comm)
+  size = MPI.Comm_size(t.comm)
+  accum_max_reduced = MPI.Allreduce([accum_max], MPI.MAX, t.comm)
+  accum_min_reduced = MPI.Allreduce([accum_min], MPI.MIN, t.comm)
+  accum_sum_reduced = MPI.Allreduce([accum_sum], +, t.comm)
   (accum_min_reduced[1],accum_max_reduced[1],accum_sum_reduced[1]/size)
 end

@@ -27,7 +27,7 @@ nprocs_str = get(ENV, "JULIA_GRIDAPDISTRIBUTED_TEST_NPROCS","")
 nprocs = nprocs_str == "" ? clamp(Sys.CPU_THREADS, 2, 4) : parse(Int, nprocs_str)
 mpiexec_args = Base.shell_split("--allow-run-as-root --tag-output") #Base.shell_split(get(ENV, "JULIA_MPIEXEC_TEST_ARGS", ""))
 testdir = @__DIR__
-istest(f) = endswith(f, ".jl") && startswith(f, "MPIPETSc")
+istest(f) = endswith(f, ".jl") && startswith(f, "MPI")
 testfiles = sort(filter(istest, readdir(testdir)))
 @testset "$f" for f in testfiles
   MPI.mpiexec() do cmd
