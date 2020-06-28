@@ -236,7 +236,7 @@ version = "1.2.0"
 
 [[PETSc]]
 deps = ["Compat", "DelimitedFiles", "LinearAlgebra", "MPI", "SparseArrays", "Test"]
-git-tree-sha1 = "1c3d4d48940d3a7220dd22b8091c0100ccd15e8b"
+git-tree-sha1 = "b62dfd0ad725ee35624cfafbbc5944fc016ce18e"
 repo-rev = "uptodate1.4"
 repo-url = "https://github.com/gridap/PETSc.jl"
 uuid = "743b6f9b-fae8-55fc-a981-4e9a2885e829"
