@@ -4,6 +4,7 @@ abstract type DistributedVector{T} end
 # Do not use the abstract type in function arguments since we want vectors from other packages
 # to be used as distributed vectors. Use duck typing.
 
+
 # a distributed vector should be indexable by a distributed index set
 # The restriction of the resulting object to a part in a communicator
 # should be a vector indexable by the local indices in this part.
@@ -25,6 +26,27 @@ end
 
 # Build a Distributed vector from an index set
 # the resulting object is assumed to be locally indexable when restricted to a part
+function DistributedVector{T}(initializer::Function,indices::DistributedIndexSet,args...) where T
+  @abstractmethod
+end
+function DistributedVector(initializer::Function,indices::DistributedIndexSet,args...)
+  @abstractmethod
+end
 function DistributedVector{T}(indices::DistributedIndexSet) where T
+  @abstractmethod
+end
+
+function DistributedVector{T}(
+  indices::DistributedIndexSet) where T <: Number
+  @abstractmethod
+end
+
+function DistributedVector{T}(
+  indices::DistributedIndexSet, length_entry :: Int ) where T <: AbstractVector{<:Number}
+  @abstractmethod
+end
+
+function DistributedVector{T}(
+  indices::DistributedIndexSet, length_entries::DistributedData) where T <: AbstractVector{<:Number}
   @abstractmethod
 end

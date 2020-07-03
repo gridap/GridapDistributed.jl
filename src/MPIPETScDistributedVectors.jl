@@ -45,6 +45,17 @@ function _build_local_part_from_ptrs(::Type{T}, indices, block_indices, vecghost
 end
 
 function DistributedVector{T}(
+  initializer::Function, indices::MPIPETScDistributedIndexSet,args...) where T
+  @notimplemented "Unsupported method"
+end
+  
+function DistributedVector(
+  initializer::Function, indices::MPIPETScDistributedIndexSet,args...)
+  @notimplemented "Unsupported method"
+end
+
+
+function DistributedVector{T}(
   indices::MPIPETScDistributedIndexSet, length_entry :: Int ) where T <: AbstractVector{<:Number}
   num_entries = length(indices.parts.part.lid_to_owner)
   ptrs=Vector{Int32}(undef,num_entries+1)
