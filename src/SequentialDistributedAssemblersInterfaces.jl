@@ -13,7 +13,7 @@ function Gridap.Algebra.allocate_vector(::Type{V},gids::DistributedIndexSet) whe
 end
 
 function allocate_local_vector(
-  ::Union{Type{RowsComputedLocally{false}},Type{OwnedCellsStrategy{false}}},
+  strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{false}},DistributedAssemblyStrategy{OwnedCellsStrategy{false}}},
   ::Type{V},
   indices::SequentialDistributedIndexSet,
 ) where V<:Vector
@@ -26,7 +26,7 @@ function allocate_local_vector(
 end
 
 function allocate_local_vector(
-  ::Union{Type{RowsComputedLocally{true}},Type{OwnedCellsStrategy{true}}},
+  strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{true}},DistributedAssemblyStrategy{OwnedCellsStrategy{true}}},
   ::Type{V},
   indices::SequentialDistributedIndexSet,
 ) where V<:Vector
@@ -37,7 +37,7 @@ function allocate_local_vector(
 end
 
 
-function assemble_global_matrix(::Union{Type{RowsComputedLocally{T}},Type{OwnedCellsStrategy{T}}},
+function assemble_global_matrix(strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{T}},DistributedAssemblyStrategy{OwnedCellsStrategy{T}}},
                                 ::Type{M},
                                 IJV::SequentialIJV,
                                 m::DistributedIndexSet,
@@ -55,7 +55,7 @@ function assemble_global_matrix(::Union{Type{RowsComputedLocally{T}},Type{OwnedC
   A=sparse_from_coo(M,I,J,V,num_gids(m),num_gids(n))
 end
 
-function assemble_global_vector(::Union{Type{RowsComputedLocally{false}},Type{OwnedCellsStrategy{false}}},
+function assemble_global_vector(strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{false}},DistributedAssemblyStrategy{OwnedCellsStrategy{false}}},
                                 ::Type{M},
                                 db::DistributedData,
                                 m::DistributedIndexSet) where M <: Vector
@@ -70,7 +70,7 @@ end
 
 
 
-function assemble_global_vector(::Union{Type{RowsComputedLocally{true}},Type{OwnedCellsStrategy{true}}},
+function assemble_global_vector(strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{true}},DistributedAssemblyStrategy{OwnedCellsStrategy{true}}},
                                 ::Type{M},
                                 b::M,
                                 m::DistributedIndexSet) where M <: Vector

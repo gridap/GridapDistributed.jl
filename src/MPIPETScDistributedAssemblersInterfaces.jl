@@ -36,7 +36,7 @@ function get_local_matrix_type(::Type{PETSc.Mat{Float64}})
 end
 
 function allocate_local_vector(
-  ::Union{Type{RowsComputedLocally{false}},Type{OwnedCellsStrategy{false}}},
+  strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{false}},DistributedAssemblyStrategy{OwnedCellsStrategy{false}}},
   ::Type{PETSc.Vec{Float64}},
   indices::MPIPETScDistributedIndexSet,
 )
@@ -61,7 +61,7 @@ function _convert_buf_to_petscint(buf)
 end
 
 function assemble_global_matrix(
-  ::Type{RowsComputedLocally{false}},
+  strat::DistributedAssemblyStrategy{RowsComputedLocally{false}},
   ::Type{PETSc.Mat{Float64}},
   IJV::MPIPETScDistributedData,
   m::MPIPETScDistributedIndexSet,
@@ -325,7 +325,7 @@ function build_petsc_matrix_from_local_portion(m,n,Alocal)
 end
 
 function assemble_global_matrix(
-  ::Type{OwnedCellsStrategy{false}},
+  strat::DistributedAssemblyStrategy{OwnedCellsStrategy{false}},
   ::Type{PETSc.Mat{Float64}},
   IJV::MPIPETScDistributedData,
   m::MPIPETScDistributedIndexSet,
@@ -357,7 +357,7 @@ function assemble_global_matrix(
 end
 
 function assemble_global_vector(
-  ::Type{OwnedCellsStrategy{false}},
+  strat::DistributedAssemblyStrategy{OwnedCellsStrategy{false}},
   ::Type{PETSc.Vec{Float64}},
   db::MPIPETScDistributedData,
   indices::MPIPETScDistributedIndexSet)
@@ -369,7 +369,7 @@ function assemble_global_vector(
 end
 
 function assemble_global_vector(
-  ::Type{RowsComputedLocally{false}},
+  strat::DistributedAssemblyStrategy{RowsComputedLocally{false}},
   ::Type{PETSc.Vec{Float64}},
   db::MPIPETScDistributedData,
   indices::MPIPETScDistributedIndexSet)

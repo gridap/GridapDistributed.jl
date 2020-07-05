@@ -22,12 +22,13 @@ function MPIPETScCommunicatorDestroy(comm::MPIPETScCommunicator)
 end
 
 
-# All objects to be used with this communicator need to implement this
-# function
+
 function get_part(comm::MPIPETScCommunicator)
   MPI.Comm_rank(comm.comm)+1
 end
 
+# All objects to be used with this communicator need to implement this
+# function
 function get_part(comm::MPIPETScCommunicator,object,part::Integer)
   @abstractmethod
 end

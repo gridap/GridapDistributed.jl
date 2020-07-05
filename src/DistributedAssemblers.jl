@@ -10,7 +10,6 @@ end
 struct DistributedAssembler{M,V,AS} <: Assembler
   matrix_type             :: Type{M}
   vector_type             :: Type{V}
-  assembly_strategy_type  :: Type{AS}
   trial::DistributedFESpace
   test::DistributedFESpace
   assems::DistributedData{<:Assembler}
@@ -18,13 +17,12 @@ struct DistributedAssembler{M,V,AS} <: Assembler
 end
 
 """
-    allocate_local_vector(::Type{AS}, ::Type{V}, indices) where {AS,V}
-
+    allocate_local_vector(::DistributedAssemblyStrategy, ::Type{V}, indices) where {V}
+ 
 Allocate the local vector required in order to assemble a global vector
-of type V accordingly to the assembly algorithm underlying the assembly strategy
-AS.  The global vector is indexable using indices.
+of type V accordingly to the assembly algorithm underlying the assembly strategy.  The global vector is indexable using indices.
 """
-function allocate_local_vector(::Type{AS}, ::Type{V}, indices::DistributedIndexSet) where {AS,V}
+function allocate_local_vector(::DistributedAssemblyStrategy, ::Type{V}, indices::DistributedIndexSet) where {V}
    @abstractmethod
 end
 
@@ -60,14 +58,14 @@ function get_local_vector_type(::Type{V}) where V <: Vector
   V
 end
 
-function assemble_global_matrix(::Type{AS}, ::Type{M},
+function assemble_global_matrix(::DistributedAssemblyStrategy, ::Type{M},
                                 ::DistributedData,
                                 ::DistributedIndexSet,
                                 ::DistributedIndexSet) where {AS,M}
    @abstractmethod
 end
 
-function assemble_global_vector(::Type{AS}, ::Type{V},
+function assemble_global_vector(::DistributedAssemblyStrategy, ::Type{V},
                                 ::DistributedData,
                                 ::DistributedIndexSet) where {AS,V}
    @abstractmethod
@@ -103,7 +101,7 @@ function Gridap.FESpaces.allocate_matrix(dassem::DistributedAssembler,dmatdata)
   end
 
   finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-  A = assemble_global_matrix(dassem.assembly_strategy_type,
+  A = assemble_global_matrix(dassem.strategy,
                              dassem.matrix_type,
                              dIJV,
                              dassem.test.gids,
@@ -127,7 +125,7 @@ function Gridap.FESpaces.allocate_matrix_and_vector(dassem::DistributedAssembler
     fill_matrix_and_vector_coo_symbolic!(I,J,assem,data)
   end
   finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-  A = assemble_global_matrix(dassem.assembly_strategy_type,
+  A = assemble_global_matrix(dassem.strategy,
                              dassem.matrix_type,
                              dIJV,
                              dassem.test.gids,
@@ -183,7 +181,7 @@ function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dmatdata)
   end
   finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
   
-  A = assemble_global_matrix(dassem.assembly_strategy_type,
+  A = assemble_global_matrix(dassem.strategy,
                              dassem.matrix_type,
                              dIJV,
                              dassem.test.gids,
@@ -202,7 +200,7 @@ function Gridap.FESpaces.assemble_matrix_and_vector(dassem::DistributedAssembler
   end
 
   gids = dassem.test.gids
-  db = allocate_local_vector(dassem.assembly_strategy_type,dassem.vector_type,gids)
+  db = allocate_local_vector(dassem.strategy,dassem.vector_type,gids)
 
   dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
   do_on_parts(dassem,dIJV,ddata,db) do part, assem, IJV, data, b
@@ -211,13 +209,13 @@ function Gridap.FESpaces.assemble_matrix_and_vector(dassem::DistributedAssembler
   end
   finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
 
-  A = assemble_global_matrix(dassem.assembly_strategy_type,
+  A = assemble_global_matrix(dassem.strategy,
                              dassem.matrix_type,
                              dIJV,
                              dassem.test.gids,
                              dassem.trial.gids)
 
-  b = assemble_global_vector(dassem.assembly_strategy_type,
+  b = assemble_global_vector(dassem.strategy,
                              dassem.vector_type,
                              db,
                              dassem.test.gids)
@@ -317,7 +315,7 @@ function Gridap.FESpaces.SparseMatrixAssembler(
   vector_type::Type,
   dtrial::DistributedFESpace,
   dtest::DistributedFESpace,
-  dstrategy::DistributedAssemblyStrategy{T}) where T
+  dstrategy::DistributedAssemblyStrategy)
 
   assems = DistributedData(
     dtrial.spaces,dtest.spaces,dstrategy) do part, U, V, strategy
@@ -326,7 +324,6 @@ function Gridap.FESpaces.SparseMatrixAssembler(
 
   DistributedAssembler(matrix_type,
                        vector_type,
-                       T,
                        dtrial,
                        dtest,
                        assems,
