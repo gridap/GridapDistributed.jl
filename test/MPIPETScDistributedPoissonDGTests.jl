@@ -119,6 +119,7 @@ function run(assembly_strategy::AbstractString, global_dofs::Bool)
   if (i_am_master(comm))
     println("$(e_l2) < $(tol)")
     println("$(e_h1) < $(tol)")
+    
   end
 end
 
