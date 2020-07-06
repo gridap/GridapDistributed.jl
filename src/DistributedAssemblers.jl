@@ -61,13 +61,13 @@ end
 function assemble_global_matrix(::DistributedAssemblyStrategy, ::Type{M},
                                 ::DistributedData,
                                 ::DistributedIndexSet,
-                                ::DistributedIndexSet) where {AS,M}
+                                ::DistributedIndexSet) where {M}
    @abstractmethod
 end
 
 function assemble_global_vector(::DistributedAssemblyStrategy, ::Type{V},
                                 ::DistributedData,
-                                ::DistributedIndexSet) where {AS,V}
+                                ::DistributedIndexSet) where {V}
    @abstractmethod
 end
 
