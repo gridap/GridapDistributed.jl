@@ -33,8 +33,9 @@ end
 
 function Gridap.Algebra.numerical_setup!(
         pns::PETScNumericalSetup{T},
-        mat::PETSc.Mat{T}) where {T}
-    @notimplemented
+        mat::PETSc.PetscMat{T}) where {T}
+    PETSc.C.chk(PETSc.C.KSPSetOperators(pns.solver.ksp.p,mat.p,mat.p))
+    PETSc.KSPSetUp!(pns.solver.ksp)
 end
 
 function Gridap.Algebra.solve!(

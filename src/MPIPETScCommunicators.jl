@@ -37,6 +37,10 @@ function get_part(comm::MPIPETScCommunicator,object::Number,part::Integer)
   object
 end
 
+function get_part(comm::MPIPETScCommunicator,object::PETSc.Mat{Float64},part::Integer)
+  object
+end
+
 function i_am_master(comm::MPIPETScCommunicator)
   MPI.Comm_rank(comm.comm) == comm.master_rank
 end

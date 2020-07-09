@@ -12,6 +12,7 @@ function Gridap.Algebra.allocate_vector(
   nl = num_owned_entries(indices)
   vec=PETSc.Vec(Float64, ng; mlocal = nl, comm = get_comm(indices).comm)
   vec.insertmode = PETSc.C.ADD_VALUES
+  PETSc.set_local_to_global_mapping(vec,indices.IS)
   vec
 end
 
@@ -25,6 +26,19 @@ function Gridap.Algebra.allocate_coo_vectors(
     V = Vector{Float64}(undef, n)
     (I, J, V)
   end
+end
+
+function Gridap.Algebra.fill_entries!(a::PETSc.Mat{Float64},v::Number)
+  fill!(a,v)
+  a
+end
+
+function Gridap.FESpaces.assemble_matrix_and_vector_add!(dmat::PETSc.Mat{Float64},dvec::PETSc.Vec{Float64},dassem::DistributedAssembler, ddata)
+  do_on_parts(dassem,ddata,dmat,dvec) do part, assem, data, mat, vec
+    assemble_matrix_and_vector_add!(mat,vec,assem,data)
+  end
+  PETSc.assemble(dmat)
+  PETSc.assemble(dvec)
 end
 
 function get_local_vector_type(::Type{PETSc.Vec{Float64}})
@@ -302,6 +316,7 @@ function build_fully_assembled_local_portion(m,GI,GJ,GV,trial_lid_to_gid_extende
 end
 
 function build_petsc_matrix_from_local_portion(m,n,Alocal)
+  # Build PETSc Matrix
   ngrows = num_gids(m)
   ngcols = num_gids(n)
   n_owned_dofs = num_owned_entries(m)
@@ -319,9 +334,15 @@ function build_petsc_matrix_from_local_portion(m,n,Alocal)
         Alocal.nzval,
         p,))
   # NOTE: the triple (rowptr,colval,Alocal.nzval) is passed to the
-  #       constructor of Mat() in order to avoid this Julia arrays
+  #       constructor of Mat() in order to avoid these Julia arrays
   #       from being garbage collected.
   A=PETSc.Mat{Float64}(p[],(rowptr,colval,Alocal.nzval))
+  PETSc.set_local_to_global_mapping(A,m.IS,n.IS)
+  PETSc.C.chk(PETSc.C.MatSetOption(p[],
+                           PETSc.C.MAT_NEW_NONZERO_LOCATIONS,
+                           PETSc.C.PETSC_FALSE))
+  A.insertmode = PETSc.C.ADD_VALUES
+  A
 end
 
 function assemble_global_matrix(

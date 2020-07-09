@@ -6,6 +6,7 @@ struct MPIPETScDistributedIndexSet{A,B,C} <: DistributedIndexSet
   parts               :: MPIPETScDistributedData{IndexSet{A,B,C}}
   # TO-THINK: Should we store these as DistributedData?
   lid_to_gid_petsc    :: Vector{PETSc.C.PetscInt}
+  IS                  :: PETSc.ISLocalToGlobalMapping{Float64}
   petsc_to_app_locidx :: Vector{Int32}
   app_to_petsc_locidx :: Vector{Int32}
 end
@@ -51,7 +52,8 @@ get_comm(a::MPIPETScDistributedIndexSet) = a.parts.comm
 function DistributedIndexSet(initializer::Function,comm::MPIPETScCommunicator,ngids::Integer,args...)
   parts = DistributedData(initializer,comm,args...)
   lid_to_gid_petsc, petsc_to_app_locidx, app_to_petsc_locidx = _compute_internal_members(comm,parts.part)
-  MPIPETScDistributedIndexSet(ngids,parts,lid_to_gid_petsc,petsc_to_app_locidx,app_to_petsc_locidx)
+  IS=PETSc.ISLocalToGlobalMapping(Float64, lid_to_gid_petsc, comm=comm.comm)
+  MPIPETScDistributedIndexSet(ngids,parts,lid_to_gid_petsc, IS,petsc_to_app_locidx,app_to_petsc_locidx)
 end
 
 #TODO: think about type stability of this auxiliary function

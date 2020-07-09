@@ -79,6 +79,8 @@ include("DistributedAssemblers.jl")
 
 include("SequentialDistributedAssemblersInterfaces.jl")
 
+include("MPIPETScAlgebraInterfaces.jl")
+
 include("MPIPETScDistributedAssemblersInterfaces.jl")
 
 include("DistributedFETerms.jl")

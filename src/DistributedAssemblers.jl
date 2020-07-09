@@ -18,7 +18,7 @@ end
 
 """
     allocate_local_vector(::DistributedAssemblyStrategy, ::Type{V}, indices) where {V}
- 
+
 Allocate the local vector required in order to assemble a global vector
 of type V accordingly to the assembly algorithm underlying the assembly strategy.  The global vector is indexable using indices.
 """
@@ -132,7 +132,6 @@ function Gridap.FESpaces.allocate_matrix_and_vector(dassem::DistributedAssembler
                              dassem.trial.gids)
   gids = dassem.test.gids
   b = allocate_vector(dassem.vector_type,gids)
-
   A,b
 end
 
@@ -180,7 +179,7 @@ function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dmatdata)
     fill_matrix_coo_numeric!(I,J,V,assem,matdata)
   end
   finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
-  
+
   A = assemble_global_matrix(dassem.strategy,
                              dassem.matrix_type,
                              dIJV,
