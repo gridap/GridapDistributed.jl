@@ -3,6 +3,11 @@ struct SequentialCommunicator <: OrchestratedCommunicator
   nparts::Int
 end
 
+function SequentialCommunicator(user_driver_function,nparts)
+  comm=SequentialCommunicator(nparts)
+  user_driver_function(comm)
+end
+
 function SequentialCommunicator(nparts::Tuple)
   SequentialCommunicator(prod(nparts))
 end

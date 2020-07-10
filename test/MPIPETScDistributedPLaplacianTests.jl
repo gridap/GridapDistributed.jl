@@ -115,7 +115,7 @@ function (dist::Distances.SqEuclidean)(a::PETSc.Vec{Float64}, b::PETSc.Vec{Float
 end 
 
 
-function run(assembly_strategy::AbstractString, global_dofs::Bool)
+function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
   # Select matrix and vector types for discrete problem
   # Note that here we use serial vectors and matrices
   # but the assembly is distributed
@@ -135,7 +135,6 @@ function run(assembly_strategy::AbstractString, global_dofs::Bool)
   subdomains = (2,2)
   domain = (0,1,0,1)
   cells = (4,4)
-  comm = MPIPETScCommunicator()
   model = CartesianDiscreteModel(comm,subdomains,domain,cells)
 
   # FE Spaces
@@ -206,8 +205,9 @@ function run(assembly_strategy::AbstractString, global_dofs::Bool)
   @test e_l2 < tol
 end
 
-run("RowsComputedLocally",false)
-run("OwnedCellsStrategy",false)
-
+MPIPETScCommunicator() do comm
+  run(comm,"RowsComputedLocally",false)
+  run(comm,"OwnedCellsStrategy",false)
+end
 
 end # module

@@ -6,7 +6,7 @@ using Gridap.FESpaces
 using GridapDistributed
 using SparseArrays
 
-function run(assembly_strategy::AbstractString, global_dofs::Bool)
+function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Bool)
   # Select matrix and vector types for discrete problem
   # Note that here we use serial vectors and matrices
   # but the assembly is distributed
@@ -82,9 +82,12 @@ function run(assembly_strategy::AbstractString, global_dofs::Bool)
   @test e_l2 < tol
 end
 
-run("RowsComputedLocally", false)
-run("OwnedCellsStrategy", false)
-run("RowsComputedLocally", true)
-run("OwnedCellsStrategy", true)
+subdomains = (2,2)
+SequentialCommunicator(subdomains) do comm
+  run(comm,subdomains,"RowsComputedLocally", false)
+  run(comm,subdomains,"OwnedCellsStrategy", false)
+  run(comm,subdomains,"RowsComputedLocally", true)
+  run(comm,subdomains,"OwnedCellsStrategy", true)
+end
 
 end # module

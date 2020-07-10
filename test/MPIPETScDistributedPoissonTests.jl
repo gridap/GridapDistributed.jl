@@ -7,7 +7,7 @@ using GridapDistributed
 using SparseArrays
 using PETSc
 
-function run(assembly_strategy::AbstractString)
+function run(comm, assembly_strategy::AbstractString)
   T = Float64
   vector_type = PETSc.Vec{T}
   matrix_type = PETSc.Mat{T}
@@ -20,7 +20,6 @@ function run(assembly_strategy::AbstractString)
   subdomains = (2, 2)
   domain = (0, 1, 0, 1)
   cells = (4, 4)
-  comm = MPIPETScCommunicator()
   model = CartesianDiscreteModel(comm, subdomains, domain, cells)
 
   # FE Spaces
@@ -98,7 +97,9 @@ function run(assembly_strategy::AbstractString)
 end
 
 
-run("RowsComputedLocally")
-run("OwnedCellsStrategy")
+MPIPETScCommunicator() do comm
+  run(comm, "RowsComputedLocally")
+  run(comm, "OwnedCellsStrategy")
+end
 
 end # module

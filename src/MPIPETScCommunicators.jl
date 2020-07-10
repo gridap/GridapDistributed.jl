@@ -9,7 +9,17 @@ mutable struct MPIPETScCommunicator <: CollaborativeCommunicator
   end
 end
 
-function MPIPETScCommunicator()
+function MPIPETScCommunicator(user_driver_function)
+  comm=_MPIPETScCommunicator()
+  try
+    user_driver_function(comm)
+  catch err
+    showerror(stdout,err,stacktrace(catch_backtrace()))
+    MPI.Abort(comm.comm,1)
+  end
+end
+
+function _MPIPETScCommunicator()
   petsc_comm = Ref{MPI.Comm}(MPI.Comm())
   first_tag  = Ref{PETSc.C.PetscMPIInt}()
   PETSc.C.chk(PETSc.C.PetscCommDuplicate(Float64,MPI.COMM_WORLD,petsc_comm,first_tag))
