@@ -125,7 +125,7 @@ version = "0.10.12"
 deps = ["AbstractTrees", "BSON", "Combinatorics", "DocStringExtensions", "FastGaussQuadrature", "FileIO", "FillArrays", "ForwardDiff", "JLD2", "JSON", "LineSearches", "LinearAlgebra", "NLsolve", "QuadGK", "SparseArrays", "StaticArrays", "Test", "WriteVTK"]
 git-tree-sha1 = "e8acaf1eca955aa107fb361a874da5ffdb2942d0"
 repo-rev = "multifield_array_extends_abstract_array"
-repo-url = "/home/amartin/git-repos/Gridap.jl"
+repo-url = "https://github.com/gridap/Gridap.jl/"
 uuid = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
 version = "0.13.0"
 
