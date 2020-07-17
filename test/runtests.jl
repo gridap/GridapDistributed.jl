@@ -38,7 +38,7 @@ testfiles = sort(filter(istest, readdir(testdir)))
      np = nprocs
      if f in ["MPIPETScDistributedVectorsTests.jl","MPIPETScDistributedIndexSetsTests.jl"]
        np = 2
-     elseif f in ["MPIPETScDistributedPoissonTests.jl","MPIPETScDistributedPoissonDGTests.jl","MPIPETScDistributedPLaplacianTests.jl"]
+     elseif f in ["MPIPETScDistributedPoissonTests.jl","MPIPETScDistributedPoissonDGTests.jl","MPIPETScDistributedPLaplacianTests.jl","MPIPETScDistributedStokesTests.jl"]
        np = 4
      end
      cmd = `$cmd -n $(np) $(Base.julia_cmd()) $(joinpath(testdir, f))`
