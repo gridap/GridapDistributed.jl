@@ -318,7 +318,11 @@ function Gridap.FESpaces.SparseMatrixAssembler(
 
   assems = DistributedData(
     dtrial.spaces,dtest.spaces,dstrategy) do part, U, V, strategy
-    SparseMatrixAssembler(get_local_matrix_type(matrix_type),get_local_vector_type(vector_type),U,V,strategy)
+    SparseMatrixAssembler(get_local_matrix_type(matrix_type),  
+                          get_local_vector_type(vector_type),
+                          U,
+                          V,
+                          strategy)
   end
 
   DistributedAssembler(matrix_type,

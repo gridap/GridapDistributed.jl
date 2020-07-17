@@ -22,6 +22,8 @@ using PETSc
 
 @time @testset "DistributedPLaplacian" begin include("DistributedPLaplacianTests.jl") end
 
+@time @testset "DistributedStokes" begin include("DistributedStokesTests.jl") end
+
 
 nprocs_str = get(ENV, "JULIA_GRIDAPDISTRIBUTED_TEST_NPROCS","")
 nprocs = nprocs_str == "" ? clamp(Sys.CPU_THREADS, 2, 4) : parse(Int, nprocs_str)

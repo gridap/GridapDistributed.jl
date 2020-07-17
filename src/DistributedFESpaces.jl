@@ -99,17 +99,11 @@ function Gridap.FESpace(::Type{V};model::DistributedDiscreteModel,kwargs...) whe
   DistributedFESpace(V;model=model,kwargs...)
 end
 
-function DistributedFESpace(::Type{V}; model::DistributedDiscreteModel,kwargs...) where V
+function DistributedFESpace(::Type{V},
+                            model::DistributedDiscreteModel,
+                            spaces::DistributedData{<:FESpace}) where {V}
 
   comm = get_comm(model)
-
-  nsubdoms = num_parts(model.models)
-
-  function init_local_spaces(part,model)
-    lspace = FESpace(;model=model,kwargs...)
-  end
-
-  spaces = DistributedData(init_local_spaces,comm,model.models)
 
   function init_lid_to_owner(part,lspace,cell_gids)
     nlids = num_free_dofs(lspace)
@@ -209,6 +203,16 @@ function DistributedFESpace(::Type{V}; model::DistributedDiscreteModel,kwargs...
   gids = DistributedIndexSet(init_free_gids,comm,ngids, part_to_lid_to_gid,part_to_lid_to_owner,part_to_ngids)
 
   DistributedFESpace(V,spaces,gids)
+end 
+
+
+function DistributedFESpace(::Type{V}; model::DistributedDiscreteModel,kwargs...) where V
+  function init_local_spaces(part,model)
+    lspace = FESpace(;model=model,kwargs...)
+  end
+  comm = get_comm(model)
+  spaces = DistributedData(init_local_spaces,comm,model.models)
+  DistributedFESpace(V,model,spaces) 
 end
 
 function _update_lid_to_gid!(lid_to_gid,cell_to_lids,cell_to_gids,cell_to_owner,lid_to_owner)

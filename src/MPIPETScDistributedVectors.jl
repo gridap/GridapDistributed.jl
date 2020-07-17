@@ -330,8 +330,3 @@ function _unpack_all_entries!(
     end
   end
 end
-
-function Base.setindex!(a::Gridap.Arrays.Reindexed,v,j::Integer)
-  i = a.j_to_i[j]
-  a.i_to_v[i]=v
-end
