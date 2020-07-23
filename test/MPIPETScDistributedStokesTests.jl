@@ -110,11 +110,7 @@ function run(comm,assembly_strategy::AbstractString, global_dofs::Bool)
     end
     t_Ω = AffineFETerm(a,l,trian,quad)
     t_Γ = FESource(lΓ,btrian,bquad)
-    if ( part in [1,2] )
-      (t_Ω,t_Γ)
-    else
-      (t_Ω,)
-    end
+    (t_Ω,t_Γ)
   end
 
    # Assembler
@@ -151,8 +147,8 @@ function run(comm,assembly_strategy::AbstractString, global_dofs::Bool)
   e_l2 = sum(gather(sums))
 
   tol = 1.0e-9
-  if (i_am_master(comm)) 
-    println("$(e_l2) < $(tol)") 
+  if (i_am_master(comm))
+    println("$(e_l2) < $(tol)")
   end
   @test e_l2 < tol
 end

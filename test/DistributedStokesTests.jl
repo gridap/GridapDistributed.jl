@@ -107,11 +107,12 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
     end
     t_Ω = AffineFETerm(a,l,trian,quad)
     t_Γ = FESource(lΓ,btrian,bquad)
-    if ( part in [1,2] )
-      (t_Ω,t_Γ)
-    else
-      (t_Ω,)
-    end
+
+    #if ( part in [1,2] )
+    (t_Ω,t_Γ)
+    #else
+    #  (t_Ω,)
+    #end
   end
 
    # Assembler
