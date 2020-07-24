@@ -8,9 +8,9 @@ version = "0.3.3"
 
 [[ArrayInterface]]
 deps = ["LinearAlgebra", "Requires", "SparseArrays"]
-git-tree-sha1 = "0eccdcbe27fd6bd9cba3be31c67bdd435a21e865"
+git-tree-sha1 = "066d1e7a9eb4873660791db7f0d8c7902600b81c"
 uuid = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
-version = "2.9.1"
+version = "2.11.0"
 
 [[BSON]]
 git-tree-sha1 = "dd36d7cf3d185eeaaf64db902c15174b22f5dafb"
@@ -111,9 +111,9 @@ version = "0.8.13"
 
 [[FiniteDiff]]
 deps = ["ArrayInterface", "LinearAlgebra", "Requires", "SparseArrays", "StaticArrays"]
-git-tree-sha1 = "b02b6f6ea2c33f86a444f9cf132c1d1180a66cfd"
+git-tree-sha1 = "43b397bf66d07d113cc2cc012dd2029d336c3894"
 uuid = "6a86dc24-6348-571c-b903-95158fe2bd41"
-version = "2.4.1"
+version = "2.5.1"
 
 [[ForwardDiff]]
 deps = ["CommonSubexpressions", "DiffResults", "DiffRules", "NaNMath", "Random", "SpecialFunctions", "StaticArrays"]
@@ -123,7 +123,7 @@ version = "0.10.12"
 
 [[Gridap]]
 deps = ["AbstractTrees", "BSON", "Combinatorics", "DocStringExtensions", "FastGaussQuadrature", "FileIO", "FillArrays", "ForwardDiff", "JLD2", "JSON", "LineSearches", "LinearAlgebra", "NLsolve", "QuadGK", "SparseArrays", "StaticArrays", "Test", "WriteVTK"]
-git-tree-sha1 = "bcf0fcac4b268c409ee374931e3d298a6317da89"
+git-tree-sha1 = "583f8754928c5439bbc61d5e12afb6804ce4022b"
 repo-rev = "multifield_array_extends_abstract_array"
 repo-url = "https://github.com/gridap/Gridap.jl"
 uuid = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
