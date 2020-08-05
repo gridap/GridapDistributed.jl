@@ -142,20 +142,34 @@ function DistributedFESpace(::Type{V},
     [length(cell_dofs[i]) for i=1:length(cell_dofs)]
   end
 
-  function init_cell_to_owners(part,cell_to_owners,lspace,lid_to_owner)
+  function init_cell_to_owners(part,
+                               num_dofs_x_cell,
+                               lspace,
+                               lid_to_owner)
+    ptrs = Vector{eltype(num_dofs_x_cell)}(undef,
+                                           length(num_dofs_x_cell)+1)
+    ptrs[2:end]=num_dofs_x_cell[1:end]
+    length_to_ptrs!(ptrs)
+    data = Vector{eltype(lid_to_owner)}(undef,ptrs[end]-1)
+
     cell_to_lids = get_cell_dofs(lspace)
     dlid_to_zero = zeros(eltype(lid_to_owner),num_dirichlet_dofs(lspace))
-    cell_to_owners_from = LocalToGlobalPosNegArray(cell_to_lids,lid_to_owner,dlid_to_zero)
+    cell_to_owners_from =
+        LocalToGlobalPosNegArray(cell_to_lids,lid_to_owner,dlid_to_zero)
+    k=1
     for i=1:length(cell_to_owners_from)
       for j=1:length(cell_to_owners_from[i])
-        cell_to_owners[i][j]=cell_to_owners_from[i][j]
+        data[k]=cell_to_owners_from[i][j]
+        k=k+1
       end
     end
+    return Table(data,ptrs)
   end
 
-  part_to_cell_to_owners = DistributedVector{Vector{Int}}(model.gids, num_dofs_x_cell)
-
-  do_on_parts(init_cell_to_owners,part_to_cell_to_owners,spaces,part_to_lid_to_owner)
+  part_to_cell_to_owners = DistributedVector(init_cell_to_owners,
+                                             model.gids, num_dofs_x_cell,
+                                             spaces,
+                                             part_to_lid_to_owner)
 
   exchange!(part_to_cell_to_owners)
 
@@ -175,10 +189,11 @@ function DistributedFESpace(::Type{V},
   part_to_lid_to_gid = DistributedData{Vector{Int}}(
     init_lid_to_gids,comm,part_to_lid_to_owner,offsets)
 
-  part_to_cell_to_gids = DistributedVector{Vector{Int}}(
-      model.gids,num_dofs_x_cell)
-
-  do_on_parts(init_cell_to_owners,part_to_cell_to_gids,spaces,part_to_lid_to_gid)
+  part_to_cell_to_gids = DistributedVector(init_cell_to_owners,
+                                           model.gids,
+                                           num_dofs_x_cell,
+                                           spaces,
+                                           part_to_lid_to_gid)
 
   exchange!(part_to_cell_to_gids)
 
@@ -203,7 +218,7 @@ function DistributedFESpace(::Type{V},
   gids = DistributedIndexSet(init_free_gids,comm,ngids, part_to_lid_to_gid,part_to_lid_to_owner,part_to_ngids)
 
   DistributedFESpace(V,spaces,gids)
-end 
+end
 
 
 function DistributedFESpace(::Type{V}; model::DistributedDiscreteModel,kwargs...) where V
@@ -212,7 +227,7 @@ function DistributedFESpace(::Type{V}; model::DistributedDiscreteModel,kwargs...
   end
   comm = get_comm(model)
   spaces = DistributedData(init_local_spaces,comm,model.models)
-  DistributedFESpace(V,model,spaces) 
+  DistributedFESpace(V,model,spaces)
 end
 
 function _update_lid_to_gid!(lid_to_gid,cell_to_lids,cell_to_gids,cell_to_owner,lid_to_owner)

@@ -25,7 +25,24 @@ function num_owned_entries(indices::MPIPETScDistributedIndexSet)
     count((a)->(a == comm_rank), lid_to_owner)
   end
 
-function create_ghost_vector(indices::MPIPETScDistributedIndexSet)
+function create_ghost_vector(entries::Vector{Float64},
+                             indices::MPIPETScDistributedIndexSet)
+  ghost_idx = _generate_ghost_idx(indices)
+  num_owned = num_owned_entries(indices)
+  comm = get_comm(indices)
+  vref = Ref{PETSc.C.Vec{Float64}}()
+  PETSc.C.chk(PETSc.C.VecCreateGhostWithArray(comm.comm,
+                          PETSc.C.PetscInt(num_owned),
+                          PETSc.C.PetscInt(PETSc.C.PETSC_DECIDE),
+                          PETSc.C.PetscInt(length(ghost_idx)),
+                          ghost_idx,
+                          entries,
+                          vref))
+  PETSc.C.chk(PETSc.C.VecSetType(vref[], PETSc.C.VECMPI))
+  return PETSc.Vec{Float64}(vref[],entries)
+end
+
+function _generate_ghost_idx(indices::MPIPETScDistributedIndexSet)
   comm = get_comm(indices)
   comm_rank = MPI.Comm_rank(comm.comm)
   ghost_idx = PETSc.C.PetscInt[]
@@ -34,18 +51,13 @@ function create_ghost_vector(indices::MPIPETScDistributedIndexSet)
   num_local_entries = length(lid_to_owner)
   for i = 1:num_local_entries
     if (lid_to_owner[i] !== comm_rank + 1)
-      push!(ghost_idx, lid_to_gid_petsc[i])
+      push!(ghost_idx, lid_to_gid_petsc[i]-1)
     end
   end
-  num_owned = num_owned_entries(indices)
-  VecGhost(
-    Float64,
-    num_owned,
-    ghost_idx;
-    comm = comm.comm,
-    vtype = PETSc.C.VECMPI,
-  )
+  ghost_idx
 end
+
+
 
 get_comm(a::MPIPETScDistributedIndexSet) = a.parts.comm
 

@@ -4,11 +4,6 @@ struct SequentialDistributedVector{T,V<:AbstractVector{T},A,B,C}
   indices::SequentialDistributedIndexSet{A,B,C}
 end
 
-function SequentialDistributedVector{T}(
-  parts::Vector{<:AbstractVector{T}},indices::SequentialDistributedIndexSet) where T
-  SequentialDistributedVector(parts,indices)
-end
-
 get_comm(a::SequentialDistributedVector) = get_comm(a.indices)
 
 get_part(
@@ -16,14 +11,7 @@ get_part(
   a::SequentialDistributedVector,
   part::Integer) = a.parts[part]
 
-function DistributedVector{T}(
-  initializer::Function, indices::SequentialDistributedIndexSet,args...) where T
-  comm = get_comm(indices)
-  data = DistributedData(initializer,comm,args...)
-  parts = data.parts
-  SequentialDistributedVector{T}(parts,indices)
-end
-  
+
 function DistributedVector(
   initializer::Function, indices::SequentialDistributedIndexSet,args...)
   comm = get_comm(indices)
@@ -31,40 +19,6 @@ function DistributedVector(
   parts = data.parts
   SequentialDistributedVector(parts,indices)
 end
-
-function DistributedVector{T}(
-  indices::SequentialDistributedIndexSet) where T <: Number
-  comm = get_comm(indices)
-  data = DistributedData(comm,indices) do part, lindices
-    Vector{T}(undef, length(lindices.lid_to_owner))
-  end
-  parts = data.parts
-  SequentialDistributedVector(parts,indices)
-end
-
-function DistributedVector{T}(
-  indices::SequentialDistributedIndexSet, length_entry :: Int ) where T <: AbstractVector{<:Number}
-  comm = get_comm(indices)
-  data = DistributedData(comm,indices) do part, lindices
-    Vector{eltype(T)}[ Vector{eltype(T)}(undef,length_entry) for i=1:length(lindices.lid_to_owner) ]
-  end
-  parts = data.parts
-  SequentialDistributedVector(parts,indices)
-end
-
-function DistributedVector{T}(
-  indices::SequentialDistributedIndexSet, length_entries :: SequentialDistributedData ) where T <: AbstractVector{<:Number}
-  comm = get_comm(indices)
-  data = DistributedData(comm,indices,length_entries) do part, lindices, length_entries
-    Vector{eltype(T)}[ Vector{eltype(T)}(undef,length_entries[i]) for i=1:length(lindices.lid_to_owner) ]
-  end
-  parts = data.parts
-  SequentialDistributedVector(parts,indices)
-end
-
-
-
-
 
 function Base.getindex(a::SequentialDistributedVector,indices::SequentialDistributedIndexSet)
   @notimplementedif a.indices !== indices
@@ -91,13 +45,39 @@ function exchange!(a::SequentialDistributedVector)
   a
 end
 
+# Note: this type dispatch is needed because setindex! is
+#       not available for Table
+function exchange!(a::SequentialDistributedVector{T,<:Table}) where {T}
+  indices = a.indices
+  for part in 1:num_parts(indices)
+    lid_to_gid = indices.parts.parts[part].lid_to_gid
+    lid_to_item = a.parts[part]
+    lid_to_owner = indices.parts.parts[part].lid_to_owner
+    for lid in 1:length(lid_to_item)
+      gid = lid_to_gid[lid]
+      owner = lid_to_owner[lid]
+      if owner != part
+        lid_owner = indices.parts.parts[owner].gid_to_lid[gid]
+        k=a.parts[owner].ptrs[lid_owner]
+        for j=lid_to_item.ptrs[lid]:lid_to_item.ptrs[lid+1]-1
+          lid_to_item.data[j]=a.parts[owner].data[k]
+          k=k+1
+        end
+      end
+    end
+  end
+  a
+end
+
+
 # Julia vectors
 function Base.getindex(a::Vector,indices::SequentialDistributedIndexSet)
-  dv = DistributedVector{eltype(a)}(indices)
-  do_on_parts(dv,indices,a) do part, v, indices, a
+  dv = DistributedVector(indices,indices,a) do part, indices, a
+    v=Vector{eltype(a)}(undef,length(indices.lid_to_gid))
     for i=1:length(v)
       v[i]=a[indices.lid_to_gid[i]]
     end
+    v
   end
   dv
 end

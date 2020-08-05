@@ -182,29 +182,37 @@ function compute_subdomain_graph_dIS_and_lst_snd(gids, dI)
 end
 
 function pack_and_comm_entries(dIS, dIJV, m, n, part_to_lst_snd)
-  length_entries = DistributedVector{Int}(dIS)
-  do_on_parts(length_entries, m, dIJV, part_to_lst_snd) do part, length_entries, gid, IJV, lst_snd
+   length_entries =
+      DistributedVector(dIS, dIS, m, dIJV, part_to_lst_snd) do part, dIS, gid, IJV, lst_snd
     I,_,_ = IJV
-    fill!(length_entries, zero(eltype(length_entries)))
+    local_vector = fill(zero(Int),length(dIS.lid_to_owner))
     for i = 1:length(I)
       owner = gid.lid_to_owner[I[i]]
       if (owner != part)
         edge_lid = findfirst((i) -> (i == owner), lst_snd)
-        length_entries[edge_lid]+=3
+        local_vector[edge_lid]+=3
       end
     end
+    local_vector
   end
   exchange!(length_entries)
   dd_length_entries = DistributedData(length_entries) do part, length_entries
     collect(length_entries)
   end
-  exchange_entries_vector = DistributedVector{Vector{Float64}}(dIS, dd_length_entries)
 
   # Pack data to be sent
-  do_on_parts(dIS,exchange_entries_vector,
-              m, dIJV, part_to_lst_snd) do part, IS, exchange_entries_vector,
-                                           test_gids, IJV, lst_snd
-    current_pack_position = fill(one(Int32), length(IS.lid_to_owner))
+  exchange_entries_vector =
+  DistributedVector(dIS, dIS, dd_length_entries,
+                    m, dIJV, part_to_lst_snd) do part, IS, length_entries, test_gids, IJV, lst_snd
+
+    ptrs    = Vector{Int64}(undef, length(length_entries)+1)
+    ptrs[1] = 1
+    for i=1:length(ptrs)-1
+      ptrs[i+1]=ptrs[i]+length_entries[i]
+    end
+    data = Vector{Float64}(undef, ptrs[end]-1)
+
+    current_pack_position = fill(zero(Int32), length(IS.lid_to_owner))
     I,J,V = IJV
     for i = 1:length(I)
         owner = test_gids.lid_to_owner[I[i]]
@@ -213,12 +221,13 @@ function pack_and_comm_entries(dIS, dIJV, m, n, part_to_lst_snd)
           row=m.lid_to_gid_petsc[I[i]]
           col=n.lid_to_gid_petsc[J[i]]
           current_pos=current_pack_position[edge_lid]
-          exchange_entries_vector[edge_lid][current_pos  ]=row
-          exchange_entries_vector[edge_lid][current_pos+1]=col
-          exchange_entries_vector[edge_lid][current_pos+2]=V[i]
+          data[ptrs[edge_lid]+current_pos]  = row
+          data[ptrs[edge_lid]+current_pos+1]= col
+          data[ptrs[edge_lid]+current_pos+2]= V[i]
           current_pack_position[edge_lid] += 3
         end
     end
+    Table(data,ptrs)
   end
   exchange!(exchange_entries_vector)
   exchange_entries_vector
@@ -280,19 +289,28 @@ function combine_local_and_remote_entries(dIS, dIJV, m, n, exchange_entries_vect
       current=current+1
     end
    end
+
+   data = remote_entries.data
+   ptrs = remote_entries.ptrs
+
    # Add remote entries
    for edge_lid = 1:length(IS.lid_to_gid)
      if (IS.lid_to_owner[edge_lid] != part)
-       for i = 1:3:length(remote_entries[edge_lid])
-        row=Int64(remote_entries[edge_lid][i])
+
+      for i = 1:3:length(remote_entries[edge_lid])
+
+
+        row=Int64(data[ptrs[edge_lid]+i-1])
         GI[current]=lid_to_owned_lid[test_gid_to_lid[row]]
-        col=Int64(remote_entries[edge_lid][i+1])
+        col=Int64(data[ptrs[edge_lid]+i])
         if (!(haskey(trial_gid_to_lid_extended,col)))
           trial_gid_to_lid_extended[col]=length(trial_lid_to_gid_extended)+1
           push!(trial_lid_to_gid_extended, col)
         end
         GJ[current] = trial_gid_to_lid_extended[col]
-        GV[current] = remote_entries[edge_lid][i+2]
+
+        GV[current] = data[ptrs[edge_lid]+i+1]
+
         current = current + 1
        end
      end

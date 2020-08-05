@@ -6,7 +6,7 @@ using Test
 nparts = 2
 SequentialCommunicator(nparts) do comm
   n = 10
-  
+
   indices = DistributedIndexSet(comm,n) do part
     lid_to_owner = fill(part,6)
     if part == 1
@@ -25,24 +25,8 @@ SequentialCommunicator(nparts) do comm
   exchange!(a)
   @test a.parts == [[10, 10, 10, 10, 10, 20], [10, 20, 20, 20, 20, 20]]
 
-  a = DistributedVector{Int}(indices)
-  do_on_parts(a) do part, a
-    for i=1:length(a)
-      a[i]=10*part
-    end
-  end
-  exchange!(a)
-  @test a.parts == [[10, 10, 10, 10, 10, 20], [10, 20, 20, 20, 20, 20]]
-
-  b = DistributedVector{Int}(indices,a) do part, a
+  b = DistributedVector(indices,a) do part, a
     a .+ part
-  end
-  c = b[indices]
-  @test c.parts == [[11, 11, 11, 11, 11, 22], [11, 22, 22, 22, 22, 22]]
-
-  b = DistributedVector{Int}(indices)
-  do_on_parts(b,a) do part, b, a
-    b .= a .+ part
   end
   c = b[indices]
   @test c.parts == [[11, 11, 11, 11, 11, 22], [11, 22, 22, 22, 22, 22]]
@@ -52,6 +36,6 @@ SequentialCommunicator(nparts) do comm
   do_on_parts(w,indices) do part, w, indices
     @test w == v[indices.lid_to_gid]
   end
-end 
+end
 
 end # module

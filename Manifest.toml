@@ -123,11 +123,11 @@ version = "0.10.12"
 
 [[Gridap]]
 deps = ["AbstractTrees", "BSON", "Combinatorics", "DocStringExtensions", "FastGaussQuadrature", "FileIO", "FillArrays", "ForwardDiff", "JLD2", "JSON", "LineSearches", "LinearAlgebra", "NLsolve", "QuadGK", "SparseArrays", "StaticArrays", "Test", "WriteVTK"]
-git-tree-sha1 = "583f8754928c5439bbc61d5e12afb6804ce4022b"
-repo-rev = "multifield_array_extends_abstract_array"
+git-tree-sha1 = "8da39fdfddada4daeb062e0a566948c2b67c8248"
+repo-rev = "extend_table_plus_multifield_array"
 repo-url = "https://github.com/gridap/Gridap.jl"
 uuid = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
-version = "0.13.0"
+version = "0.13.2"
 
 [[InteractiveUtils]]
 deps = ["Markdown"]
@@ -365,6 +365,6 @@ version = "2.9.10+1"
 
 [[Zlib_jll]]
 deps = ["Libdl", "Pkg"]
-git-tree-sha1 = "622d8b6dc0c7e8029f17127703de9819134d1b71"
+git-tree-sha1 = "d5bba6485811931e4b8958e2d7ca3738273ac468"
 uuid = "83775a58-1f1d-513f-b197-d71354ab007a"
-version = "1.2.11+14"
+version = "1.2.11+15"
