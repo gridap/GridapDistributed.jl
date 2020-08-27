@@ -260,7 +260,6 @@ git-tree-sha1 = "6503d29e7c97113156fb9d1ebd3e557276f52fab"
 repo-rev = "uptodate1.4"
 repo-url = "https://github.com/gridap/PETSc.jl"
 uuid = "743b6f9b-fae8-55fc-a981-4e9a2885e829"
-version = "0.0.0"
 
 [[Parameters]]
 deps = ["OrderedCollections", "UnPack"]
