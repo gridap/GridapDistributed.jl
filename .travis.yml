@@ -36,6 +36,6 @@ jobs:
           Pkg.add(PackageSpec(url="https://github.com/gridap/PETSc.jl", rev="uptodate1.4"));
           Pkg.develop(PackageSpec(path=pwd()));
           Pkg.instantiate();
-          Pkg.test();
+          Pkg.test("GridapDistributed);
           include("docs/make.jl");'
       after_success: skip
