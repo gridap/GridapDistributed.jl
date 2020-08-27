@@ -33,6 +33,7 @@ jobs:
       julia: 1.4
       script: julia --project=docs -e '
           using Pkg;
+          Pkg.add(PackageSpec(url="https://github.com/gridap/PETSc.jl", rev="uptodate1.4"));
           Pkg.develop(PackageSpec(path=pwd()));
           Pkg.instantiate();
           include("docs/make.jl");'
