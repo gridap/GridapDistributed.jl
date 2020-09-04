@@ -65,7 +65,7 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
             #constraint=:zeromean)
     MultiFieldFESpace([V,Q])
   end
-  Y=GridapDistributed.DistributedFESpace(vector_type,model,spaces)
+  Y=GridapDistributed.DistributedFESpaceFromLocalFESpaces(vector_type,model,spaces)
 
   # Build local and global trial FE spaces
   trialspaces = DistributedData(comm, Y) do part, (y,gids)
@@ -73,7 +73,7 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
     P=TrialFESpace(y.spaces[2])
     MultiFieldFESpace([U,P])
   end
-  X=GridapDistributed.DistributedFESpace(vector_type,trialspaces,Y.gids)
+  X=GridapDistributed.DistributedFESpaceFromLocalFESpaces(vector_type,trialspaces,Y.gids)
 
   if (assembly_strategy == "RowsComputedLocally")
     strategy = RowsComputedLocally(Y; global_dofs=global_dofs)

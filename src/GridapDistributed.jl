@@ -10,6 +10,7 @@ using Gridap.Algebra
 using SparseArrays
 using MPI
 using PETSc
+using FillArrays
 
 export Communicator
 export num_parts
@@ -74,6 +75,10 @@ include("DistributedDiscreteModels.jl")
 include("CartesianDiscreteModels.jl")
 
 include("DistributedFESpaces.jl")
+
+include("ZeroMeanDistributedFESpaces.jl")
+
+include("DistributedFESpaceFactories.jl")
 
 include("DistributedAssemblers.jl")
 

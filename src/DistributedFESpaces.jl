@@ -1,8 +1,5 @@
-struct DistributedFESpace{V} <: FESpace
-  vector_type::Type{V}
-  spaces::DistributedData{<:FESpace}
-  gids::DistributedIndexSet
-end
+
+abstract type DistributedFESpace{V} <: FESpace end
 
 function get_distributed_data(dspace::DistributedFESpace)
   spaces = dspace.spaces
@@ -13,36 +10,17 @@ function get_distributed_data(dspace::DistributedFESpace)
   end
 end
 
-# Minimal FE interface
-
-function Gridap.FESpaces.num_free_dofs(f::DistributedFESpace)
-  f.gids.ngids
-end
-
 function Gridap.FESpaces.FEFunction(dV::DistributedFESpace,x)
-  dfree_vals = x[dV.gids]
-  # IMPORTANT NOTE: we need to call collect below in order to duplicate the
-  #                 local portion of dfree_vals. When dfree_vals is of
-  #                 type MPIPETScDistributedVector, the Julia's GC can destroy
-  #                 the vector on which the entries of dfree_vals are ultimately
-  #                 stored when it goes out of scope.
-  funs = DistributedData(dV.spaces,dfree_vals) do part, V, free_vals
-    FEFunction(V,collect(free_vals))
-  end
-  DistributedFEFunction(funs,x,dV)
+  @abstractmethod
 end
 
 function Gridap.FESpaces.EvaluationFunction(dV::DistributedFESpace,x)
-  dfree_vals = x[dV.gids]
-  # IMPORTANT NOTE: we need to call collect below in order to duplicate the
-  #                 local portion of dfree_vals. When dfree_vals is of
-  #                 type MPIPETScDistributedVector, the Julia's GC can destroy
-  #                 the vector on which the entries of dfree_vals are ultimately
-  #                 stored when it goes out of scope.
-  funs = DistributedData(dV.spaces,dfree_vals) do part, V, free_vals
-    Gridap.FESpaces.EvaluationFunction(V,collect(free_vals))
-  end
-  DistributedFEFunction(funs,x,dV)
+  @abstractmethod
+end
+
+# Minimal FE interface
+function Gridap.FESpaces.num_free_dofs(f::DistributedFESpace)
+  f.gids.ngids
 end
 
 function Gridap.FESpaces.zero_free_values(f::DistributedFESpace)
@@ -58,176 +36,183 @@ function Gridap.FESpaces.get_cell_basis(f::DistributedFESpace)
   DistributedCellBasis(bases)
 end
 
-# FE Function
-
-struct DistributedFEFunction{T}
-  funs::DistributedData
-  vals::T #::AbstractVector
-  space::DistributedFESpace
+# TO-DO: Better name?
+struct DistributedFESpaceFromLocalFESpaces{V} <: DistributedFESpace{V}
+  vector_type::Type{V}
+  spaces::DistributedData{<:FESpace}
+  gids::DistributedIndexSet
 end
 
-Gridap.FESpaces.FEFunctionStyle(::Type{DistributedFEFunction}) = Val{true}()
-
-get_distributed_data(u::DistributedFEFunction) = u.funs
-
-Gridap.FESpaces.get_free_values(a::DistributedFEFunction) = a.vals
-
-Gridap.FESpaces.get_fe_space(a::DistributedFEFunction) = a.space
-
-Gridap.FESpaces.is_a_fe_function(a::DistributedFEFunction) = true
-
-# Cell basis
-
-struct DistributedCellBasis
-  bases::DistributedData
+function Gridap.FESpaces.FEFunction(dV::DistributedFESpaceFromLocalFESpaces,x)
+  dfree_vals = x[dV.gids]
+  # IMPORTANT NOTE: we need to call collect below in order to duplicate the
+  #                 local portion of dfree_vals. When dfree_vals is of
+  #                 type MPIPETScDistributedVector, the Julia's GC can destroy
+  #                 the vector on which the entries of dfree_vals are ultimately
+  #                 stored when it goes out of scope.
+  funs = DistributedData(dV.spaces,dfree_vals) do part, V, free_vals
+    FEFunction(V,collect(free_vals))
+  end
+  DistributedFEFunction(funs,x,dV)
 end
 
-Gridap.FESpaces.FECellBasisStyle(::Type{DistributedCellBasis}) = Val{true}()
+function Gridap.FESpaces.EvaluationFunction(dV::DistributedFESpaceFromLocalFESpaces,x)
+  dfree_vals = x[dV.gids]
+  # IMPORTANT NOTE: we need to call collect below in order to duplicate the
+  #                 local portion of dfree_vals. When dfree_vals is of
+  #                 type MPIPETScDistributedVector, the Julia's GC can destroy
+  #                 the vector on which the entries of dfree_vals are ultimately
+  #                 stored when it goes out of scope.
+  funs = DistributedData(dV.spaces,dfree_vals) do part, V, free_vals
+    Gridap.FESpaces.EvaluationFunction(V,collect(free_vals))
+  end
+  DistributedFEFunction(funs,x,dV)
+end
 
-get_distributed_data(u::DistributedCellBasis) = u.bases
 
 #  Constructors
-
-function Gridap.TrialFESpace(V::DistributedFESpace,args...)
+function Gridap.TrialFESpace(V::DistributedFESpaceFromLocalFESpaces,args...)
   spaces = DistributedData(V.spaces) do part, space
     TrialFESpace(space,args...)
   end
-  DistributedFESpace(V.vector_type,spaces,V.gids)
+  DistributedFESpaceFromLocalFESpaces(V.vector_type,spaces,V.gids)
 end
 
-function Gridap.FESpace(::Type{V};model::DistributedDiscreteModel,kwargs...) where V
-  DistributedFESpace(V;model=model,kwargs...)
-end
-
-function DistributedFESpace(::Type{V},
-                            model::DistributedDiscreteModel,
-                            spaces::DistributedData{<:FESpace}) where {V}
-
-  comm = get_comm(model)
-
-  function init_lid_to_owner(part,lspace,cell_gids)
-    nlids = num_free_dofs(lspace)
-    lid_to_owner = zeros(Int,nlids)
-    cell_to_part = cell_gids.lid_to_owner
-    cell_to_lids = Table(get_cell_dofs(lspace))
-    _fill_max_part_around!(lid_to_owner,cell_to_part,cell_to_lids)
-    lid_to_owner
-  end
-
-  part_to_lid_to_owner = DistributedData{Vector{Int}}(init_lid_to_owner,comm,spaces,model.gids)
-
-  function count_owned_lids(part,lid_to_owner)
-    count(owner -> owner == part,lid_to_owner)
-  end
-
-  a = DistributedData{Int}(count_owned_lids,comm,part_to_lid_to_owner)
-  part_to_num_oids = gather(a)
-
-  if i_am_master(comm)
-    ngids = sum(part_to_num_oids)
-    _fill_offsets!(part_to_num_oids)
-  else
-    ngids = -1
-  end
-
-  offsets = scatter(comm,part_to_num_oids)
-  part_to_ngids = scatter_value(comm,ngids)
-
-  do_on_parts(comm,part_to_ngids) do part, lngids
-      ngids=lngids
-  end
-
-  num_dofs_x_cell=DistributedData(comm,spaces) do part, lspace
-    cell_dofs=get_cell_dofs(lspace)
-    [length(cell_dofs[i]) for i=1:length(cell_dofs)]
-  end
-
-  function init_cell_to_owners(part,
-                               num_dofs_x_cell,
-                               lspace,
-                               lid_to_owner)
-    ptrs = Vector{eltype(num_dofs_x_cell)}(undef,
-                                           length(num_dofs_x_cell)+1)
-    ptrs[2:end]=num_dofs_x_cell[1:end]
-    length_to_ptrs!(ptrs)
-    data = Vector{eltype(lid_to_owner)}(undef,ptrs[end]-1)
-
-    cell_to_lids = get_cell_dofs(lspace)
-    dlid_to_zero = zeros(eltype(lid_to_owner),num_dirichlet_dofs(lspace))
-    cell_to_owners_from =
-        LocalToGlobalPosNegArray(cell_to_lids,lid_to_owner,dlid_to_zero)
-    k=1
-    for i=1:length(cell_to_owners_from)
-      for j=1:length(cell_to_owners_from[i])
-        data[k]=cell_to_owners_from[i][j]
-        k=k+1
-      end
-    end
-    return Table(data,ptrs)
-  end
-
-  part_to_cell_to_owners = DistributedVector(init_cell_to_owners,
-                                             model.gids, num_dofs_x_cell,
-                                             spaces,
-                                             part_to_lid_to_owner)
-
-  exchange!(part_to_cell_to_owners)
-
-  function update_lid_to_owner(part,lid_to_owner,lspace,cell_to_owners)
-    cell_to_lids = Table(get_cell_dofs(lspace))
-    _update_lid_to_owner!(lid_to_owner,cell_to_lids,cell_to_owners)
-  end
-
-  do_on_parts(update_lid_to_owner,part_to_lid_to_owner,spaces,part_to_cell_to_owners)
-
-  function init_lid_to_gids(part,lid_to_owner,offset)
-    lid_to_gid = zeros(Int,length(lid_to_owner))
-    _fill_owned_gids!(lid_to_gid,lid_to_owner,part,offset)
-    lid_to_gid
-  end
-
-  part_to_lid_to_gid = DistributedData{Vector{Int}}(
-    init_lid_to_gids,comm,part_to_lid_to_owner,offsets)
-
-  part_to_cell_to_gids = DistributedVector(init_cell_to_owners,
-                                           model.gids,
-                                           num_dofs_x_cell,
-                                           spaces,
-                                           part_to_lid_to_gid)
-
-  exchange!(part_to_cell_to_gids)
-
-  function update_lid_to_gid(part,lid_to_gid,lid_to_owner,lspace,cell_to_gids,cell_gids)
-    cell_to_lids = Table(get_cell_dofs(lspace))
-    cell_to_owner = cell_gids.lid_to_owner
-    _update_lid_to_gid!(
-      lid_to_gid,cell_to_lids,cell_to_gids,cell_to_owner,lid_to_owner)
-  end
-
-  do_on_parts(
-    update_lid_to_gid,part_to_lid_to_gid,part_to_lid_to_owner,spaces,part_to_cell_to_gids,model.gids)
-
-  exchange!(part_to_cell_to_gids)
-
-  do_on_parts(update_lid_to_owner,part_to_lid_to_gid,spaces,part_to_cell_to_gids)
-
-  function init_free_gids(part,lid_to_gid,lid_to_owner,ngids)
-    IndexSet(ngids,lid_to_gid,lid_to_owner)
-  end
-
-  gids = DistributedIndexSet(init_free_gids,comm,ngids, part_to_lid_to_gid,part_to_lid_to_owner,part_to_ngids)
-
-  DistributedFESpace(V,spaces,gids)
-end
-
-
-function DistributedFESpace(::Type{V}; model::DistributedDiscreteModel,kwargs...) where V
+function DistributedFESpaceFromLocalFESpaces(::Type{V};
+                                             model::DistributedDiscreteModel,
+                                             kwargs...) where V
   function init_local_spaces(part,model)
     lspace = FESpace(;model=model,kwargs...)
   end
   comm = get_comm(model)
   spaces = DistributedData(init_local_spaces,comm,model.models)
-  DistributedFESpace(V,model,spaces)
+  DistributedFESpaceFromLocalFESpaces(V,model,spaces)
+end
+
+function DistributedFESpaceFromLocalFESpaces(::Type{V},
+                                             model::DistributedDiscreteModel,
+                                             spaces::DistributedData{<:FESpace}) where {V}
+  gids=_compute_distributed_index_set(model, spaces)
+  DistributedFESpaceFromLocalFESpaces(V,spaces,gids)
+end
+
+function _compute_distributed_index_set(
+   model  :: DistributedDiscreteModel,
+   spaces :: DistributedData{<:FESpace})
+
+   comm = get_comm(model)
+
+   function init_lid_to_owner(part,lspace,cell_gids)
+     nlids = num_free_dofs(lspace)
+     lid_to_owner = zeros(Int,nlids)
+     cell_to_part = cell_gids.lid_to_owner
+     cell_to_lids = Table(get_cell_dofs(lspace))
+     _fill_max_part_around!(lid_to_owner,cell_to_part,cell_to_lids)
+     lid_to_owner
+   end
+
+   part_to_lid_to_owner = DistributedData{Vector{Int}}(init_lid_to_owner,comm,spaces,model.gids)
+
+   function count_owned_lids(part,lid_to_owner)
+     count(owner -> owner == part,lid_to_owner)
+   end
+
+   a = DistributedData{Int}(count_owned_lids,comm,part_to_lid_to_owner)
+   part_to_num_oids = gather(a)
+
+   if i_am_master(comm)
+     ngids = sum(part_to_num_oids)
+     _fill_offsets!(part_to_num_oids)
+   else
+     ngids = -1
+   end
+
+   offsets = scatter(comm,part_to_num_oids)
+   part_to_ngids = scatter_value(comm,ngids)
+
+   do_on_parts(comm,part_to_ngids) do part, lngids
+       ngids=lngids
+   end
+
+   num_dofs_x_cell=DistributedData(comm,spaces) do part, lspace
+     cell_dofs=get_cell_dofs(lspace)
+     [length(cell_dofs[i]) for i=1:length(cell_dofs)]
+   end
+
+   function init_cell_to_owners(part,
+                                num_dofs_x_cell,
+                                lspace,
+                                lid_to_owner)
+     ptrs = Vector{eltype(num_dofs_x_cell)}(undef,
+                                            length(num_dofs_x_cell)+1)
+     ptrs[2:end]=num_dofs_x_cell[1:end]
+     length_to_ptrs!(ptrs)
+     data = Vector{eltype(lid_to_owner)}(undef,ptrs[end]-1)
+
+     cell_to_lids = get_cell_dofs(lspace)
+     dlid_to_zero = zeros(eltype(lid_to_owner),num_dirichlet_dofs(lspace))
+     cell_to_owners_from =
+         LocalToGlobalPosNegArray(cell_to_lids,lid_to_owner,dlid_to_zero)
+     k=1
+     for i=1:length(cell_to_owners_from)
+       for j=1:length(cell_to_owners_from[i])
+         data[k]=cell_to_owners_from[i][j]
+         k=k+1
+       end
+     end
+     return Table(data,ptrs)
+   end
+
+   part_to_cell_to_owners = DistributedVector(init_cell_to_owners,
+                                              model.gids, num_dofs_x_cell,
+                                              spaces,
+                                              part_to_lid_to_owner)
+
+   exchange!(part_to_cell_to_owners)
+
+   function update_lid_to_owner(part,lid_to_owner,lspace,cell_to_owners)
+     cell_to_lids = Table(get_cell_dofs(lspace))
+     _update_lid_to_owner!(lid_to_owner,cell_to_lids,cell_to_owners)
+   end
+
+   do_on_parts(update_lid_to_owner,part_to_lid_to_owner,spaces,part_to_cell_to_owners)
+
+   function init_lid_to_gids(part,lid_to_owner,offset)
+     lid_to_gid = zeros(Int,length(lid_to_owner))
+     _fill_owned_gids!(lid_to_gid,lid_to_owner,part,offset)
+     lid_to_gid
+   end
+
+   part_to_lid_to_gid = DistributedData{Vector{Int}}(
+     init_lid_to_gids,comm,part_to_lid_to_owner,offsets)
+
+   part_to_cell_to_gids = DistributedVector(init_cell_to_owners,
+                                            model.gids,
+                                            num_dofs_x_cell,
+                                            spaces,
+                                            part_to_lid_to_gid)
+
+   exchange!(part_to_cell_to_gids)
+
+   function update_lid_to_gid(part,lid_to_gid,lid_to_owner,lspace,cell_to_gids,cell_gids)
+     cell_to_lids = Table(get_cell_dofs(lspace))
+     cell_to_owner = cell_gids.lid_to_owner
+     _update_lid_to_gid!(
+       lid_to_gid,cell_to_lids,cell_to_gids,cell_to_owner,lid_to_owner)
+   end
+
+   do_on_parts(
+     update_lid_to_gid,part_to_lid_to_gid,part_to_lid_to_owner,spaces,part_to_cell_to_gids,model.gids)
+
+   exchange!(part_to_cell_to_gids)
+
+   do_on_parts(update_lid_to_owner,part_to_lid_to_gid,spaces,part_to_cell_to_gids)
+
+   function init_free_gids(part,lid_to_gid,lid_to_owner,ngids)
+     IndexSet(ngids,lid_to_gid,lid_to_owner)
+   end
+
+   gids = DistributedIndexSet(init_free_gids,comm,ngids, part_to_lid_to_gid,part_to_lid_to_owner,part_to_ngids)
 end
 
 function _update_lid_to_gid!(lid_to_gid,cell_to_lids,cell_to_gids,cell_to_owner,lid_to_owner)
@@ -297,3 +282,29 @@ function _fill_max_part_around!(lid_to_owner,cell_to_owner,cell_to_lids)
     end
   end
 end
+
+# FE Function
+struct DistributedFEFunction{T}
+  funs::DistributedData
+  vals::T #::AbstractVector
+  space::DistributedFESpace
+end
+
+Gridap.FESpaces.FEFunctionStyle(::Type{DistributedFEFunction}) = Val{true}()
+
+get_distributed_data(u::DistributedFEFunction) = u.funs
+
+Gridap.FESpaces.get_free_values(a::DistributedFEFunction) = a.vals
+
+Gridap.FESpaces.get_fe_space(a::DistributedFEFunction) = a.space
+
+Gridap.FESpaces.is_a_fe_function(a::DistributedFEFunction) = true
+
+# Cell basis
+struct DistributedCellBasis
+  bases::DistributedData
+end
+
+Gridap.FESpaces.FECellBasisStyle(::Type{DistributedCellBasis}) = Val{true}()
+
+get_distributed_data(u::DistributedCellBasis) = u.bases
