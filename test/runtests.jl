@@ -14,6 +14,8 @@ using PETSc
 
 @time @testset "DistributedFESpaces" begin include("DistributedFESpacesTests.jl") end
 
+@time @testset "ZeroMeanDistributedFESpacesTests" begin include("ZeroMeanDistributedFESpacesTests.jl") end
+
 @time @testset "DistributedAssemblers" begin include("DistributedAssemblersTests.jl") end
 
 @time @testset "DistributedPoisson" begin include("DistributedPoissonTests.jl") end
