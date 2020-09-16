@@ -49,14 +49,14 @@ end
 function _generate_zero_mean_funs(dV::ZeroMeanDistributedFESpace, funs)
   dpartial_sums_fixed_val=
   DistributedData(dV.spaces, funs, dV.vol_i, dV.vol) do part, V, fun, vol_i, vol
-      if (get_val_parameter(V.remove_dof))
+      if (constant_fixed(V))
         fv=get_free_values(fun)
         dv=get_dirichlet_values(fun)
         c=Gridap.FESpaces._compute_new_fixedval(fv,
                                                 dv,
                                                 vol_i,
                                                 vol,
-                                                V.dof_to_remove)
+                                                V.dof_to_fix)
       else
         fv=get_free_values(fun)
         c=-dot(fv,vol_i)/vol
@@ -72,7 +72,7 @@ function _generate_zero_mean_funs(dV::ZeroMeanDistributedFESpace, funs)
   dfuns = DistributedData(dV.spaces, funs, dfixed_val) do part, V, fun, fixed_val
        free_values=get_free_values(fun)
        fv=apply(+,free_values, Fill(fixed_val,length(free_values)))
-       if (get_val_parameter(V.remove_dof))
+       if (constant_fixed(V))
          dirichlet_values=get_dirichlet_values(fun)
          dv = dirichlet_values .+ fixed_val
          return FEFunction(V,fv,dv)
@@ -81,6 +81,15 @@ function _generate_zero_mean_funs(dV::ZeroMeanDistributedFESpace, funs)
        end
   end
 end
+
+function constant_fixed(V::FESpaceWithConstantFixed{CS,Gridap.FESpaces.FixConstant}) where {CS}
+  true
+end
+
+function constant_fixed(V::FESpaceWithConstantFixed{CS,CA}) where {CS,CA}
+   false
+end
+
 
 function ZeroMeanDistributedFESpace(::Type{V};
                                     model::DistributedDiscreteModel,
@@ -93,17 +102,17 @@ function ZeroMeanDistributedFESpace(::Type{V};
   comm = get_comm(model)
   spaces = DistributedData(init_local_spaces,comm,model.models)
 
-  dof_lid_to_remove = _compute_dof_lid_to_remove(model,spaces)
+  dof_lid_to_fix = _compute_dof_lid_to_fix(model,spaces)
 
-  function init_local_spaces_with_dof_removed(part,lspace,dof_lid_to_remove)
-    Gridap.FESpaces.FESpaceWithDofPotentiallyRemoved(
-      lspace, dof_lid_to_remove != -1, dof_lid_to_remove)
+  function init_local_spaces_with_dof_removed(part,lspace,dof_lid_to_fix)
+    Gridap.FESpaces.FESpaceWithConstantFixed(
+      lspace, dof_lid_to_fix != -1, dof_lid_to_fix)
   end
 
   spaces_dof_removed = DistributedData(init_local_spaces_with_dof_removed,
                                        comm,
                                        spaces,
-                                       dof_lid_to_remove)
+                                       dof_lid_to_fix)
 
   order=Gridap.FESpaces._get_kwarg(:order,kwargs)
   dvol_i, dvol = _setup_vols(model,spaces,order)
@@ -134,7 +143,7 @@ function _setup_vols(model,spaces,order)
   (dvol_i,dvol)
 end
 
-function _compute_dof_lid_to_remove(model,spaces)
+function _compute_dof_lid_to_fix(model,spaces)
   dof_lids_candidates=DistributedData(model.gids,spaces) do part, cell_gids, lspace
    n_free_dofs = num_free_dofs(lspace)
    lid_to_n_local_minus_ghost=zeros(Int32,n_free_dofs)
@@ -167,5 +176,5 @@ function _compute_dof_lid_to_remove(model,spaces)
     end
   end
 
-  dof_lid_to_remove = scatter(comm,part_dof_lids_candidates)
+  dof_lid_to_fix = scatter(comm,part_dof_lids_candidates)
 end

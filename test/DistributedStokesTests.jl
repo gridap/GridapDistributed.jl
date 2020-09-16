@@ -45,35 +45,33 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
     add_tag_from_tags!(labels,"neumann",[5])
   end
 
-  # Build local and global test FE spaces
-  spaces = DistributedData(comm, model) do part, (model,gids)
-    labels = get_face_labeling(model)
-    V = TestFESpace(
-           reffe=:QLagrangian,
-           conformity=:H1,
-           valuetype=VectorValue{2,Float64},
-           model=model,
-           labels=labels,
-           order=2,
-           dirichlet_tags=["diri0","diri1"])
-    Q = TestFESpace(
-            reffe=:PLagrangian,
-            conformity=:L2,
-            valuetype=Float64,
-            model=model,
-            order=1) #,
-            #constraint=:zeromean)
-    MultiFieldFESpace([V,Q])
-  end
-  Y=GridapDistributed.DistributedFESpaceFromLocalFESpaces(vector_type,model,spaces)
 
-  # Build local and global trial FE spaces
-  trialspaces = DistributedData(comm, Y) do part, (y,gids)
-    U=TrialFESpace(y.spaces[1],[u,u])
-    P=TrialFESpace(y.spaces[2])
-    MultiFieldFESpace([U,P])
-  end
-  X=GridapDistributed.DistributedFESpaceFromLocalFESpaces(vector_type,trialspaces,Y.gids)
+  # FE Spaces
+  order = 2
+  V = FESpace(
+        vector_type,
+        valuetype = VectorValue{2,Float64},
+        reffe=:QLagrangian,
+        order = order,
+        model = model,
+        conformity = :H1,
+        dirichlet_tags=["diri0","diri1"],
+      )
+
+  Q = FESpace(
+       vector_type,
+       reffe=:PLagrangian,
+       conformity=:L2,
+       valuetype=Float64,
+       model=model,
+       order=order-1)
+       #constraint=:zeromean)
+
+  Y=MultiFieldFESpace(model,[V,Q])
+
+  U=TrialFESpace(V,[u,u])
+  P=TrialFESpace(Q)
+  X=MultiFieldFESpace(Y,[U,P])
 
   if (assembly_strategy == "RowsComputedLocally")
     strategy = RowsComputedLocally(Y; global_dofs=global_dofs)
@@ -113,7 +111,7 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
    # Assembler
    assem = SparseMatrixAssembler(matrix_type, vector_type, X, Y, strategy)
 
-   # FE solution
+  #  # FE solution
    op = AffineFEOperator(assem, terms)
    xh = solve(op)
 
