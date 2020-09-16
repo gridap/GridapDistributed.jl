@@ -18,6 +18,10 @@ function get_part(comm::SequentialCommunicator,object,part::Integer)
   @abstractmethod
 end
 
+function get_part(comm::SequentialCommunicator,object::Number,part::Integer)
+  object
+end
+
 function num_parts(a::SequentialCommunicator)
   a.nparts
 end

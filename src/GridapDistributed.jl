@@ -78,6 +78,8 @@ include("DistributedFESpaces.jl")
 
 include("ZeroMeanDistributedFESpaces.jl")
 
+include("MultiFieldDistributedFESpaces.jl")
+
 include("DistributedFESpaceFactories.jl")
 
 include("DistributedAssemblers.jl")
