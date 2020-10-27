@@ -8,22 +8,13 @@ julia:
 addons:
  apt:
    update: true
-   packages:
-   - openmpi-bin
-   - libopenmpi-dev
-   - petsc-dev
 notifications:
   email:
     on_success: never
     on_failure: always
 before_script:
   - lsb_release -a       
-  - export JULIA_MPI_BINARY="system"
-  - export JULIA_PETSC_RealDouble_DIR="/usr/lib/petsc/"
-  - export JULIA_PETSC_RealDouble_ARCH=""
-  - export JULIA_PETSC_RealDouble_LIBNAME="libpetsc_real"
-  - export JULIA_PETSC_RealSingle_NOBUILD="1"
-  - export JULIA_PETSC_ComplexDouble_NOBUILD="1"
+  - export JULIA_MPI_BINARY=""
 after_success:
   - julia -e 'using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
 jobs:
