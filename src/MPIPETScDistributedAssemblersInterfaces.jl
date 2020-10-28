@@ -5,19 +5,19 @@
 Allocate a vector of type `V` indexable at the indices `indices`
 """
 function Gridap.Algebra.allocate_vector(
-  ::Type{PETSc.Vec{Float64}},
+  ::Type{GridapDistributedPETScWrappers.Vec{Float64}},
   indices::MPIPETScDistributedIndexSet,
 )
   ng = num_gids(indices)
   nl = num_owned_entries(indices)
-  vec=PETSc.Vec(Float64, ng; mlocal = nl, comm = get_comm(indices).comm)
-  vec.insertmode = PETSc.C.ADD_VALUES
-  PETSc.set_local_to_global_mapping(vec,indices.IS)
+  vec=GridapDistributedPETScWrappers.Vec(Float64, ng; mlocal = nl, comm = get_comm(indices).comm)
+  vec.insertmode = GridapDistributedPETScWrappers.C.ADD_VALUES
+  GridapDistributedPETScWrappers.set_local_to_global_mapping(vec,indices.IS)
   vec
 end
 
 function Gridap.Algebra.allocate_coo_vectors(
-  ::Type{PETSc.Mat{Float64}},
+  ::Type{GridapDistributedPETScWrappers.Mat{Float64}},
   dn::MPIPETScDistributedData,
 )
   DistributedData(dn) do part, n
@@ -28,34 +28,34 @@ function Gridap.Algebra.allocate_coo_vectors(
   end
 end
 
-function Gridap.Algebra.fill_entries!(a::PETSc.Mat{Float64},v::Number)
+function Gridap.Algebra.fill_entries!(a::GridapDistributedPETScWrappers.Mat{Float64},v::Number)
   fill!(a,v)
   a
 end
 
-function Gridap.FESpaces.assemble_matrix_and_vector_add!(dmat::PETSc.Mat{Float64},dvec::PETSc.Vec{Float64},dassem::DistributedAssembler, ddata)
+function Gridap.FESpaces.assemble_matrix_and_vector_add!(dmat::GridapDistributedPETScWrappers.Mat{Float64},dvec::GridapDistributedPETScWrappers.Vec{Float64},dassem::DistributedAssembler, ddata)
   do_on_parts(dassem,ddata,dmat,dvec) do part, assem, data, mat, vec
     assemble_matrix_and_vector_add!(mat,vec,assem,data)
   end
-  PETSc.assemble(dmat)
-  PETSc.assemble(dvec)
+  GridapDistributedPETScWrappers.assemble(dmat)
+  GridapDistributedPETScWrappers.assemble(dvec)
 end
 
-function get_local_vector_type(::Type{PETSc.Vec{Float64}})
+function get_local_vector_type(::Type{GridapDistributedPETScWrappers.Vec{Float64}})
   Vector{Float64}
 end
 
-function get_local_matrix_type(::Type{PETSc.Mat{Float64}})
+function get_local_matrix_type(::Type{GridapDistributedPETScWrappers.Mat{Float64}})
   SparseMatrixCSR{1,Float64,Int64}
 end
 
 function allocate_local_vector(
   strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{false}},DistributedAssemblyStrategy{OwnedCellsStrategy{false}}},
-  ::Type{PETSc.Vec{Float64}},
+  ::Type{GridapDistributedPETScWrappers.Vec{Float64}},
   indices::MPIPETScDistributedIndexSet,
 )
   DistributedData(indices) do part,index
-   T = get_local_vector_type(PETSc.Vec{Float64})
+   T = get_local_vector_type(GridapDistributedPETScWrappers.Vec{Float64})
    lvec=T(undef,length(index.lid_to_gid))
    fill!(lvec,zero(eltype(T)))
    lvec
@@ -63,20 +63,20 @@ function allocate_local_vector(
 end
 
 function Gridap.Algebra.finalize_coo!(
-  ::Type{PETSc.Mat{Float64}},IJV::MPIPETScDistributedData,m::MPIPETScDistributedIndexSet,n::MPIPETScDistributedIndexSet)
+  ::Type{GridapDistributedPETScWrappers.Mat{Float64}},IJV::MPIPETScDistributedData,m::MPIPETScDistributedIndexSet,n::MPIPETScDistributedIndexSet)
 end
 
 function _convert_buf_to_petscint(buf)
   if isempty(buf)
-    Ptr{PETSc.C.PetscInt}(0)
+    Ptr{GridapDistributedPETScWrappers.C.PetscInt}(0)
   else
-    isa(buf,Vector{PETSc.C.PetscInt}) ? buf : PETSc.C.PetscInt[ i for i in buf ]
+    isa(buf,Vector{GridapDistributedPETScWrappers.C.PetscInt}) ? buf : GridapDistributedPETScWrappers.C.PetscInt[ i for i in buf ]
   end
 end
 
 function assemble_global_matrix(
   strat::DistributedAssemblyStrategy{RowsComputedLocally{false}},
-  ::Type{PETSc.Mat{Float64}},
+  ::Type{GridapDistributedPETScWrappers.Mat{Float64}},
   IJV::MPIPETScDistributedData,
   m::MPIPETScDistributedIndexSet,
   n::MPIPETScDistributedIndexSet,
@@ -129,18 +129,18 @@ function compute_subdomain_graph_dIS_and_lst_snd(gids, dI)
       owned_edge_gids
     end
 
-  num_snd    = PETSc.C.PetscMPIInt(part_to_num_snd.part)
-  lst_snd    = convert(Vector{PETSc.C.PetscMPIInt}, part_to_lst_snd.part) .- PETSc.C.PetscMPIInt(1)
+  num_snd    = GridapDistributedPETScWrappers.C.PetscMPIInt(part_to_num_snd.part)
+  lst_snd    = convert(Vector{GridapDistributedPETScWrappers.C.PetscMPIInt}, part_to_lst_snd.part) .- GridapDistributedPETScWrappers.C.PetscMPIInt(1)
   snd_buf    = part_to_owned_subdomain_graph_edge_gids.part
 
-  num_rcv    = Ref{PETSc.C.PetscMPIInt}()
-  lst_rcv    = Ref{Ptr{PETSc.C.PetscMPIInt}}()
+  num_rcv    = Ref{GridapDistributedPETScWrappers.C.PetscMPIInt}()
+  lst_rcv    = Ref{Ptr{GridapDistributedPETScWrappers.C.PetscMPIInt}}()
   rcv_buf    = Ref{Ptr{Int64}}()
 
-  #PETSc.C.PetscCommBuildTwoSidedSetType(Float64, get_comm(gids).comm, PETSc.C.PETSC_BUILDTWOSIDED_ALLREDUCE)
-  PETSc.C.chk(PETSc.C.PetscCommBuildTwoSided(Float64,
+  #GridapDistributedPETScWrappers.C.PetscCommBuildTwoSidedSetType(Float64, get_comm(gids).comm, GridapDistributedPETScWrappers.C.PETSC_BUILDTWOSIDED_ALLREDUCE)
+  GridapDistributedPETScWrappers.C.chk(GridapDistributedPETScWrappers.C.PetscCommBuildTwoSided(Float64,
                                  get_comm(gids).comm,
-                                 PETSc.C.PetscMPIInt(1),
+                                 GridapDistributedPETScWrappers.C.PetscMPIInt(1),
                                  MPI.Datatype(Int64).val,
                                  num_snd,
                                  pointer(lst_snd),
@@ -156,7 +156,7 @@ function compute_subdomain_graph_dIS_and_lst_snd(gids, dI)
   #for more details
 
   num_rcv=num_rcv[]
-  lst_rcv_vec=unsafe_wrap(Vector{PETSc.C.PetscMPIInt},lst_rcv[],num_rcv)
+  lst_rcv_vec=unsafe_wrap(Vector{GridapDistributedPETScWrappers.C.PetscMPIInt},lst_rcv[],num_rcv)
   rcv_buf_vec=unsafe_wrap(Vector{Int64},rcv_buf[],num_rcv)
 
   function compute_subdomain_graph_index_set(part,num_edges,owned_edge_entries)
@@ -338,15 +338,15 @@ function build_petsc_matrix_from_local_portion(m,n,Alocal)
   ngrows = num_gids(m)
   ngcols = num_gids(n)
   n_owned_dofs = num_owned_entries(m)
-  p = Ref{PETSc.C.Mat{Float64}}()
+  p = Ref{GridapDistributedPETScWrappers.C.Mat{Float64}}()
   rowptr = _convert_buf_to_petscint(Alocal.rowptr)
   colval = _convert_buf_to_petscint(Alocal.colval)
-  PETSc.C.chk(PETSc.C.MatCreateMPIAIJWithArrays(
+  GridapDistributedPETScWrappers.C.chk(GridapDistributedPETScWrappers.C.MatCreateMPIAIJWithArrays(
         get_comm(m).comm,
-        PETSc.C.PetscInt(n_owned_dofs),
-        PETSc.C.PetscInt(n_owned_dofs),
-        PETSc.C.PetscInt(ngrows),
-        PETSc.C.PetscInt(ngcols),
+        GridapDistributedPETScWrappers.C.PetscInt(n_owned_dofs),
+        GridapDistributedPETScWrappers.C.PetscInt(n_owned_dofs),
+        GridapDistributedPETScWrappers.C.PetscInt(ngrows),
+        GridapDistributedPETScWrappers.C.PetscInt(ngcols),
         rowptr,
         colval,
         Alocal.nzval,
@@ -354,18 +354,18 @@ function build_petsc_matrix_from_local_portion(m,n,Alocal)
   # NOTE: the triple (rowptr,colval,Alocal.nzval) is passed to the
   #       constructor of Mat() in order to avoid these Julia arrays
   #       from being garbage collected.
-  A=PETSc.Mat{Float64}(p[],(rowptr,colval,Alocal.nzval))
-  PETSc.set_local_to_global_mapping(A,m.IS,n.IS)
-  PETSc.C.chk(PETSc.C.MatSetOption(p[],
-                           PETSc.C.MAT_NEW_NONZERO_LOCATIONS,
-                           PETSc.C.PETSC_FALSE))
-  A.insertmode = PETSc.C.ADD_VALUES
+  A=GridapDistributedPETScWrappers.Mat{Float64}(p[],(rowptr,colval,Alocal.nzval))
+  GridapDistributedPETScWrappers.set_local_to_global_mapping(A,m.IS,n.IS)
+  GridapDistributedPETScWrappers.C.chk(GridapDistributedPETScWrappers.C.MatSetOption(p[],
+                           GridapDistributedPETScWrappers.C.MAT_NEW_NONZERO_LOCATIONS,
+                           GridapDistributedPETScWrappers.C.PETSC_FALSE))
+  A.insertmode = GridapDistributedPETScWrappers.C.ADD_VALUES
   A
 end
 
 function assemble_global_matrix(
   strat::DistributedAssemblyStrategy{OwnedCellsStrategy{false}},
-  ::Type{PETSc.Mat{Float64}},
+  ::Type{GridapDistributedPETScWrappers.Mat{Float64}},
   IJV::MPIPETScDistributedData,
   m::MPIPETScDistributedIndexSet,
   n::MPIPETScDistributedIndexSet,
@@ -397,30 +397,30 @@ end
 
 function assemble_global_vector(
   strat::DistributedAssemblyStrategy{OwnedCellsStrategy{false}},
-  ::Type{PETSc.Vec{Float64}},
+  ::Type{GridapDistributedPETScWrappers.Vec{Float64}},
   db::MPIPETScDistributedData,
   indices::MPIPETScDistributedIndexSet)
-  vec = allocate_vector(PETSc.Vec{Float64},indices)
-  PETSc.setindex0!(vec, db.part, indices.lid_to_gid_petsc .- PETSc.C.PetscInt(1))
-  PETSc.AssemblyBegin(vec)
-  PETSc.AssemblyEnd(vec)
+  vec = allocate_vector(GridapDistributedPETScWrappers.Vec{Float64},indices)
+  GridapDistributedPETScWrappers.setindex0!(vec, db.part, indices.lid_to_gid_petsc .- GridapDistributedPETScWrappers.C.PetscInt(1))
+  GridapDistributedPETScWrappers.AssemblyBegin(vec)
+  GridapDistributedPETScWrappers.AssemblyEnd(vec)
   vec
 end
 
 function assemble_global_vector(
   strat::DistributedAssemblyStrategy{RowsComputedLocally{false}},
-  ::Type{PETSc.Vec{Float64}},
+  ::Type{GridapDistributedPETScWrappers.Vec{Float64}},
   db::MPIPETScDistributedData,
   indices::MPIPETScDistributedIndexSet)
-  vec = allocate_vector(PETSc.Vec{Float64},indices)
+  vec = allocate_vector(GridapDistributedPETScWrappers.Vec{Float64},indices)
 
   part = MPI.Comm_rank(get_comm(indices).comm)+1
   owned_pos = (indices.parts.part.lid_to_owner .== part)
   bowned    = db.part[owned_pos]
-  l2g_petsc = indices.lid_to_gid_petsc[owned_pos] .- PETSc.C.PetscInt(1)
+  l2g_petsc = indices.lid_to_gid_petsc[owned_pos] .- GridapDistributedPETScWrappers.C.PetscInt(1)
 
-  PETSc.setindex0!(vec, bowned, l2g_petsc)
-  PETSc.AssemblyBegin(vec)
-  PETSc.AssemblyEnd(vec)
+  GridapDistributedPETScWrappers.setindex0!(vec, bowned, l2g_petsc)
+  GridapDistributedPETScWrappers.AssemblyBegin(vec)
+  GridapDistributedPETScWrappers.AssemblyEnd(vec)
   vec
 end

@@ -70,22 +70,22 @@ function restrict_to_field(dV::MultiFieldDistributedFESpace, x::Vector, field)
     xi
 end
 
-function restrict_to_field(dV::MultiFieldDistributedFESpace, x::PETSc.Vec{Float64}, field)
+function restrict_to_field(dV::MultiFieldDistributedFESpace, x::GridapDistributedPETScWrappers.Vec{Float64}, field)
     fgids  = dV.distributed_spaces[field].gids
     mfgids = dV.gids
     @assert isa(fgids, MPIPETScDistributedIndexSet)
 
-    xi = Gridap.Algebra.allocate_vector(PETSc.Vec{Float64},
+    xi = Gridap.Algebra.allocate_vector(GridapDistributedPETScWrappers.Vec{Float64},
                                       dV.distributed_spaces[field].gids)
 
     comm = get_comm(fgids)
     part = get_part(comm)
 
-    fis_gids = [ PETSc.PetscInt(fgids.lid_to_gid_petsc[i] - 1)
+    fis_gids = [ GridapDistributedPETScWrappers.PetscInt(fgids.lid_to_gid_petsc[i] - 1)
                   for i = 1:length(fgids.lid_to_gid_petsc)
                      if fgids.parts.part.lid_to_owner[i] == part ]
 
-    mfis_gids = Vector{PETSc.PetscInt}(undef,length(fis_gids))
+    mfis_gids = Vector{GridapDistributedPETScWrappers.PetscInt}(undef,length(fis_gids))
 
     do_on_parts(dV.gids, dV.distributed_spaces...) do part, lmfgids, fspaces_and_gids...
         offset = 0
@@ -103,10 +103,10 @@ function restrict_to_field(dV::MultiFieldDistributedFESpace, x::PETSc.Vec{Float6
         end
     end
 
-    fis  = PETSc.IS_(Float64, fis_gids; comm=comm.comm)
-    mfis = PETSc.IS_(Float64, mfis_gids; comm=comm.comm)
+    fis  = GridapDistributedPETScWrappers.IS_(Float64, fis_gids; comm=comm.comm)
+    mfis = GridapDistributedPETScWrappers.IS_(Float64, mfis_gids; comm=comm.comm)
 
-    vscatter = PETSc.VecScatter(x, mfis, xi, fis)
+    vscatter = GridapDistributedPETScWrappers.VecScatter(x, mfis, xi, fis)
     scatter!(vscatter,x,xi)
     xi
 end

@@ -9,8 +9,8 @@ using PETSc
 
 function run(comm, assembly_strategy::AbstractString)
   T = Float64
-  vector_type = PETSc.Vec{T}
-  matrix_type = PETSc.Mat{T}
+  vector_type = GridapDistributedPETScWrappers.Vec{T}
+  matrix_type = GridapDistributedPETScWrappers.Mat{T}
 
   # Manufactured solution
   u(x) = x[1] + x[2]

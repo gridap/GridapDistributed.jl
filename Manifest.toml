@@ -145,6 +145,14 @@ git-tree-sha1 = "df24e9b56f00305912fc952ce244aa64d2941d83"
 uuid = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
 version = "0.14.1"
 
+[[GridapDistributedPETScWrappers]]
+deps = ["Compat", "Libdl", "LinearAlgebra", "MPI", "PETSc_jll", "SparseArrays", "Test"]
+git-tree-sha1 = "bd39b524da5a643657460d8e4c583af58ae197bf"
+repo-rev = "master"
+repo-url = "https://github.com/gridap/GridapDistributedPETScWrappers.jl"
+uuid = "743b6f9b-fae8-55fc-a981-4e9a2885e829"
+version = "0.1.0"
+
 [[InteractiveUtils]]
 deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
@@ -268,14 +276,6 @@ version = "0.5.3+4"
 git-tree-sha1 = "16c08bf5dba06609fe45e30860092d6fa41fde7b"
 uuid = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 version = "1.3.1"
-
-[[PETSc]]
-deps = ["Compat", "Libdl", "LinearAlgebra", "MPI", "PETSc_jll", "SparseArrays", "Test"]
-git-tree-sha1 = "efad95d74164b63d4fe032027dfb591413bda6cb"
-repo-rev = "uptodate1.4"
-repo-url = "https://github.com/gridap/PETSc.jl"
-uuid = "743b6f9b-fae8-55fc-a981-4e9a2885e829"
-version = "0.1.0"
 
 [[PETSc_jll]]
 deps = ["CompilerSupportLibraries_jll", "Libdl", "MPICH_jll", "MicrosoftMPI_jll", "OpenBLAS32_jll", "Pkg"]

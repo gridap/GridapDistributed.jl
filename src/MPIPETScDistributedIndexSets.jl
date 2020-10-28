@@ -5,8 +5,8 @@ struct MPIPETScDistributedIndexSet{A,B,C} <: DistributedIndexSet
   #           Why dont we store part directly?
   parts               :: MPIPETScDistributedData{IndexSet{A,B,C}}
   # TO-THINK: Should we store these as DistributedData?
-  lid_to_gid_petsc    :: Vector{PETSc.C.PetscInt}
-  IS                  :: PETSc.ISLocalToGlobalMapping{Float64}
+  lid_to_gid_petsc    :: Vector{GridapDistributedPETScWrappers.C.PetscInt}
+  IS                  :: GridapDistributedPETScWrappers.ISLocalToGlobalMapping{Float64}
   petsc_to_app_locidx :: Vector{Int32}
   app_to_petsc_locidx :: Vector{Int32}
 end
@@ -30,22 +30,22 @@ function create_ghost_vector(entries::Vector{Float64},
   ghost_idx = _generate_ghost_idx(indices)
   num_owned = num_owned_entries(indices)
   comm = get_comm(indices)
-  vref = Ref{PETSc.C.Vec{Float64}}()
-  PETSc.C.chk(PETSc.C.VecCreateGhostWithArray(comm.comm,
-                          PETSc.C.PetscInt(num_owned),
-                          PETSc.C.PetscInt(PETSc.C.PETSC_DECIDE),
-                          PETSc.C.PetscInt(length(ghost_idx)),
+  vref = Ref{GridapDistributedPETScWrappers.C.Vec{Float64}}()
+  GridapDistributedPETScWrappers.C.chk(GridapDistributedPETScWrappers.C.VecCreateGhostWithArray(comm.comm,
+                          GridapDistributedPETScWrappers.C.PetscInt(num_owned),
+                          GridapDistributedPETScWrappers.C.PetscInt(GridapDistributedPETScWrappers.C.PETSC_DECIDE),
+                          GridapDistributedPETScWrappers.C.PetscInt(length(ghost_idx)),
                           ghost_idx,
                           entries,
                           vref))
-  PETSc.C.chk(PETSc.C.VecSetType(vref[], PETSc.C.VECMPI))
-  return PETSc.Vec{Float64}(vref[],entries)
+  GridapDistributedPETScWrappers.C.chk(GridapDistributedPETScWrappers.C.VecSetType(vref[], GridapDistributedPETScWrappers.C.VECMPI))
+  return GridapDistributedPETScWrappers.Vec{Float64}(vref[],entries)
 end
 
 function _generate_ghost_idx(indices::MPIPETScDistributedIndexSet)
   comm = get_comm(indices)
   comm_rank = MPI.Comm_rank(comm.comm)
-  ghost_idx = PETSc.C.PetscInt[]
+  ghost_idx = GridapDistributedPETScWrappers.C.PetscInt[]
   lid_to_owner = indices.parts.part.lid_to_owner
   lid_to_gid_petsc = indices.lid_to_gid_petsc
   num_local_entries = length(lid_to_owner)
@@ -64,7 +64,7 @@ get_comm(a::MPIPETScDistributedIndexSet) = a.parts.comm
 function DistributedIndexSet(initializer::Function,comm::MPIPETScCommunicator,ngids::Integer,args...)
   parts = DistributedData(initializer,comm,args...)
   lid_to_gid_petsc, petsc_to_app_locidx, app_to_petsc_locidx = _compute_internal_members(comm,parts.part)
-  IS=PETSc.ISLocalToGlobalMapping(Float64, lid_to_gid_petsc, comm=comm.comm)
+  IS=GridapDistributedPETScWrappers.ISLocalToGlobalMapping(Float64, lid_to_gid_petsc, comm=comm.comm)
   MPIPETScDistributedIndexSet(ngids,parts,lid_to_gid_petsc, IS,petsc_to_app_locidx,app_to_petsc_locidx)
 end
 
@@ -79,10 +79,10 @@ function _compute_internal_members(comm::MPIPETScCommunicator, is::IndexSet)
   MPI.Exscan!(sndbuf, rcvbuf, 1, +, comm.comm)
 
 
-  app_idx = Array{PETSc.C.PetscInt}(undef, num_owned_entries)
-  petsc_idx = Array{PETSc.C.PetscInt}(undef, num_owned_entries)
+  app_idx = Array{GridapDistributedPETScWrappers.C.PetscInt}(undef, num_owned_entries)
+  petsc_idx = Array{GridapDistributedPETScWrappers.C.PetscInt}(undef, num_owned_entries)
 
-  (comm_rank == 0) ? (offset = PETSc.C.PetscInt(1)) : (offset = PETSc.C.PetscInt(rcvbuf[] + 1))
+  (comm_rank == 0) ? (offset = GridapDistributedPETScWrappers.C.PetscInt(1)) : (offset = GridapDistributedPETScWrappers.C.PetscInt(rcvbuf[] + 1))
   current = 1
   for i = 1:num_local_entries
     if (is.lid_to_owner[i] == comm_rank + 1)
@@ -96,7 +96,7 @@ function _compute_internal_members(comm::MPIPETScCommunicator, is::IndexSet)
   # build application ordering in order to get lid_to_gid
   # accordingly to PETSc global numbering
   petsc_ao = AO(Float64, app_idx, petsc_idx)
-  lid_to_gid_petsc = convert(Vector{PETSc.C.PetscInt}, collect(is.lid_to_gid))
+  lid_to_gid_petsc = convert(Vector{GridapDistributedPETScWrappers.C.PetscInt}, collect(is.lid_to_gid))
   map_app_to_petsc!(petsc_ao, lid_to_gid_petsc)
 
   ghost_idx = Int[]

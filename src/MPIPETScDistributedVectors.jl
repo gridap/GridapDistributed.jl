@@ -2,7 +2,7 @@
 struct MPIPETScDistributedVector{T <: Union{Number,AbstractVector{<:Number}},V <: AbstractVector{T},A,B,C} <: DistributedVector{T}
     part::V
     indices::MPIPETScDistributedIndexSet{A,B,C}
-    vecghost::PETSc.Vec{Float64}
+    vecghost::GridapDistributedPETScWrappers.Vec{Float64}
 end
 
 get_comm(a::MPIPETScDistributedVector) = get_comm(a.indices)
@@ -14,7 +14,7 @@ get_part(
 
 get_part(
   comm::MPIPETScCommunicator,
-  a::PETSc.Vec{Float64},
+  a::GridapDistributedPETScWrappers.Vec{Float64},
   part::Integer) = a
 
 
@@ -157,12 +157,12 @@ end
 
 function unpack_all_entries!(a::MPIPETScDistributedVector{T}) where T
     num_local = length(a.indices.app_to_petsc_locidx)
-    lvec = PETSc.LocalVector(a.vecghost, num_local)
+    lvec = GridapDistributedPETScWrappers.LocalVector(a.vecghost, num_local)
     _unpack_all_entries!(T, a.part, a.indices.app_to_petsc_locidx, lvec)
-    PETSc.restore(lvec)
+    GridapDistributedPETScWrappers.restore(lvec)
 end
 
-function Base.getindex(a::PETSc.Vec{Float64}, indices::MPIPETScDistributedIndexSet)
+function Base.getindex(a::GridapDistributedPETScWrappers.Vec{Float64}, indices::MPIPETScDistributedIndexSet)
     result = DistributedVector(indices,indices) do part, indices
        Vector{Float64}(undef,length(indices.lid_to_owner))
     end
@@ -171,9 +171,9 @@ function Base.getindex(a::PETSc.Vec{Float64}, indices::MPIPETScDistributedIndexS
     result
 end
 
-function exchange!(a::PETSc.Vec{T}) where T
+function exchange!(a::GridapDistributedPETScWrappers.Vec{T}) where T
   # Send data
-    PETSc.scatter!(a)
+    GridapDistributedPETScWrappers.scatter!(a)
 end
 
 function exchange!(a::MPIPETScDistributedVector{T}) where T
@@ -192,13 +192,13 @@ function exchange!(a::MPIPETScDistributedVector{T}) where T
 
   #  Unpack data
   # num_local = length(lid_to_owner)
-  # lvec = PETSc.LocalVector(a.vecghost,num_local)
+  # lvec = GridapDistributedPETScWrappers.LocalVector(a.vecghost,num_local)
   # _unpack_ghost_entries!(eltype(local_part), local_part, lid_to_owner, comm_rank, app_to_petsc_locidx, lvec)
-  # PETSc.restore(lvec)
+  # GridapDistributedPETScWrappers.restore(lvec)
 end
 
 function _pack_local_entries!(vecghost, local_part, lid_to_owner, comm_rank)
-    num_owned = PETSc.lengthlocal(vecghost)
+    num_owned = GridapDistributedPETScWrappers.lengthlocal(vecghost)
     idxs = Vector{Int}(undef, num_owned)
     vals = Vector{Float64}(undef, num_owned)
   # Pack data
@@ -214,9 +214,9 @@ function _pack_local_entries!(vecghost, local_part, lid_to_owner, comm_rank)
             k = k + 1
         end
     end
-    set_values_local!(vecghost, idxs, vals, PETSc.C.INSERT_VALUES)
-    AssemblyBegin(vecghost, PETSc.C.MAT_FINAL_ASSEMBLY)
-    AssemblyEnd(vecghost, PETSc.C.MAT_FINAL_ASSEMBLY)
+    set_values_local!(vecghost, idxs, vals, GridapDistributedPETScWrappers.C.INSERT_VALUES)
+    AssemblyBegin(vecghost, GridapDistributedPETScWrappers.C.MAT_FINAL_ASSEMBLY)
+    AssemblyEnd(vecghost, GridapDistributedPETScWrappers.C.MAT_FINAL_ASSEMBLY)
 end
 
 function _pack_all_entries!(vecghost, local_part)
@@ -235,9 +235,9 @@ function _pack_all_entries!(vecghost, local_part)
             k = k + 1
         end
     end
-    set_values_local!(vecghost, idxs, vals, PETSc.C.INSERT_VALUES)
-    AssemblyBegin(vecghost, PETSc.C.MAT_FINAL_ASSEMBLY)
-    AssemblyEnd(vecghost, PETSc.C.MAT_FINAL_ASSEMBLY)
+    set_values_local!(vecghost, idxs, vals, GridapDistributedPETScWrappers.C.INSERT_VALUES)
+    AssemblyBegin(vecghost, GridapDistributedPETScWrappers.C.MAT_FINAL_ASSEMBLY)
+    AssemblyEnd(vecghost, GridapDistributedPETScWrappers.C.MAT_FINAL_ASSEMBLY)
 end
 
 function _unpack_ghost_entries!(

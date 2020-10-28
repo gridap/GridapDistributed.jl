@@ -21,14 +21,14 @@ end
 
 function _MPIPETScCommunicator()
   petsc_comm = Ref{MPI.Comm}(MPI.Comm())
-  first_tag  = Ref{PETSc.C.PetscMPIInt}()
-  PETSc.C.chk(PETSc.C.PetscCommDuplicate(Float64,MPI.COMM_WORLD,petsc_comm,first_tag))
+  first_tag  = Ref{GridapDistributedPETScWrappers.C.PetscMPIInt}()
+  GridapDistributedPETScWrappers.C.chk(GridapDistributedPETScWrappers.C.PetscCommDuplicate(Float64,MPI.COMM_WORLD,petsc_comm,first_tag))
   MPIPETScCommunicator(petsc_comm[])
 end
 
 function MPIPETScCommunicatorDestroy(comm::MPIPETScCommunicator)
   petsc_comm = Ref{MPI.Comm}(comm.comm)
-  PETSc.PetscFinalized(Float64) || PETSc.C.chk(PETSc.C.PetscCommDestroy(Float64,petsc_comm))
+  GridapDistributedPETScWrappers.PetscFinalized(Float64) || GridapDistributedPETScWrappers.C.chk(GridapDistributedPETScWrappers.C.PetscCommDestroy(Float64,petsc_comm))
 end
 
 
@@ -47,7 +47,7 @@ function get_part(comm::MPIPETScCommunicator,object::Number,part::Integer)
   object
 end
 
-function get_part(comm::MPIPETScCommunicator,object::PETSc.Mat{Float64},part::Integer)
+function get_part(comm::MPIPETScCommunicator,object::GridapDistributedPETScWrappers.Mat{Float64},part::Integer)
   object
 end
 

@@ -2,7 +2,7 @@ module GridapDistributedTests
 
 using Test
 using MPI
-using PETSc
+using GridapDistributedPETScWrappers
 
 @time @testset "DistributedData" begin include("DistributedDataTests.jl") end
 
