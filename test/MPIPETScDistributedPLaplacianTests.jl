@@ -7,7 +7,7 @@ using GridapDistributed
 using SparseArrays
 using LinearAlgebra: norm
 using LinearAlgebra
-using PETSc
+using GridapDistributedPETScWrappers
 using NLSolversBase
 using NLsolve
 using Distances

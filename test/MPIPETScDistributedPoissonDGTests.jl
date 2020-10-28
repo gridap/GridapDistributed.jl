@@ -5,7 +5,7 @@ using Gridap
 using Gridap.FESpaces
 using GridapDistributed
 using SparseArrays
-using PETSc
+using GridapDistributedPETScWrappers
 
 
 function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)

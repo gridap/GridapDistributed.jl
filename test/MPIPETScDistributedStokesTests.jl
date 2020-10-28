@@ -5,7 +5,7 @@ using Gridap
 using Gridap.FESpaces
 using GridapDistributed
 using SparseArrays
-using PETSc
+using GridapDistributedPETScWrappers
 
 
 function Gridap.FESpaces.num_dirichlet_dofs(f::Gridap.MultiField.MultiFieldFESpace)

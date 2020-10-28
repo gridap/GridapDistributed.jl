@@ -3,7 +3,7 @@ using Gridap
 using GridapDistributed
 using Test
 using MPI
-using PETSc
+using GridapDistributedPETScWrappers
 
 MPIPETScCommunicator() do comm
   @test num_parts(comm) == 2
