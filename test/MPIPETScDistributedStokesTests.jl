@@ -5,7 +5,7 @@ using Gridap
 using Gridap.FESpaces
 using GridapDistributed
 using SparseArrays
-using PETSc
+using GridapDistributedPETScWrappers
 
 
 function Gridap.FESpaces.num_dirichlet_dofs(f::Gridap.MultiField.MultiFieldFESpace)
@@ -21,8 +21,8 @@ function run(comm,assembly_strategy::AbstractString, global_dofs::Bool)
   # Note that here we use serial vectors and matrices
   # but the assembly is distributed
   T = Float64
-  vector_type = PETSc.Vec{T}
-  matrix_type = PETSc.Mat{T}
+  vector_type = GridapDistributedPETScWrappers.Vec{T}
+  matrix_type = GridapDistributedPETScWrappers.Mat{T}
 
   # Manufactured solution
   ux(x)=2*x[1]*x[2]

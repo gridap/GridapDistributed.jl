@@ -19,14 +19,8 @@ end
 
 function Gridap.FESpaces.FEFunction(dV::ZeroMeanDistributedFESpace,x)
   dfree_vals = x[dV.gids]
-
-  # IMPORTANT NOTE: we need to call collect below in order to duplicate the
-  #                 local portion of dfree_vals. When dfree_vals is of
-  #                 type MPIPETScDistributedVector, the Julia's GC can destroy
-  #                 the vector on which the entries of dfree_vals are ultimately
-  #                 stored when it goes out of scope.
   funs = DistributedData(dV.spaces,dfree_vals) do part, V, free_vals
-    FEFunction(V,collect(free_vals))
+    FEFunction(V,free_vals)
   end
   dfuns=_generate_zero_mean_funs(dV,funs)
   DistributedFEFunction(dfuns,x,dV)
@@ -34,13 +28,8 @@ end
 
 function Gridap.FESpaces.EvaluationFunction(dV::ZeroMeanDistributedFESpace,x)
   dfree_vals = x[dV.gids]
-  # IMPORTANT NOTE: we need to call collect below in order to duplicate the
-  #                 local portion of dfree_vals. When dfree_vals is of
-  #                 type MPIPETScDistributedVector, the Julia's GC can destroy
-  #                 the vector on which the entries of dfree_vals are ultimately
-  #                 stored when it goes out of scope.
   funs = DistributedData(dV.spaces,dfree_vals) do part, V, free_vals
-    Gridap.FESpaces.EvaluationFunction(V,collect(free_vals))
+    Gridap.FESpaces.EvaluationFunction(V,free_vals)
   end
   dfuns=_generate_zero_mean_funs(dV,funs)
   DistributedFEFunction(dfuns,x,dV)

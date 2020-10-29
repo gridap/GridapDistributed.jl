@@ -9,7 +9,7 @@ using Gridap.Algebra
 
 using SparseArrays
 using MPI
-using PETSc
+using GridapDistributedPETScWrappers
 using FillArrays
 
 export Communicator
