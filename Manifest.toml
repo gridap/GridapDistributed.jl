@@ -147,7 +147,7 @@ version = "0.14.1"
 
 [[GridapDistributedPETScWrappers]]
 deps = ["Compat", "Libdl", "LinearAlgebra", "MPI", "PETSc_jll", "SparseArrays", "Test"]
-git-tree-sha1 = "bd39b524da5a643657460d8e4c583af58ae197bf"
+git-tree-sha1 = "5113f3df26c068578bbeaaab956a3217a57a170f"
 repo-rev = "master"
 repo-url = "https://github.com/gridap/GridapDistributedPETScWrappers.jl"
 uuid = "743b6f9b-fae8-55fc-a981-4e9a2885e829"
@@ -354,9 +354,9 @@ version = "0.10.3"
 
 [[StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
-git-tree-sha1 = "016d1e1a00fabc556473b07161da3d39726ded35"
+git-tree-sha1 = "da4cf579416c81994afd6322365d00916c79b8ae"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "0.12.4"
+version = "0.12.5"
 
 [[Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -386,9 +386,9 @@ uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
 
 [[WriteVTK]]
 deps = ["Base64", "CodecZlib", "FillArrays", "LightXML", "Random", "TranscodingStreams"]
-git-tree-sha1 = "80e0105ccc1f34a537b8957b8a54791d18272c80"
+git-tree-sha1 = "d2c54759e589ebaeeffa2744ce2f877f811dfe1b"
 uuid = "64499a7a-5c06-52f2-abe2-ccb03c286192"
-version = "1.7.4"
+version = "1.8.0"
 
 [[XML2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Pkg", "Zlib_jll"]

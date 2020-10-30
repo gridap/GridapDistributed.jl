@@ -1,5 +1,5 @@
 
-abstract type DistributedFESpace{V} <: FESpace end
+abstract type DistributedFESpace <: FESpace end
 
 function get_distributed_data(dspace::DistributedFESpace)
     spaces = dspace.spaces
@@ -18,13 +18,19 @@ function Gridap.FESpaces.EvaluationFunction(dV::DistributedFESpace, x)
     @abstractmethod
 end
 
+"""
+"""
+function get_vector_type(a::DistributedFESpace)
+  @abstractmethod
+end
+
 # Minimal FE interface
 function Gridap.FESpaces.num_free_dofs(f::DistributedFESpace)
     f.gids.ngids
 end
 
 function Gridap.FESpaces.zero_free_values(f::DistributedFESpace)
-    fv = Gridap.Algebra.allocate_vector(f.vector_type, f.gids)
+    fv = Gridap.Algebra.allocate_vector(get_vector_type(f), f.gids)
     fill_entries!(fv, zero(eltype(fv)))
     fv
 end
@@ -37,10 +43,14 @@ function Gridap.FESpaces.get_cell_basis(f::DistributedFESpace)
 end
 
 # TO-DO: Better name?
-struct DistributedFESpaceFromLocalFESpaces{V} <: DistributedFESpace{V}
+struct DistributedFESpaceFromLocalFESpaces{V} <: DistributedFESpace
     vector_type::Type{V}
     spaces::DistributedData{<:FESpace}
     gids::DistributedIndexSet
+end
+
+function get_vector_type(a::DistributedFESpaceFromLocalFESpaces)
+    a.vector_type
 end
 
 function Gridap.FESpaces.FEFunction(dV::DistributedFESpaceFromLocalFESpaces, x)
@@ -65,7 +75,7 @@ function Gridap.TrialFESpace(V::DistributedFESpaceFromLocalFESpaces, args...)
     spaces = DistributedData(V.spaces) do part, space
         TrialFESpace(space, args...)
     end
-    DistributedFESpaceFromLocalFESpaces(V.vector_type, spaces, V.gids)
+    DistributedFESpaceFromLocalFESpaces(get_vector_type(V), spaces, V.gids)
 end
 
 function DistributedFESpaceFromLocalFESpaces(::Type{V};
@@ -318,9 +328,9 @@ function _fill_max_part_around!(lid_to_owner, cell_to_owner, cell_to_lids)
 end
 
 # FE Function
-struct DistributedFEFunction{T}
+struct DistributedFEFunction
     funs::DistributedData
-    vals::T # ::AbstractVector
+    vals::AbstractVector
     space::DistributedFESpace
 end
 

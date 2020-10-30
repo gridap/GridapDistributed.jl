@@ -1,4 +1,4 @@
-struct ZeroMeanDistributedFESpace{V} <: DistributedFESpace{V}
+struct ZeroMeanDistributedFESpace{V} <: DistributedFESpace
    vector_type :: Type{V}
    spaces      :: DistributedData{<:FESpace}
    gids        :: DistributedIndexSet
@@ -6,12 +6,16 @@ struct ZeroMeanDistributedFESpace{V} <: DistributedFESpace{V}
    vol         :: DistributedData{Float64}
  end
 
+function get_vector_type(a::ZeroMeanDistributedFESpace)
+   a.vector_type
+end
+
  #  Constructors
 function Gridap.TrialFESpace(V::ZeroMeanDistributedFESpace,args...)
   spaces = DistributedData(V.spaces) do part, space
     TrialFESpace(space,args...)
   end
-  ZeroMeanDistributedFESpace(V.vector_type,spaces,V.gids,V.vol_i,V.vol)
+  ZeroMeanDistributedFESpace(get_vector_type(V),spaces,V.gids,V.vol_i,V.vol)
 end
 
 # U = TrialFESpace(f.space)

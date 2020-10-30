@@ -1,12 +1,16 @@
-struct MultiFieldDistributedFESpace{V} <: DistributedFESpace{V}
+struct MultiFieldDistributedFESpace{V} <: DistributedFESpace
     vector_type::Type{V}
     distributed_spaces::Vector{<:DistributedFESpace}
     spaces::DistributedData{<:MultiFieldFESpace}
     gids::DistributedIndexSet
 end
 
+function get_vector_type(a::MultiFieldDistributedFESpace)
+    a.vector_type
+end
+
 function Gridap.MultiFieldFESpace(test_space::MultiFieldDistributedFESpace{V},
-                                   trial_spaces::Vector{<:DistributedFESpace{V}}) where V
+                                   trial_spaces::Vector{<:DistributedFESpace}) where V
     spaces = DistributedData(trial_spaces...) do part, spaces_and_gids...
         MultiFieldFESpace([s[1] for s in spaces_and_gids])
     end
@@ -20,7 +24,7 @@ end
 
 
 function _gen_multifield_distributed_fe_function(dV::MultiFieldDistributedFESpace{T}, x, f) where {T}
-    single_fe_functions = DistributedFEFunction{T}[]
+    single_fe_functions = DistributedFEFunction[]
     for (field, U) in enumerate(dV.distributed_spaces)
         free_values_i = restrict_to_field(dV, x, field)
         uhi = f(U, free_values_i)
@@ -41,7 +45,7 @@ function _gen_multifield_distributed_fe_function(dV::MultiFieldDistributedFESpac
         f(V, mfv)
     end
     multifield_fe_function = DistributedFEFunction(funs, x, dV)
-    MultiFieldDistributedFEFunction{T}(single_fe_functions,
+    MultiFieldDistributedFEFunction(single_fe_functions,
                                   multifield_fe_function,
                                   dV)
 end
@@ -119,7 +123,7 @@ end
 
 
 function Gridap.MultiFieldFESpace(model::DistributedDiscreteModel,
-                                  distributed_spaces::Vector{<:DistributedFESpace{V}}) where V
+                                  distributed_spaces::Vector{<:DistributedFESpace}) where V
 
     spaces = DistributedData(distributed_spaces...) do part, spaces_and_gids...
         MultiFieldFESpace([s[1] for s in spaces_and_gids])
@@ -167,17 +171,17 @@ function Gridap.MultiFieldFESpace(model::DistributedDiscreteModel,
                              part_to_lid_to_owner,
                              ngids)
 
-    MultiFieldDistributedFESpace(V,
+    MultiFieldDistributedFESpace(get_vector_type(distributed_spaces[1]),
                                distributed_spaces,
                                spaces,
                                gids)
 end
 
 # FE Function
-struct MultiFieldDistributedFEFunction{T}
-    single_fe_functions::Vector{DistributedFEFunction{T}}
-    multifield_fe_function::DistributedFEFunction{T}
-    space::MultiFieldDistributedFESpace{T}
+struct MultiFieldDistributedFEFunction
+    single_fe_functions::Vector{DistributedFEFunction}
+    multifield_fe_function::DistributedFEFunction
+    space::MultiFieldDistributedFESpace
 end
 
 Gridap.FESpaces.FEFunctionStyle(::Type{MultiFieldDistributedFEFunction}) = Val{true}()
