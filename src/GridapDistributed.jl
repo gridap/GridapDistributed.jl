@@ -98,6 +98,4 @@ include("DistributedTriangulations.jl")
 
 include("MPIPETScLinearSolvers.jl")
 
-include("MPIPETScFELinearSolversInterfaces.jl")
-
 end # module
