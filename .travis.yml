@@ -21,6 +21,14 @@ after_success:
 jobs:
   fast_finish: true
   include:
+    - stage: "test"
+      julia: 1.4
+      os: linux
+      script:
+        - echo $PWD
+        - julia --project=. --color=yes -e 'using Pkg; Pkg.instantiate()'
+        - julia --project=. --color=yes --check-bounds=yes test/MPIPETScTests/runtests.jl
+      after_success: skip
     - stage: Documentation
       julia: 1.4
       script: julia --project=docs -e '
