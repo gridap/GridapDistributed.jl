@@ -15,6 +15,7 @@ notifications:
 before_script:
   - lsb_release -a       
   - export JULIA_MPI_BINARY=""
+  - export JULIA_PETSC_RealDouble_BINARY=""
 after_success:
   - julia -e 'using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
 jobs:
