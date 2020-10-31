@@ -14,7 +14,7 @@ This package is currently **experimental, under development**. In any case, the 
 
 ## Build 
 
-Before using `GridapDistributed.jl` package, we have to buildi `MPI.jl` and `GridapDistributedPETScWrappers.jl`. We refer to the main [`README.md`](https://github.com/gridap/GridapDistributedPETScWrappers.jl) of the latter for configuration instructions.
+Before using `GridapDistributed.jl` package, we have to build `MPI.jl` and `GridapDistributedPETScWrappers.jl`. We refer to the main [`README.md`](https://github.com/gridap/GridapDistributedPETScWrappers.jl) of the latter for configuration instructions.
 
 ## MPI-parallel Julia script execution instructions
 
