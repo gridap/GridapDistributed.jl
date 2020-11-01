@@ -28,12 +28,23 @@ MPIPETScCommunicator() do comm
   @test vec.part == indices.parts.part.lid_to_owner
 
   function init_vec()
-    DistributedVector(indices,indices) do part, indices
+    sizes=DistributedVector(indices,indices) do part, indices
+      n=length(indices.lid_to_owner)
+      lsizes=Vector{Int}(undef,n)
+      for i=1:n
+        if (indices.lid_to_owner[i] == part)
+           lsizes[i]=rand(1:4)
+        end
+      end
+      lsizes
+    end
+    exchange!(sizes)
+    DistributedVector(indices,indices,sizes) do part, indices, lsizes
       n = length(indices.lid_to_owner)
       ptrs = Vector{Int}(undef,n+1)
       ptrs[1]=1
       for i=1:n
-        ptrs[i+1]=ptrs[i]+rand(1:4)
+        ptrs[i+1]=ptrs[i]+lsizes[i]
       end
       current=1
       data = Vector{Int}(undef, ptrs[n+1]-1)
