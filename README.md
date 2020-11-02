@@ -5,7 +5,7 @@
 [![Build Status](https://travis-ci.com/gridap/GridapDistributed.jl.svg?branch=master)](https://travis-ci.com/gridap/GridapDistributed.jl)
 [![Codecov](https://codecov.io/gh/gridap/GridapDistributed.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/gridap/GridapDistributed.jl)
 
-Parallel distributed-memory version of `Gridap.jl`. 
+Parallel distributed-memory version of `Gridap.jl`.  🚧 work in progress 🚧
 
 
 ## Purpose
