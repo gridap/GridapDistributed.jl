@@ -1,4 +1,4 @@
-module DistributedStokesTests
+module MPIPETScDistributedStokesTests
 
 using Test
 using Gridap
