@@ -1,18 +1,20 @@
-module DistributedPoissonDGTests
+module MPIPETScDistributedPoissonDGTests
 
 using Test
 using Gridap
 using Gridap.FESpaces
 using GridapDistributed
 using SparseArrays
+using GridapDistributedPETScWrappers
 
-function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Bool)
+
+function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
   # Select matrix and vector types for discrete problem
   # Note that here we use serial vectors and matrices
   # but the assembly is distributed
   T = Float64
-  vector_type = Vector{T}
-  matrix_type = SparseMatrixCSC{T,Int}
+  vector_type = GridapDistributedPETScWrappers.Vec{T}
+  matrix_type = GridapDistributedPETScWrappers.Mat{T}
 
   # Manufactured solution
   u(x) = x[1] * (x[1] - 1) * x[2] * (x[2] - 1)
@@ -23,7 +25,6 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
   subdomains = (2, 2)
   domain = (0, 1, 0, 1)
   cells = (4, 4)
-  comm = SequentialCommunicator(subdomains)
   model = CartesianDiscreteModel(comm, subdomains, domain, cells)
   h = (domain[2] - domain[1]) / cells[1]
 
@@ -83,7 +84,16 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
   op = AffineFEOperator(assem, terms)
 
   # FE solution
-  uh = solve(op)
+  ls = PETScLinearSolver(
+    Float64;
+    ksp_type = "cg",
+    ksp_rtol = 1.0e-06,
+    ksp_atol = 0.0,
+    ksp_monitor = "",
+    pc_type = "jacobi",
+  )
+  fels = LinearFESolver(ls)
+  uh = solve(fels, op)
 
   # Error norms and print solution
   sums = DistributedData(model, uh) do part, (model, gids), uh
@@ -105,14 +115,15 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
   tol = 1.0e-9
   @test e_l2 < tol
   @test e_h1 < tol
+  if (i_am_master(comm))
+    println("$(e_l2) < $(tol)")
+    println("$(e_h1) < $(tol)")
+  end
 end
 
-subdomains = (2,2)
-SequentialCommunicator(subdomains) do comm
-  run(comm,subdomains,"RowsComputedLocally", false)
-  run(comm,subdomains,"OwnedCellsStrategy", false)
-  run(comm,subdomains,"RowsComputedLocally", true)
-  run(comm,subdomains,"OwnedCellsStrategy", true)
-end 
+MPIPETScCommunicator() do comm
+  run(comm, "RowsComputedLocally",false)
+  run(comm, "OwnedCellsStrategy",false)
+end
 
 end # module#

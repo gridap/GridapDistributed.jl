@@ -6,76 +6,71 @@ using GridapDistributed
 using Test
 using SparseArrays
 
-T = Float64
-vector_type = Vector{T}
-matrix_type = SparseMatrixCSC{T,Int}
-
 subdomains = (2,2)
-comm = SequentialCommunicator(subdomains)
+SequentialCommunicator(subdomains) do comm
+  T = Float64
+  vector_type = Vector{T}
+  matrix_type = SparseMatrixCSC{T,Int}
 
-domain = (0,1,0,1)
-cells = (4,4)
-model = CartesianDiscreteModel(comm,subdomains,domain,cells)
+  domain = (0,1,0,1)
+  cells = (4,4)
+  model = CartesianDiscreteModel(comm,subdomains,domain,cells)
 
-V = FESpace(vector_type,model=model,valuetype=Float64,reffe=:Lagrangian,order=1)
+  V = FESpace(vector_type,model=model,valuetype=Float64,reffe=:Lagrangian,order=1)
 
-U = TrialFESpace(V)
+  U = TrialFESpace(V)
 
-strategy = RowsComputedLocally(V)
+  strategy = RowsComputedLocally(V)
 
+  assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
 
-assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
+  function setup_terms(part,(model,gids))
+    trian = Triangulation(model)
+    degree = 2
+    quad = CellQuadrature(trian,degree)
+    a(u,v) = v*u
+    l(v) = 1*v
+    t1 = AffineFETerm(a,l,trian,quad)
+    (t1,)
+  end
 
-function setup_terms(part,(model,gids))
+  dterms = DistributedData(setup_terms,model)
 
-  trian = Triangulation(model)
-  
-  degree = 2
-  quad = CellQuadrature(trian,degree)
+  vecdata = DistributedData(assem,dterms) do part, assem, terms
+    UL = get_trial(assem)
+    VL = get_test(assem)
+    u0 = zero(UL)
+    vl = get_cell_basis(VL)
+    collect_cell_vector(u0,vl,terms)
+  end
 
-  a(u,v) = v*u
-  l(v) = 1*v
-  t1 = AffineFETerm(a,l,trian,quad)
+  matdata = DistributedData(assem,dterms) do part, assem, terms
+    UL = get_trial(assem)
+    VL = get_test(assem)
+    ul = get_cell_basis(UL)
+    vl = get_cell_basis(VL)
+    collect_cell_matrix(ul,vl,terms)
+  end
 
-  (t1,)
-end
+  A = assemble_matrix(assem,matdata)
+  b = assemble_vector(assem,vecdata)
 
-terms = DistributedData(setup_terms,model)
+  @test sum(b) ≈ 1
+  @test ones(1,size(A,1))*A*ones(size(A,2)) ≈ [1]
 
-vecdata = DistributedData(assem,terms) do part, assem, terms
-  U = get_trial(assem)
-  V = get_test(assem)
-  u0 = zero(U)
   v = get_cell_basis(V)
-  collect_cell_vector(u0,v,terms)
-end
+  du = get_cell_basis(U)
+  uh = zero(U)
 
-matdata = DistributedData(assem,terms) do part, assem, terms
-  U = get_trial(assem)
-  V = get_test(assem)
-  u = get_cell_basis(U)
-  v = get_cell_basis(V)
-  collect_cell_matrix(u,v,terms)
-end
+  matdata = collect_cell_matrix(du,v,dterms)
+  vecdata = collect_cell_vector(uh,v,dterms)
+  data = collect_cell_matrix_and_vector(uh,du,v,dterms)
+  test_assembler(assem,matdata,vecdata,data)
 
-A = assemble_matrix(assem,matdata)
-b = assemble_vector(assem,vecdata)
-
-@test sum(b) ≈ 1
-@test ones(1,size(A,1))*A*ones(size(A,2)) ≈ [1]
-
-v = get_cell_basis(V)
-du = get_cell_basis(U)
-uh = zero(U)
-
-matdata = collect_cell_matrix(du,v,terms)
-vecdata = collect_cell_vector(uh,v,terms)
-data = collect_cell_matrix_and_vector(uh,du,v,terms)
-test_assembler(assem,matdata,vecdata,data)
-
-matdata = collect_cell_jacobian(uh,du,v,terms)
-vecdata = collect_cell_residual(uh,v,terms)
-data = collect_cell_jacobian_and_residual(uh,du,v,terms)
-test_assembler(assem,matdata,vecdata,data)
+  matdata = collect_cell_jacobian(uh,du,v,dterms)
+  vecdata = collect_cell_residual(uh,v,dterms)
+  data = collect_cell_jacobian_and_residual(uh,du,v,dterms)
+  test_assembler(assem,matdata,vecdata,data)
+end 
 
 end # module

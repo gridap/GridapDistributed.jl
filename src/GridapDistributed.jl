@@ -7,14 +7,19 @@ using Gridap.FESpaces
 using Gridap.Arrays
 using Gridap.Algebra
 
-#using MPI
+using SparseArrays
+using MPI
+using GridapDistributedPETScWrappers
+using FillArrays
 
 export Communicator
 export num_parts
 export num_workers
+export get_part
 export do_on_parts
 export i_am_master
 export SequentialCommunicator
+export MPIPETScCommunicator
 
 export DistributedData
 export get_comm
@@ -37,13 +42,33 @@ export OwnedCellsStrategy
 export remove_ghost_cells
 export include_ghost_cells
 
+export PETScLinearSolver
+
 include("Communicators.jl")
+
+include("SequentialCommunicators.jl")
+
+include("MPIPETScCommunicators.jl")
+
+include("MPITimers.jl")
 
 include("DistributedData.jl")
 
+include("SequentialDistributedData.jl")
+
+include("MPIPETScDistributedData.jl")
+
 include("DistributedIndexSets.jl")
 
+include("SequentialDistributedIndexSets.jl")
+
+include("MPIPETScDistributedIndexSets.jl")
+
 include("DistributedVectors.jl")
+
+include("SequentialDistributedVectors.jl")
+
+include("MPIPETScDistributedVectors.jl")
 
 include("DistributedDiscreteModels.jl")
 
@@ -51,12 +76,26 @@ include("CartesianDiscreteModels.jl")
 
 include("DistributedFESpaces.jl")
 
+include("ZeroMeanDistributedFESpaces.jl")
+
+include("MultiFieldDistributedFESpaces.jl")
+
+include("DistributedFESpaceFactories.jl")
+
 include("DistributedAssemblers.jl")
+
+include("SequentialDistributedAssemblersInterfaces.jl")
+
+include("MPIPETScAlgebraInterfaces.jl")
+
+include("MPIPETScDistributedAssemblersInterfaces.jl")
 
 include("DistributedFETerms.jl")
 
 include("DistributedFEOperators.jl")
 
 include("DistributedTriangulations.jl")
+
+include("MPIPETScLinearSolvers.jl")
 
 end # module

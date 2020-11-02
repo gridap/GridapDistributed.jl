@@ -4,7 +4,7 @@ using Gridap
 using GridapDistributed
 using Test
 
-function test_face_labelings_consistency(D::Int)
+function test_face_labelings_consistency(comm,subdomains,D::Int)
     domain = Int[]
     for i = 1:D
         push!(domain, 0)
@@ -12,8 +12,6 @@ function test_face_labelings_consistency(D::Int)
     end
     domain = Tuple(domain)
     cells = Gridap.Geometry.tfill(4, Val{D}())
-    subdomains = Gridap.Geometry.tfill(2, Val{D}())
-    comm  = SequentialCommunicator(subdomains)
     dmodel = CartesianDiscreteModel(comm, subdomains, domain, cells)
     gmodel = CartesianDiscreteModel(domain, cells)
 
@@ -26,7 +24,6 @@ function test_face_labelings_consistency(D::Int)
     end
     all(gather(result))
 end
-
 
 function test_local_part_face_labelings_consistency(model::CartesianDiscreteModel{D},gid,gmodel) where {D}
    local_topology         = model.grid_topology
@@ -60,16 +57,23 @@ function test_local_part_face_labelings_consistency(model::CartesianDiscreteMode
    return true
 end
 
-subdomains = (2,3)
-domain = (0,1,0,1)
-cells = (10,10)
+function generate_subdomains(D::Int)
+    subdomains = Gridap.Geometry.tfill(2, Val{D}())
+end 
 
-comm = SequentialCommunicator(subdomains)
-model = CartesianDiscreteModel(comm,subdomains,domain,cells)
-writevtk(model,"model")
+subdomains = (2,3)
+SequentialCommunicator(subdomains) do comm
+  domain = (0,1,0,1)
+  cells = (10,10)
+  model = CartesianDiscreteModel(comm,subdomains,domain,cells)
+  writevtk(model,"model")
+end 
 
 for D in (1,2,3)
-  @test test_face_labelings_consistency(D)
+  subdomains = generate_subdomains(D)
+  SequentialCommunicator(subdomains) do comm
+    @test test_face_labelings_consistency(comm,subdomains,D)
+  end
 end
 
 end # module
