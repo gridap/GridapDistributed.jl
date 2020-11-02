@@ -27,8 +27,9 @@ function DistributedVector(
     if (V <: Table)
         sizes = [part.ptrs[i + 1] - part.ptrs[i]
                      for i = 1:length(part.ptrs)-1]
-        max_sizes = maximum(sizes)
-        min_sizes = minimum(sizes)
+
+        max_sizes = length(sizes)!=0 ? maximum(sizes) : 0
+        min_sizes = length(sizes)!=0 ? minimum(sizes) : 0
         if (max_sizes == min_sizes)
             scalar_indices =
               _create_fixed_length_indices(max_sizes, indices)
