@@ -21,15 +21,15 @@ after_success:
 jobs:
   fast_finish: true
   include:
-    - stage: "test"
+    - stage: "MPIPETScTests"
       julia: 1.4
       os: linux
       script:
         - echo $PWD
         - julia --project=. --color=yes -e 'using Pkg; Pkg.instantiate()'
-        - cd test/MPIPETScTests/
+        - cd test/MPIPETScTests/compile
         - ./compile.sh
-        - cd ../../   
+        - cd ../../..   
         - julia --project=. --color=yes --check-bounds=yes test/MPIPETScTests/runtests.jl -i test/MPIPETScTests/compile/GridapDistributed.so
       after_success: skip
     - stage: Documentation
