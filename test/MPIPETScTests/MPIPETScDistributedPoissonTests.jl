@@ -1,4 +1,4 @@
-module DistributedPoissonTests
+module MPIPETScDistributedPoissonTests
 
 using Test
 using Gridap
@@ -7,7 +7,32 @@ using GridapDistributed
 using SparseArrays
 using GridapDistributedPETScWrappers
 
-function run(comm, assembly_strategy::AbstractString)
+using ArgParse
+
+function parse_commandline()
+    s = ArgParseSettings()
+    @add_arg_table! s begin
+        "--subdomains", "-s"
+        help = "Tuple with the # of subdomains per Cartesian direction"
+        arg_type = Int64
+        default=[1,1]
+        nargs='+'
+        "--partition", "-p"
+        help = "Tuple with the # of cells per Cartesian direction"
+        arg_type = Int64
+        default=[4,4]
+        nargs='+'
+    end
+    return parse_args(s)
+end
+
+
+function run(comm,
+             assembly_strategy::AbstractString,
+             subdomains=(2, 2),
+             cells=(4, 4),
+             domain = (0, 1, 0, 1))
+
   T = Float64
   vector_type = GridapDistributedPETScWrappers.Vec{T}
   matrix_type = GridapDistributedPETScWrappers.Mat{T}
@@ -17,9 +42,6 @@ function run(comm, assembly_strategy::AbstractString)
   f(x) = -Δ(u)(x)
 
   # Discretization
-  subdomains = (2, 2)
-  domain = (0, 1, 0, 1)
-  cells = (4, 4)
   model = CartesianDiscreteModel(comm, subdomains, domain, cells)
 
   # FE Spaces
@@ -97,9 +119,13 @@ function run(comm, assembly_strategy::AbstractString)
 end
 
 
+parsed_args = parse_commandline()
+subdomains = Tuple(parsed_args["subdomains"])
+partition = Tuple(parsed_args["partition"])
+
 MPIPETScCommunicator() do comm
-  run(comm, "RowsComputedLocally")
-  run(comm, "OwnedCellsStrategy")
+  run(comm, "RowsComputedLocally", subdomains,partition)
+  run(comm, "OwnedCellsStrategy",subdomains,partition)
 end
 
 end # module
