@@ -27,7 +27,10 @@ jobs:
       script:
         - echo $PWD
         - julia --project=. --color=yes -e 'using Pkg; Pkg.instantiate()'
-        - julia --project=. --color=yes --check-bounds=yes test/MPIPETScTests/runtests.jl
+        - cd test/MPIPETScTests/
+        - ./compile.sh
+        - cd ../../   
+        - julia --project=. --color=yes --check-bounds=yes test/MPIPETScTests/runtests.jl -i test/MPIPETScTests/compile/GridapDistributed.so
       after_success: skip
     - stage: Documentation
       julia: 1.4
