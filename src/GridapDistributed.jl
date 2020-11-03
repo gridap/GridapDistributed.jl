@@ -6,6 +6,7 @@ using Gridap.Geometry
 using Gridap.FESpaces
 using Gridap.Arrays
 using Gridap.Algebra
+using Gridap.MultiField
 
 using SparseArrays
 using MPI
