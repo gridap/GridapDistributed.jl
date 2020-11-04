@@ -35,7 +35,7 @@ function _gen_multifield_distributed_fe_function(dV::MultiFieldDistributedFESpac
     funs = DistributedData(get_comm(dV.distributed_spaces[1]),
                          dV.spaces, single_fe_functions...,) do part, V, fe_functions...
         mfv = zero_free_values(V)
-        mf_lids = [i for i=1:length(mfv)]
+        mf_lids = 1:length(mfv)
         current = 1
         for (field_id,fun) in enumerate(fe_functions)
             fv = get_free_values(fun)
@@ -63,7 +63,7 @@ function restrict_to_field(dV::MultiFieldDistributedFESpace, x::Vector, field)
     do_on_parts(dV.spaces, dV.gids, xi, x, dV.distributed_spaces...) do part, mfspace, mfgids, xi, x, fspaces_and_gids...
         fspace = fspaces_and_gids[field][1]
         fgids  = fspaces_and_gids[field][2]
-        mf_lids = [i for i=1:num_free_dofs(mfspace)]
+        mf_lids = i=1:num_free_dofs(mfspace)
         sf_lids = Gridap.MultiField.restrict_to_field(mfspace,mf_lids,field)
         for i = 1:num_free_dofs(fspace)
             if fgids.lid_to_owner[i] == part
@@ -92,7 +92,7 @@ function restrict_to_field(dV::MultiFieldDistributedFESpace, x::GridapDistribute
     mfis_gids = Vector{GridapDistributedPETScWrappers.PetscInt}(undef,length(fis_gids))
 
     do_on_parts(dV.spaces, dV.gids, dV.distributed_spaces...) do part, mfspace, lmfgids, fspaces_and_gids...
-        mf_lids = [i for i=1:num_free_dofs(mfspace)]
+        mf_lids = 1:num_free_dofs(mfspace)
         sf_lids = Gridap.MultiField.restrict_to_field(mfspace,mf_lids,field)
         fspace = fspaces_and_gids[field][1]
         current=1
@@ -158,7 +158,7 @@ function _generate_multifield_gids(model,spaces,distributed_spaces)
     function init_lid_to_owner(part, lspace, spaces_and_gids...)
         nlids = num_free_dofs(lspace)
         lid_to_owner = zeros(Int, nlids)
-        mf_lids = [i for i=1:nlids]
+        mf_lids = 1:nlids
         for (field_id,current_field_space_gids) in enumerate(spaces_and_gids)
             gids = current_field_space_gids[2]
             sf_lids=Gridap.MultiField.restrict_to_field(lspace,mf_lids,field_id)
