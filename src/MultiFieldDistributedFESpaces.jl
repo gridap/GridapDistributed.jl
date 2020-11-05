@@ -11,8 +11,9 @@ end
 
 function Gridap.MultiFieldFESpace(test_space::MultiFieldDistributedFESpace{V},
                                    trial_spaces::Vector{<:DistributedFESpace}) where V
-    spaces = DistributedData(trial_spaces...) do part, spaces_and_gids...
-        MultiFieldFESpace([s[1] for s in spaces_and_gids])
+
+    spaces = DistributedData(test_space.spaces, trial_spaces...) do part, lspace, spaces_and_gids...
+        MultiFieldFESpace([s[1] for s in spaces_and_gids],MultiFieldStyle(lspace))
     end
     MultiFieldDistributedFESpace(V, trial_spaces, spaces, test_space.gids)
 end
@@ -34,11 +35,13 @@ function _gen_multifield_distributed_fe_function(dV::MultiFieldDistributedFESpac
     funs = DistributedData(get_comm(dV.distributed_spaces[1]),
                          dV.spaces, single_fe_functions...,) do part, V, fe_functions...
         mfv = zero_free_values(V)
+        mf_lids = 1:length(mfv)
         current = 1
-        for fun in fe_functions
+        for (field_id,fun) in enumerate(fe_functions)
             fv = get_free_values(fun)
-            for i = 1:length(fv)
-                mfv[current] = fv[i]
+            sf_lids=Gridap.MultiField.restrict_to_field(V,mf_lids,field_id)
+            for i = 1:length(sf_lids)
+                mfv[sf_lids[i]] = fv[i]
                 current = current + 1
             end
         end
@@ -58,16 +61,13 @@ function restrict_to_field(dV::MultiFieldDistributedFESpace, x::Vector, field)
                                       dV.distributed_spaces[field].gids)
 
     do_on_parts(dV.spaces, dV.gids, xi, x, dV.distributed_spaces...) do part, mfspace, mfgids, xi, x, fspaces_and_gids...
-        offset = 0
-        for i = 1:field - 1
-            fspace = fspaces_and_gids[i][1]
-            offset = offset + num_free_dofs(fspace)
-        end
         fspace = fspaces_and_gids[field][1]
         fgids  = fspaces_and_gids[field][2]
+        mf_lids = i=1:num_free_dofs(mfspace)
+        sf_lids = Gridap.MultiField.restrict_to_field(mfspace,mf_lids,field)
         for i = 1:num_free_dofs(fspace)
             if fgids.lid_to_owner[i] == part
-                xi[fgids.lid_to_gid[i]] = x[mfgids.lid_to_gid[offset + i]]
+                xi[fgids.lid_to_gid[i]] = x[mfgids.lid_to_gid[sf_lids[i]]]
             end
         end
     end
@@ -91,17 +91,14 @@ function restrict_to_field(dV::MultiFieldDistributedFESpace, x::GridapDistribute
 
     mfis_gids = Vector{GridapDistributedPETScWrappers.PetscInt}(undef,length(fis_gids))
 
-    do_on_parts(dV.gids, dV.distributed_spaces...) do part, lmfgids, fspaces_and_gids...
-        offset = 0
-        for i = 1:field - 1
-            fspace = fspaces_and_gids[i][1]
-            offset = offset + num_free_dofs(fspace)
-        end
+    do_on_parts(dV.spaces, dV.gids, dV.distributed_spaces...) do part, mfspace, lmfgids, fspaces_and_gids...
+        mf_lids = 1:num_free_dofs(mfspace)
+        sf_lids = Gridap.MultiField.restrict_to_field(mfspace,mf_lids,field)
         fspace = fspaces_and_gids[field][1]
         current=1
         for i = 1:num_free_dofs(fspace)
-            if lmfgids.lid_to_owner[offset+i] == part
-                mfis_gids[current]=mfgids.lid_to_gid_petsc[offset+i]-1
+            if lmfgids.lid_to_owner[sf_lids[i]] == part
+                mfis_gids[current]=mfgids.lid_to_gid_petsc[sf_lids[i]]-1
                 current=current+1
             end
         end
@@ -129,15 +126,44 @@ function Gridap.MultiFieldFESpace(model::DistributedDiscreteModel,
         MultiFieldFESpace([s[1] for s in spaces_and_gids])
     end
 
+    gids=_generate_multifield_gids(model,spaces,distributed_spaces)
+
+    MultiFieldDistributedFESpace(get_vector_type(distributed_spaces[1]),
+                               distributed_spaces,
+                               spaces,
+                               gids)
+end
+
+
+function Gridap.MultiFieldFESpace(model::DistributedDiscreteModel,
+                                  distributed_spaces::Vector{<:DistributedFESpace},
+                                  multifield_style::MultiFieldStyle) where V
+
+    spaces = DistributedData(distributed_spaces...) do part, spaces_and_gids...
+        MultiFieldFESpace([s[1] for s in spaces_and_gids],multifield_style)
+    end
+
+    gids=_generate_multifield_gids(model,spaces,distributed_spaces)
+
+    MultiFieldDistributedFESpace(get_vector_type(distributed_spaces[1]),
+                               distributed_spaces,
+                               spaces,
+                               gids)
+end
+
+
+
+
+function _generate_multifield_gids(model,spaces,distributed_spaces)
     function init_lid_to_owner(part, lspace, spaces_and_gids...)
         nlids = num_free_dofs(lspace)
         lid_to_owner = zeros(Int, nlids)
-        current_lid = 1
-        for current_field_space_gids in spaces_and_gids
+        mf_lids = 1:nlids
+        for (field_id,current_field_space_gids) in enumerate(spaces_and_gids)
             gids = current_field_space_gids[2]
-            for i = 1:length(gids.lid_to_owner)
-                lid_to_owner[current_lid] = gids.lid_to_owner[i]
-                current_lid += 1
+            sf_lids=Gridap.MultiField.restrict_to_field(lspace,mf_lids,field_id)
+            for i=1:length(sf_lids)
+              lid_to_owner[sf_lids[i]]=gids.lid_to_owner[i]
             end
         end
         lid_to_owner
@@ -170,12 +196,9 @@ function Gridap.MultiFieldFESpace(model::DistributedDiscreteModel,
                              part_to_lid_to_gid,
                              part_to_lid_to_owner,
                              ngids)
-
-    MultiFieldDistributedFESpace(get_vector_type(distributed_spaces[1]),
-                               distributed_spaces,
-                               spaces,
-                               gids)
 end
+
+
 
 # FE Function
 struct MultiFieldDistributedFEFunction
