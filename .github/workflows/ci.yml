@@ -2,8 +2,7 @@ name: CI
 on:
   - push 
 jobs:
-  test:
-    name: Julia
+  SequentialCommTests:
     runs-on: ubuntu-latest 
     steps:
       - uses: actions/checkout@v2
@@ -13,3 +12,18 @@ jobs:
           arch: x64 
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
+  MPIPETScCommTests:
+    runs-on: ubuntu-latest 
+    steps:
+      - uses: actions/checkout@v2
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: 1.4
+          arch: x64 
+      - uses: julia-actions/julia-buildpkg@latest
+      - echo $PWD  
+      - julia --project=. --color=yes -e 'using Pkg; Pkg.instantiate()'
+      - cd test/MPIPETScTests/compile
+      - ./compile.sh
+      - cd ../../..
+      - julia --project=. --color=yes --check-bounds=yes test/MPIPETScTests/runtests.jl -i test/MPIPETScTests/compile/GridapDistributed.so  
