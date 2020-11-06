@@ -24,6 +24,8 @@ jobs:
       - run: echo $PWD  
       - run: julia --project=. --color=yes -e 'using Pkg; Pkg.instantiate()'
       - run: cd test/MPIPETScTests/compile
+      - run: echo $PWD 
+      - run: ls -l 
       - run: ./compile.sh
       - run: cd ../../..
       - run: julia --project=. --color=yes --check-bounds=yes test/MPIPETScTests/runtests.jl -i test/MPIPETScTests/compile/GridapDistributed.so  
