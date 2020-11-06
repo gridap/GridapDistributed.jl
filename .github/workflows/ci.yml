@@ -10,6 +10,6 @@ jobs:
       - uses: julia-actions/setup-julia@v1
         with:
           version: 1.4
-          arch: x86 
+          arch: x64 
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
