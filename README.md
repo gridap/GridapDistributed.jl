@@ -2,7 +2,7 @@
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://gridap.github.io/GridapDistributed.jl/stable)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://gridap.github.io/GridapDistributed.jl/dev)
-![CI](https://github.com/actions/GridapDistributed.jl/workflows/CI/badge.svg)
+![CI](https://github.com/Gridap/GridapDistributed.jl/workflows/CI/badge.svg)
 
 Parallel distributed-memory version of `Gridap.jl`.  🚧 work in progress 🚧
 
@@ -33,7 +33,7 @@ $ export MPIRUN=$(julia --project=. -e "using MPI;println(MPI.mpiexec_path)")
 As an example, the MPI-parallel `GridapDistributed.jl` driver `MPIPETScCommunicatorsTests.jl`, located in the `test` directory, can be executed as:
 
 ```
-$MPIRUN -np 2 julia --project=. -J ../Gridap.jl/compile/Gridapv0.14.1.so test/MPIPETScCommunicatorsTests.jl
+$MPIRUN -np 2 julia --project=. -J ../Gridap.jl/compile/Gridapv0.14.1.so test/MPIPETScTests/MPIPETScCommunicatorsTests.jl
 ```
 
 where `-J ../Gridap.jl/compile/Gridapv0.14.1.so` is optional, but highly recommended in order to reduce JIT compilation times. More details about how to generate this file can be found [here](https://github.com/gridap/Gridap.jl/tree/master/compile).
