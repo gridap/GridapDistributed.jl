@@ -40,15 +40,15 @@ SequentialCommunicator(subdomains) do comm
     UL = get_trial(assem)
     VL = get_test(assem)
     u0 = zero(UL)
-    vl = get_cell_basis(VL)
+    vl = get_fe_basis(VL)
     collect_cell_vector(u0,vl,terms)
   end
 
   matdata = DistributedData(assem,dterms) do part, assem, terms
     UL = get_trial(assem)
     VL = get_test(assem)
-    ul = get_cell_basis(UL)
-    vl = get_cell_basis(VL)
+    ul = get_trial_fe_basis(UL)
+    vl = get_fe_basis(VL)
     collect_cell_matrix(ul,vl,terms)
   end
 
@@ -58,8 +58,8 @@ SequentialCommunicator(subdomains) do comm
   @test sum(b) ≈ 1
   @test ones(1,size(A,1))*A*ones(size(A,2)) ≈ [1]
 
-  v = get_cell_basis(V)
-  du = get_cell_basis(U)
+  v = get_fe_basis(V)
+  du = get_trial_fe_basis(U)
   uh = zero(U)
 
   matdata = collect_cell_matrix(du,v,dterms)
@@ -71,6 +71,6 @@ SequentialCommunicator(subdomains) do comm
   vecdata = collect_cell_residual(uh,v,dterms)
   data = collect_cell_jacobian_and_residual(uh,du,v,dterms)
   test_assembler(assem,matdata,vecdata,data)
-end 
+end
 
 end # module

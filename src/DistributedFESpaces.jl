@@ -35,9 +35,9 @@ function Gridap.FESpaces.zero_free_values(f::DistributedFESpace)
     fv
 end
 
-function Gridap.FESpaces.get_cell_basis(f::DistributedFESpace)
+function Gridap.FESpaces.get_trial_fe_basis(f::DistributedFESpace)
     bases = DistributedData(f.spaces) do part, space
-        get_cell_basis(space)
+        get_trial_fe_basis(space)
     end
     DistributedCellBasis(bases)
 end
@@ -80,9 +80,10 @@ end
 
 function DistributedFESpaceFromLocalFESpaces(::Type{V};
                                              model::DistributedDiscreteModel,
+                                             reffe,
                                              kwargs...) where V
     function init_local_spaces(part, model)
-        lspace = FESpace(;model=model,kwargs...)
+        lspace = FESpace(model,reffe;kwargs...)
     end
     comm = get_comm(model)
     spaces = DistributedData(init_local_spaces, comm, model.models)
@@ -106,7 +107,7 @@ function _compute_distributed_index_set(
         nlids = num_free_dofs(lspace)
         lid_to_owner = zeros(Int, nlids)
         cell_to_part = cell_gids.lid_to_owner
-        cell_to_lids = Table(get_cell_dofs(lspace))
+        cell_to_lids = Table(get_cell_dof_ids(lspace))
         _fill_max_part_around!(lid_to_owner, cell_to_part, cell_to_lids)
         lid_to_owner
     end
@@ -174,7 +175,7 @@ end
 
 function compute_num_dofs_x_cell(comm, spaces)
   DistributedData(comm, spaces) do part, lspace
-    cell_dofs = get_cell_dofs(lspace)
+    cell_dofs = get_cell_dof_ids(lspace)
     [length(cell_dofs[i]) for i = 1:length(cell_dofs)]
   end
 end
@@ -233,10 +234,10 @@ function init_cell_to_owners(part,
     length_to_ptrs!(ptrs)
     data = Vector{eltype(lid_to_owner)}(undef, ptrs[end] - 1)
 
-    cell_to_lids = get_cell_dofs(lspace)
+    cell_to_lids = get_cell_dof_ids(lspace)
     dlid_to_zero = zeros(eltype(lid_to_owner), num_dirichlet_dofs(lspace))
     cell_to_owners_from =
-LocalToGlobalPosNegArray(cell_to_lids,lid_to_owner,dlid_to_zero)
+       lazy_map(Broadcasting(PosNegReindex(lid_to_owner,dlid_to_zero)),cell_to_lids)
     k = 1
     for i = 1:length(cell_to_owners_from)
         for j = 1:length(cell_to_owners_from[i])
@@ -248,7 +249,7 @@ LocalToGlobalPosNegArray(cell_to_lids,lid_to_owner,dlid_to_zero)
 end
 
 function update_lid_to_gid(part, lid_to_gid, lid_to_owner, lspace, cell_to_gids, cell_gids)
-    cell_to_lids = Table(get_cell_dofs(lspace))
+    cell_to_lids = Table(get_cell_dof_ids(lspace))
     cell_to_owner = cell_gids.lid_to_owner
     _update_lid_to_gid!(
     lid_to_gid,cell_to_lids,cell_to_gids,cell_to_owner,lid_to_owner)
@@ -274,7 +275,7 @@ function _update_lid_to_gid!(lid_to_gid, cell_to_lids, cell_to_gids, cell_to_own
 end
 
 function update_lid_to_owner(part, lid_to_owner, lspace, cell_to_owners)
-    cell_to_lids = Table(get_cell_dofs(lspace))
+    cell_to_lids = Table(get_cell_dof_ids(lspace))
     _update_lid_to_owner!(lid_to_owner, cell_to_lids, cell_to_owners)
 end
 
@@ -334,7 +335,7 @@ struct DistributedFEFunction
     space::DistributedFESpace
 end
 
-Gridap.FESpaces.FEFunctionStyle(::Type{DistributedFEFunction}) = Val{true}()
+# TO-DO Gridap.FESpaces.FEFunctionStyle(::Type{DistributedFEFunction}) = Val{true}()
 
 get_distributed_data(u::DistributedFEFunction) = u.funs
 
@@ -342,13 +343,13 @@ Gridap.FESpaces.get_free_values(a::DistributedFEFunction) = a.vals
 
 Gridap.FESpaces.get_fe_space(a::DistributedFEFunction) = a.space
 
-Gridap.FESpaces.is_a_fe_function(a::DistributedFEFunction) = true
+# TO-DO Gridap.FESpaces.is_a_fe_function(a::DistributedFEFunction) = true
 
 # Cell basis
 struct DistributedCellBasis
     bases::DistributedData
 end
 
-Gridap.FESpaces.FECellBasisStyle(::Type{DistributedCellBasis}) = Val{true}()
+# TO-DO Gridap.FESpaces.FECellBasisStyle(::Type{DistributedCellBasis}) = Val{true}()
 
 get_distributed_data(u::DistributedCellBasis) = u.bases

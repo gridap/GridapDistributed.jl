@@ -30,7 +30,7 @@ function remove_ghost_cells(trian::Triangulation, part::Integer, gids::IndexSet)
     tcell_to_mcell = get_cell_id(trian)
     ocell_to_tcell =
         findall((x) -> (gids.lid_to_owner[x] == part), tcell_to_mcell)
-    TriangulationPortion(trian, ocell_to_tcell)
+    # TO-DO: TriangulationPortion(trian, ocell_to_tcell)
 end
 
 function remove_ghost_cells(
@@ -43,7 +43,7 @@ function remove_ghost_cells(
     @assert length(cell_id_left) == length(cell_id_right)
     facets_to_old_facets =
         _compute_facets_to_old_facets(cell_id_left, cell_id_right, part, gids)
-    TriangulationPortion(trian, facets_to_old_facets)
+    # TO-DO: TriangulationPortion(trian, facets_to_old_facets)
 end
 
 function _compute_facets_to_old_facets(cell_id_left, cell_id_right, part, gids)
@@ -59,6 +59,6 @@ function _compute_facets_to_old_facets(cell_id_left, cell_id_right, part, gids)
     facets_to_old_facets
 end
 
-function include_ghost_cells(trian::TriangulationPortion)
+function include_ghost_cells(trian) # TO-DO :: TriangulationPortion)
     trian.oldtrian
 end

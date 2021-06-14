@@ -12,6 +12,7 @@ using SparseArrays
 using MPI
 using GridapDistributedPETScWrappers
 using FillArrays
+using SparseMatricesCSR
 
 export Communicator
 export num_parts

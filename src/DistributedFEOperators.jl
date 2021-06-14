@@ -4,8 +4,8 @@ function Gridap.FESpaces.AffineFEOperator(dassem::DistributedAssembler, dterms)
   trial = dassem.trial
   test = dassem.test
 
-  u = get_cell_basis(trial)
-  v = get_cell_basis(test)
+  u = get_trial_fe_basis(trial)
+  v = get_fe_basis(test)
 
   uhd = zero(trial)
 
@@ -22,4 +22,3 @@ function Gridap.FESpaces.FEOperator(assem::DistributedAssembler,terms::Distribut
   test = assem.test
   FEOperatorFromTerms(trial,test,assem,terms)
 end
-

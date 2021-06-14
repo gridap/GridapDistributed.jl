@@ -75,21 +75,22 @@ function _generate_zero_mean_funs(dV::ZeroMeanDistributedFESpace, funs)
   end
 end
 
-function constant_fixed(V::FESpaceWithConstantFixed{CS,Gridap.FESpaces.FixConstant}) where {CS}
+function constant_fixed(V::FESpaceWithConstantFixed{Gridap.FESpaces.FixConstant})
   true
 end
 
-function constant_fixed(V::FESpaceWithConstantFixed{CS,CA}) where {CS,CA}
+function constant_fixed(V::FESpaceWithConstantFixed)
    false
 end
 
 
 function ZeroMeanDistributedFESpace(::Type{V};
                                     model::DistributedDiscreteModel,
+                                    reffe,
                                     kwargs...) where V
 
   function init_local_spaces(part,model)
-    lspace = FESpace(;model=model,kwargs...)
+    lspace = FESpace(model,reffe,kwargs...)
   end
 
   comm = get_comm(model)
@@ -107,7 +108,8 @@ function ZeroMeanDistributedFESpace(::Type{V};
                                        spaces,
                                        dof_lid_to_fix)
 
-  order=Gridap.FESpaces._get_kwarg(:order,kwargs)
+  # TO-DO: order=Gridap.FESpaces._get_kwarg(:order,kwargs)
+  order=1
   dvol_i, dvol = _setup_vols(model,spaces,order)
   gids=_compute_distributed_index_set(model, spaces_dof_removed)
   ZeroMeanDistributedFESpace(V,spaces_dof_removed,gids,dvol_i,dvol)
@@ -140,7 +142,7 @@ function _compute_dof_lid_to_fix(model,spaces)
   dof_lids_candidates=DistributedData(model.gids,spaces) do part, cell_gids, lspace
    n_free_dofs = num_free_dofs(lspace)
    lid_to_n_local_minus_ghost=zeros(Int32,n_free_dofs)
-   cell_dofs=get_cell_dofs(lspace)
+   cell_dofs=get_cell_dof_ids(lspace)
    cell_dofs_cache = array_cache(cell_dofs)
    for cell in 1:length(cell_dofs)
     current_cell_dofs = getindex!(cell_dofs_cache,cell_dofs,cell)

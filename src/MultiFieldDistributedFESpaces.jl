@@ -207,7 +207,7 @@ struct MultiFieldDistributedFEFunction
     space::MultiFieldDistributedFESpace
 end
 
-Gridap.FESpaces.FEFunctionStyle(::Type{MultiFieldDistributedFEFunction}) = Val{true}()
+# TO-DO Gridap.FESpaces.FEFunctionStyle(::Type{MultiFieldDistributedFEFunction}) = Val{true}()
 
 get_distributed_data(u::MultiFieldDistributedFEFunction) =
      get_distributed_data(u.multifield_fe_function)
@@ -217,4 +217,4 @@ Gridap.FESpaces.get_free_values(a::MultiFieldDistributedFEFunction) =
 
 Gridap.FESpaces.get_fe_space(a::MultiFieldDistributedFEFunction) = a.space
 
-Gridap.FESpaces.is_a_fe_function(a::MultiFieldDistributedFEFunction) = true
+# TO-DO Gridap.FESpaces.is_a_fe_function(a::MultiFieldDistributedFEFunction) = true
