@@ -39,7 +39,7 @@ function Gridap.FESpaces.get_trial_fe_basis(f::DistributedFESpace)
     bases = DistributedData(f.spaces) do part, space
         get_trial_fe_basis(space)
     end
-    DistributedCellBasis(bases)
+    DistributedFEBasis(bases)
 end
 
 # TO-DO: Better name?
@@ -346,10 +346,10 @@ Gridap.FESpaces.get_fe_space(a::DistributedFEFunction) = a.space
 # TO-DO Gridap.FESpaces.is_a_fe_function(a::DistributedFEFunction) = true
 
 # Cell basis
-struct DistributedCellBasis
+struct DistributedFEBasis
     bases::DistributedData
 end
 
-# TO-DO Gridap.FESpaces.FECellBasisStyle(::Type{DistributedCellBasis}) = Val{true}()
+# TO-DO Gridap.FESpaces.FECellBasisStyle(::Type{DistributedFEBasis}) = Val{true}()
 
-get_distributed_data(u::DistributedCellBasis) = u.bases
+get_distributed_data(u::DistributedFEBasis) = u.bases

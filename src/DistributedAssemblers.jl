@@ -16,6 +16,12 @@ struct DistributedAssembler{M,V,AS} <: Assembler
   strategy::DistributedAssemblyStrategy{AS}
 end
 
+struct ArtificeSparseMatrixToLeverageDefaults{Tv,Ti} <: AbstractSparseMatrix{Tv,Ti} end
+
+function Gridap.Algebra.is_entry_stored(::Type{<:ArtificeSparseMatrixToLeverageDefaults},i,j)
+  true
+end
+
 """
     allocate_local_vector(::DistributedAssemblyStrategy, ::Type{V}, indices) where {V}
 
@@ -75,13 +81,13 @@ function get_distributed_data(dassem::DistributedAssembler)
   dassem.assems
 end
 
-function Gridap.FESpaces.get_test(a::DistributedAssembler)
-  a.test
-end
+# function Gridap.FESpaces.get_test(a::DistributedAssembler)
+#   a.test
+# end
 
-function Gridap.FESpaces.get_trial(a::DistributedAssembler)
-  a.trial
-end
+# function Gridap.FESpaces.get_trial(a::DistributedAssembler)
+#   a.trial
+# end
 
 function Gridap.FESpaces.get_assembly_strategy(a::DistributedAssembler)
   a.strategy
@@ -89,23 +95,27 @@ end
 
 function Gridap.FESpaces.allocate_matrix(dassem::DistributedAssembler,dmatdata)
 
-  dn = DistributedData(dassem,dmatdata) do part, assem, matdata
-    count_matrix_nnz_coo(assem,matdata)
+  dm1 = DistributedData(dassem,dmatdata) do part, assem, matdata
+    m1=nz_counter(get_matrix_builder(assem),(get_rows(assem),get_cols(assem)))
+    symbolic_loop_matrix!(m1,assem,matdata)
   end
 
-  dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
+  dm2 = DistributedData(dm1,dassem,dmatdata) do part, m1, assem, matdata
+    m2=nz_allocation(m1)
+    numeric_loop_matrix!(m2,assem,matdata)
+  end
 
-  do_on_parts(dassem,dIJV,dmatdata) do part, assem, IJV, matdata
-    I,J,V = IJV
-    fill_matrix_coo_symbolic!(I,J,assem,matdata)
+  dIJV = DistributedData(dm2) do part, m2
+     @assert isa(m2,Gridap.Algebra.CooAllocation)
+     m2.I,m2.J,m2.V
   end
 
   finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
   A = assemble_global_matrix(dassem.strategy,
-                             dassem.matrix_type,
-                             dIJV,
-                             dassem.test.gids,
-                             dassem.trial.gids)
+                              dassem.matrix_type,
+                              dIJV,
+                              dassem.test.gids,
+                              dassem.trial.gids)
 end
 
 function Gridap.FESpaces.allocate_vector(a::DistributedAssembler,dvecdata)
@@ -170,16 +180,23 @@ function Gridap.FESpaces.assemble_matrix_and_vector_add!(dmat,dvec,dassem::Distr
 end
 
 function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dmatdata)
-  dn = DistributedData(dassem,dmatdata) do part, assem, matdata
-    count_matrix_nnz_coo(assem,matdata)
+  dm1 = DistributedData(dassem,dmatdata) do part, assem, matdata
+    builder=SparseMatrixBuilder(ArtificeSparseMatrixToLeverageDefaults{Float64,Int64},MinMemory())
+    m1=nz_counter(builder,(get_rows(assem),get_cols(assem)))
+    symbolic_loop_matrix!(m1,assem,matdata)
   end
-  dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
-  do_on_parts(dassem,dIJV,dmatdata) do part, assem, IJV, matdata
-    I,J,V = IJV
-    fill_matrix_coo_numeric!(I,J,V,assem,matdata)
-  end
-  finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
 
+  dm2 = DistributedData(dm1,dassem,dmatdata) do part, m1, assem, matdata
+    m2=nz_allocation(m1)
+    numeric_loop_matrix!(m2,assem,matdata)
+    m2
+  end
+
+  dIJV = DistributedData(dm2) do part, m2
+    m2.I,m2.J,m2.V
+  end
+
+  finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
   A = assemble_global_matrix(dassem.strategy,
                              dassem.matrix_type,
                              dIJV,
@@ -318,7 +335,7 @@ function Gridap.FESpaces.SparseMatrixAssembler(
 
   assems = DistributedData(
     dtrial.spaces,dtest.spaces,dstrategy) do part, U, V, strategy
-    SparseMatrixAssembler(get_local_matrix_type(matrix_type),  
+    SparseMatrixAssembler(get_local_matrix_type(matrix_type),
                           get_local_vector_type(vector_type),
                           U,
                           V,

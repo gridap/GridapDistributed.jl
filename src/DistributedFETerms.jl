@@ -1,42 +1,26 @@
-
-# TO-DO function Gridap.FESpaces.collect_cell_jacobian(
-#   uh,du::DistributedCellBasis,v::DistributedCellBasis,terms)
-#   DistributedData(uh,du,v,terms) do part, uh, du, v, terms
-#     collect_cell_jacobian(uh,du,v,terms)
-#   end
-# end
-
 function Gridap.FESpaces.collect_cell_matrix(
-  u::DistributedCellBasis,v::DistributedCellBasis,terms)
-  DistributedData(u,v,terms) do part, u, v, terms
+  u::DistributedFESpace,v::DistributedFESpace,terms)
+  DistributedData(u,v,terms) do part, (u,_), (v,_), terms
     collect_cell_matrix(u,v,terms)
   end
 end
 
-# TO-DO function Gridap.FESpaces.collect_cell_residual(
-#   uh,v::DistributedCellBasis,terms)
-#   DistributedData(uh,v,terms) do part, uh, v, terms
-#     collect_cell_residual(uh,v,terms)
-#   end
-# end
-
-function Gridap.FESpaces.collect_cell_vector(
-  uhd,v::DistributedCellBasis,terms)
-  DistributedData(uhd,v,terms) do part, uhd, v, terms
-    collect_cell_vector(uhd,v,terms)
+function Gridap.FESpaces.collect_cell_vector(v::DistributedFESpace,terms)
+  DistributedData(v,terms) do part, (v,_), terms
+    collect_cell_vector(v,terms)
   end
 end
 
 function Gridap.FESpaces.collect_cell_matrix_and_vector(
-  uhd,u::DistributedCellBasis,v::DistributedCellBasis,terms)
-  DistributedData(uhd,u,v,terms) do part, uhd, u, v, terms
-    collect_cell_matrix_and_vector(uhd,u,v,terms)
+  u::DistributedFESpace,v::DistributedFESpace,mterms,vterms)
+  DistributedData(u,v,mterms,vterms) do part, (u,_), (v,_), mterms, vterms
+    collect_cell_matrix_and_vector(u,v,mterms,vterms)
   end
 end
 
-# TO-DO function Gridap.FESpaces.collect_cell_jacobian_and_residual(
-#   uh::DistributedFEFunction,du::DistributedCellBasis,v::DistributedCellBasis,terms)
-#   DistributedData(uh,du,v,terms) do part, uh, du, v, terms
-#     collect_cell_jacobian_and_residual(uh,du,v,terms)
-#   end
-# end
+function Gridap.FESpaces.collect_cell_matrix_and_vector(
+  u::DistributedFESpace,v::DistributedFESpace,mterms,vterms,uhd)
+  DistributedData(u,v,mterms,vterms,uhd) do part, (u,_), (v,_), mterms, vterms, uhd
+    collect_cell_matrix_and_vector(u,v,mterms,vterms,uhd)
+  end
+end
