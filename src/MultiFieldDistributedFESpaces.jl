@@ -38,7 +38,7 @@ function _gen_multifield_distributed_fe_function(dV::MultiFieldDistributedFESpac
         mf_lids = 1:length(mfv)
         current = 1
         for (field_id,fun) in enumerate(fe_functions)
-            fv = get_free_values(fun)
+            fv = get_free_dof_values(fun)
             sf_lids=Gridap.MultiField.restrict_to_field(V,mf_lids,field_id)
             for i = 1:length(sf_lids)
                 mfv[sf_lids[i]] = fv[i]
@@ -212,8 +212,8 @@ end
 get_distributed_data(u::MultiFieldDistributedFEFunction) =
      get_distributed_data(u.multifield_fe_function)
 
-Gridap.FESpaces.get_free_values(a::MultiFieldDistributedFEFunction) =
-     get_free_values(a.multifield_fe_function)
+Gridap.FESpaces.get_free_dof_values(a::MultiFieldDistributedFEFunction) =
+     get_free_dof_values(a.multifield_fe_function)
 
 Gridap.FESpaces.get_fe_space(a::MultiFieldDistributedFEFunction) = a.space
 

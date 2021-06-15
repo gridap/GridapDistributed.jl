@@ -27,10 +27,10 @@ function Gridap.Geometry.SkeletonTriangulation(strategy::AssemblyStrategy,model:
 end
 
 function remove_ghost_cells(trian::Triangulation, part::Integer, gids::IndexSet)
-    tcell_to_mcell = get_cell_id(trian)
+    tcell_to_mcell = get_cell_to_bgcell(trian)
     ocell_to_tcell =
         findall((x) -> (gids.lid_to_owner[x] == part), tcell_to_mcell)
-    # TO-DO: TriangulationPortion(trian, ocell_to_tcell)
+    RestrictedTriangulation(trian, ocell_to_tcell)
 end
 
 function remove_ghost_cells(
@@ -38,12 +38,12 @@ function remove_ghost_cells(
     part::Integer,
     gids::IndexSet,
 )
-    cell_id_left = get_cell_id(trian.left)
-    cell_id_right = get_cell_id(trian.right)
+    cell_id_left = get_cell_to_bgcell(trian.left)
+    cell_id_right = get_cell_to_bgcell(trian.right)
     @assert length(cell_id_left) == length(cell_id_right)
     facets_to_old_facets =
         _compute_facets_to_old_facets(cell_id_left, cell_id_right, part, gids)
-    # TO-DO: TriangulationPortion(trian, facets_to_old_facets)
+    RestrictedTriangulation(trian, facets_to_old_facets)
 end
 
 function _compute_facets_to_old_facets(cell_id_left, cell_id_right, part, gids)
@@ -59,6 +59,6 @@ function _compute_facets_to_old_facets(cell_id_left, cell_id_right, part, gids)
     facets_to_old_facets
 end
 
-function include_ghost_cells(trian) # TO-DO :: TriangulationPortion)
+function include_ghost_cells(trian::RestrictedTriangulation)
     trian.oldtrian
 end

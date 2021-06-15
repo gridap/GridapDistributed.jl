@@ -339,7 +339,7 @@ end
 
 get_distributed_data(u::DistributedFEFunction) = u.funs
 
-Gridap.FESpaces.get_free_values(a::DistributedFEFunction) = a.vals
+Gridap.FESpaces.get_free_dof_values(a::DistributedFEFunction) = a.vals
 
 Gridap.FESpaces.get_fe_space(a::DistributedFEFunction) = a.space
 
