@@ -92,8 +92,6 @@ include("MPIPETScAlgebraInterfaces.jl")
 
 include("MPIPETScDistributedAssemblersInterfaces.jl")
 
-include("DistributedFETerms.jl")
-
 include("DistributedFEOperators.jl")
 
 include("DistributedTriangulations.jl")
