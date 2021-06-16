@@ -20,7 +20,7 @@ function run_simulation(comm)
   V = FESpace(vector_type,model=model,reffe=reffe)
   U = TrialFESpace(V)
 
-  strategy = RowsComputedLocally(V)
+  strategy = RowsComputedLocally(V; global_dofs=false)
   assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
   function setup_measures(part,(model,gids))
     trian = Triangulation(model)
@@ -40,17 +40,22 @@ function run_simulation(comm)
     ∫(vl*ul)dΩ
   end
 
-  A = assemble_matrix(assem,collect_cell_matrix(U,V,matcont))
-  b = assemble_vector(assem,collect_cell_vector(V,veccont))
-  @test sum(b) ≈ 1
-  @test ones(1,size(A,1))*A*ones(size(A,2)) ≈ [1]
+  matdata=collect_cell_matrix(U,V,matcont)
+  A1 = assemble_matrix(assem,matdata)
+  vecdata=collect_cell_vector(V,veccont)
+  b1 = assemble_vector(assem,vecdata)
+  @test sum(b1) ≈ 1
+  @test ones(1,size(A1,1))*A1*ones(size(A1,2)) ≈ [1]
 
-  uh = zero(U)
+  data = collect_cell_matrix_and_vector(U,V,matcont,veccont)
+  A2,b2 = assemble_matrix_and_vector(assem,data)
+  @test sum(b2) ≈ 1
+  @test ones(1,size(A2,1))*A2*ones(size(A2,2)) ≈ [1]
 
-  matdata = collect_cell_matrix(U,V,matcont)
-  vecdata = collect_cell_vector(V,veccont)
-  data = collect_cell_matrix_and_vector(U,V,matcont,veccont,uh)
-  # TO-DO test_assembler(assem,matdata,vecdata,data)
+  @test norm(A1-A2) ≈ 0.0
+  @test norm(b1-b2) ≈ 0.0
+
+  #TO-DO test_assembler(assem,matdata,vecdata,data)
 end
 
 

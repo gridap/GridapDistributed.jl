@@ -42,6 +42,14 @@ function Gridap.FESpaces.get_trial_fe_basis(f::DistributedFESpace)
     DistributedFEBasis(bases)
 end
 
+function Gridap.FESpaces.get_fe_basis(f::DistributedFESpace)
+  bases = DistributedData(f.spaces) do part, space
+      get_fe_basis(space)
+  end
+  DistributedFEBasis(bases)
+end
+
+
 # TO-DO: Better name?
 struct DistributedFESpaceFromLocalFESpaces{V} <: DistributedFESpace
     vector_type::Type{V}
@@ -329,7 +337,7 @@ function _fill_max_part_around!(lid_to_owner, cell_to_owner, cell_to_lids)
 end
 
 # FE Function
-struct DistributedFEFunction
+struct DistributedFEFunction <: FEFunction
     funs::DistributedData
     vals::AbstractVector
     space::DistributedFESpace

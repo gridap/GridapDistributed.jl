@@ -1,21 +1,31 @@
 
-function Gridap.FESpaces.AffineFEOperator(dassem::DistributedAssembler, dterms)
+"""
+"""
+function Gridap.FESpaces.AffineFEOperator(trial::DistributedFESpace,
+                                          test::DistributedFESpace,
+                                          matrix::AbstractMatrix,
+                                          vector::AbstractVector)
+  @assert false # TO-DO
+end
 
-  trial = dassem.trial
-  test = dassem.test
-
+"""
+"""
+function Gridap.FESpaces.AffineFEOperator(weakform::Function,
+                                          trial::DistributedFESpace,
+                                          test::DistributedFESpace,
+                                          assem::DistributedAssembler)
   u = get_trial_fe_basis(trial)
   v = get_fe_basis(test)
-
   uhd = zero(trial)
-
-  data = collect_cell_matrix_and_vector(uhd,u,v,dterms)
-  A,b = assemble_matrix_and_vector(dassem,data)
-
+  matcontribs, veccontribs = weakform(u,v)
+  data = collect_cell_matrix_and_vector(trial,test,matcontribs,veccontribs,uhd)
+  A,b = assemble_matrix_and_vector(assem,data)
   op = AffineOperator(A,b)
   AffineFEOperator(trial,test,op)
-
 end
+
+
+
 
 function Gridap.FESpaces.FEOperator(assem::DistributedAssembler,terms::DistributedData)
   trial = assem.trial
