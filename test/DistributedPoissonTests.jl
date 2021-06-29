@@ -44,20 +44,20 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
   end
 
   assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
-  function setup_measures(part,(model,gids))
-    trian = Triangulation(model)
+  function setup_dΩ(part,(model,gids),strategy)
+    trian = Triangulation(strategy,model)
     degree = 2*(order+1)
     Measure(trian,degree)
   end
-  dmeasures = DistributedData(setup_measures,model)
+  ddΩ = DistributedData(setup_dΩ,model,strategy)
 
   function a(u,v)
-    DistributedData(u,v,dmeasures) do part, ul, vl, dΩ
+    DistributedData(u,v,ddΩ) do part, ul, vl, dΩ
       ∫(∇(vl)⋅∇(ul))dΩ
     end
   end
   function l(v)
-    DistributedData(v,dmeasures) do part, vl, dΩ
+    DistributedData(v,ddΩ) do part, vl, dΩ
       ∫(vl*f)dΩ
     end
   end
@@ -70,7 +70,8 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
     trian = Triangulation(model)
     owned_trian = remove_ghost_cells(trian, part, gids)
     dΩ = Measure(owned_trian, 2*order)
-    sum(∫(u-uh)dΩ)
+    e = u-uh
+    sum(∫(e*e)dΩ)
   end
   e_l2 = sum(gather(sums))
   tol = 1.0e-9
