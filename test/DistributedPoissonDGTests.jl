@@ -118,6 +118,8 @@ subdomains = (2,2)
 SequentialCommunicator(subdomains) do comm
   run(comm,subdomains,"RowsComputedLocally", false)
   run(comm,subdomains,"OwnedCellsStrategy", false)
+  run(comm,subdomains,"RowsComputedLocally", true)
+  run(comm,subdomains,"OwnedCellsStrategy", true)
 end
 
 end # module#
