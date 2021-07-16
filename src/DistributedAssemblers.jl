@@ -19,7 +19,7 @@ function Gridap.FESpaces.collect_cell_matrix_and_vector(
 end
 
 function Gridap.FESpaces.collect_cell_matrix_and_vector(
-  u::DistributedFESpace,v::DistributedFESpace,mterms,vterms,uhd::DistributedFEFunction)
+  u::DistributedFESpace,v::DistributedFESpace,mterms,vterms,uhd::FEFunction)
   DistributedData(u,v,mterms,vterms,uhd) do part, (u,_), (v,_), mterms, vterms, uhd
     collect_cell_matrix_and_vector(u,v,mterms,vterms,uhd)
   end

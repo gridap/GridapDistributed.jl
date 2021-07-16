@@ -13,7 +13,7 @@ function Gridap.MultiFieldFESpace(test_space::MultiFieldDistributedFESpace{V},
                                    trial_spaces::Vector{<:DistributedFESpace}) where V
 
     spaces = DistributedData(test_space.spaces, trial_spaces...) do part, lspace, spaces_and_gids...
-        MultiFieldFESpace([s[1] for s in spaces_and_gids],MultiFieldStyle(lspace))
+        MultiFieldFESpace([s[1] for s in spaces_and_gids])
     end
     MultiFieldDistributedFESpace(V, trial_spaces, spaces, test_space.gids)
 end
@@ -201,7 +201,7 @@ end
 
 
 # FE Function
-struct MultiFieldDistributedFEFunction
+struct MultiFieldDistributedFEFunction <: FEFunction
     single_fe_functions::Vector{DistributedFEFunction}
     multifield_fe_function::DistributedFEFunction
     space::MultiFieldDistributedFESpace

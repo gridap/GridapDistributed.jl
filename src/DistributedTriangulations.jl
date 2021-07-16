@@ -16,8 +16,10 @@ function Gridap.Geometry.Triangulation(strategy::AssemblyStrategy,model::Discret
   filter_cells_when_needed(strategy,trian)
 end
 
-function Gridap.Geometry.BoundaryTriangulation(strategy::AssemblyStrategy,model::DiscreteModel,args...)
-  trian = BoundaryTriangulation(model,args...)
+function Gridap.Geometry.BoundaryTriangulation(
+  strategy::AssemblyStrategy,
+  model::DiscreteModel, args...;kwargs...)
+  trian = BoundaryTriangulation(model,args...;kwargs...)
   filter_cells_when_needed(strategy,trian)
 end
 

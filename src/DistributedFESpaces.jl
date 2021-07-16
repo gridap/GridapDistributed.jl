@@ -184,8 +184,20 @@ end
 function compute_num_dofs_x_cell(comm, spaces)
   DistributedData(comm, spaces) do part, lspace
     cell_dofs = get_cell_dof_ids(lspace)
-    [length(cell_dofs[i]) for i = 1:length(cell_dofs)]
+    [_count_dofs_x_cell(cell_dofs[i]) for i = 1:length(cell_dofs)]
   end
+end
+
+function _count_dofs_x_cell(cell_dof_ids::Gridap.Fields.VectorBlock)
+  n=0
+  for i=1:length(cell_dof_ids)
+    n += length(cell_dof_ids.array[i])
+  end
+  n
+end
+
+function _count_dofs_x_cell(cell_dof_ids::Vector)
+  length(cell_dof_ids)
 end
 
 function _compute_part_to_lid_to_gid(model,
@@ -249,18 +261,52 @@ function init_cell_to_owners(part,
     k = 1
     for i = 1:length(cell_to_owners_from)
         for j = 1:length(cell_to_owners_from[i])
-            data[k] = cell_to_owners_from[i][j]
-            k = k + 1
+            k=_fill_data!(data,cell_to_owners_from[i][j],k)
         end
     end
     return Table(data, ptrs)
 end
+
+function _fill_data!(data,entry::Integer,k)
+  data[k]=entry
+  k=k+1
+end
+
+function _fill_data!(data,entry::Vector{<:Integer},k)
+  for i=1:length(entry)
+    data[k]=entry[i]
+    k=k+1
+  end
+  k
+end
+
+
 
 function update_lid_to_gid(part, lid_to_gid, lid_to_owner, lspace, cell_to_gids, cell_gids)
     cell_to_lids = Table(get_cell_dof_ids(lspace))
     cell_to_owner = cell_gids.lid_to_owner
     _update_lid_to_gid!(
     lid_to_gid,cell_to_lids,cell_to_gids,cell_to_owner,lid_to_owner)
+end
+
+function Gridap.Arrays.Table(x::AbstractVector{<:Gridap.Fields.VectorBlock})
+    c=array_cache(x)
+    n=length(x)
+    ptrs=Vector{Int32}(undef,n+1)
+    ptrs[1]=1
+    for i in 1:length(x)
+      xi=getindex!(c,x,i)
+      ptrs[i+1]=ptrs[i]+_count_dofs_x_cell(xi)
+    end
+    data=Vector{Int32}(undef,ptrs[n+1]-1)
+    k=1
+    for i in 1:length(x)
+      xi=getindex!(c,x,i)
+      for xij in xi.array
+         k=_fill_data!(data,xij,k)
+      end
+    end
+    Table(data,ptrs)
 end
 
 function _update_lid_to_gid!(lid_to_gid, cell_to_lids, cell_to_gids, cell_to_owner, lid_to_owner)

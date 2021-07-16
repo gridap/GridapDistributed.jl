@@ -24,7 +24,8 @@ function Gridap.FESpaces.AffineFEOperator(weakform::Function,
   AffineFEOperator(trial,test,op)
 end
 
-
+"""
+"""
 function Gridap.FESpaces.FEOperator(assem::DistributedAssembler,terms::DistributedData)
   trial = assem.trial
   test = assem.test
