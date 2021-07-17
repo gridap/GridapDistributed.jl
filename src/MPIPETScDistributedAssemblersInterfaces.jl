@@ -16,18 +16,6 @@ function Gridap.Algebra.allocate_vector(
   vec
 end
 
-function Gridap.Algebra.allocate_coo_vectors(
-  ::Type{GridapDistributedPETScWrappers.Mat{Float64}},
-  dn::MPIPETScDistributedData,
-)
-  DistributedData(dn) do part, n
-    I = Vector{Int}(undef, n)
-    J = Vector{Int}(undef, n)
-    V = Vector{Float64}(undef, n)
-    (I, J, V)
-  end
-end
-
 function Gridap.Algebra.fill_entries!(a::GridapDistributedPETScWrappers.Mat{Float64},v::Number)
   fill!(a,v)
   a

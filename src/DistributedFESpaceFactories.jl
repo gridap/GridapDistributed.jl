@@ -1,11 +1,9 @@
-function Gridap.FESpace(::Type{V}; model::DistributedDiscreteModel,kwargs...) where V
-  constraint=Gridap.FESpaces._get_kwarg(:constraint,kwargs,nothing)
+function Gridap.FESpace(::Type{V};
+      model::DistributedDiscreteModel, reffe, constraint=nothing, kwargs...) where V
   if constraint == nothing
-    DistributedFESpaceFromLocalFESpaces(V;model=model,kwargs...)
+    DistributedFESpaceFromLocalFESpaces(V;model=model, reffe=reffe, kwargs...)
   elseif constraint == :zeromean
-    dkwargs=Dict(kwargs)
-    delete!(dkwargs,:constraint)
-    ZeroMeanDistributedFESpace(V;model=model,dkwargs...)
+    ZeroMeanDistributedFESpace(V; model=model, reffe=reffe, kwargs...)
   else
     @unreachable "Unknown constraint value $constraint"
   end

@@ -48,23 +48,21 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
 
   # FE Spaces
   order = 2
+  reffeᵤ = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
+  reffeₚ = Gridap.ReferenceFEs.LagrangianRefFE(Float64,QUAD,order-1;space=:P)
   V = FESpace(
         vector_type,
-        valuetype = VectorValue{2,Float64},
-        reffe=:QLagrangian,
-        order = order,
-        model = model,
-        conformity = :H1,
+        model=model,
+        reffe=reffeᵤ,
+        conformity=:H1,
         dirichlet_tags=["diri0","diri1"],
       )
 
   Q = FESpace(
        vector_type,
-       reffe=:PLagrangian,
-       conformity=:L2,
-       valuetype=Float64,
        model=model,
-       order=order-1)
+       reffe=reffeₚ,
+       conformity=:L2)
        #constraint=:zeromean)
 
   Y=MultiFieldFESpace(model,[V,Q])
@@ -81,68 +79,85 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
     @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
   end
 
-  # Terms in the weak form
-  terms = DistributedData(model, strategy) do part, (model, gids), strategy
-    trian = Triangulation(strategy, model)
-    btrian=BoundaryTriangulation(strategy,model,"neumann")
+  function a(x,y)
+    DistributedData(x,y,ddΩ,ddΓ) do part, xl, yl, dΩ, dΓ
+        ul,pl=xl
+        vl,ql=yl
+        ∫( ∇(vl)⊙∇(ul) - (∇⋅vl)*pl + ql*(∇⋅ul) )dΩ
+    end
+  end
 
-    degree=2
-    quad=CellQuadrature(trian, degree)
-    bquad=CellQuadrature(btrian,degree)
-
-    function a(x,y)
-      v,q = y
-      y,z = x
-      ∇(v)⊙∇(y) - (∇⋅v)*z + q*(∇⋅y)
+  function l(y)
+    DistributedData(y,ddΩ,ddΓ) do part, yl, dΩ, dΓ
+      vl,_=yl
+      ∫( vl⋅f )dΩ + ∫( vl⋅s )dΓ
     end
-    function l(y)
-      v,q = y
-      f⋅v
-    end
-    function lΓ(y)
-      v,q = y
-      s⋅v
-    end
-    t_Ω = AffineFETerm(a,l,trian,quad)
-    t_Γ = FESource(lΓ,btrian,bquad)
-    (t_Ω,t_Γ)
   end
 
    # Assembler
    assem = SparseMatrixAssembler(matrix_type, vector_type, X, Y, strategy)
 
-  #  # FE solution
-   op = AffineFEOperator(assem, terms)
-   xh = solve(op)
+   function setup_dΩ(part,(model,gids),strategy)
+     trian = Triangulation(strategy,model)
+     degree = 2*(order+1)
+     Measure(trian,degree)
+   end
+   ddΩ = DistributedData(setup_dΩ,model,strategy)
 
-  # Error norms and print solution
+   function setup_dΓ(part,(model,gids),strategy)
+     btrian=BoundaryTriangulation(strategy,model;tags="neumann")
+     degree = 2*(order+1)
+     Measure(btrian,degree)
+   end
+   ddΓ = DistributedData(setup_dΓ,model,strategy)
+
+  # #  # FE solution
+  op = AffineFEOperator(a,l,X,Y,assem)
+  xh = solve(op)
+
   sums = DistributedData(model, xh) do part, (model, gids), xh
     trian = Triangulation(model)
     owned_trian = remove_ghost_cells(trian, part, gids)
-
-    owned_quad = CellQuadrature(owned_trian, 2)
-    owned_xh = restrict(xh, owned_trian)
-
-    uh, ph = owned_xh
-
-    #writevtk(owned_trian, "results_$part", cellfields = ["uh" => uh])
-    e = u - uh
-    l2(u) = u ⋅ u
-    sum(integrate(l2(e), owned_trian, owned_quad))
+    dΩ = Measure(owned_trian, 2*order)
+    uh,_ = xh
+    e = u-uh
+    sum(∫(e⋅e)dΩ)
   end
   e_l2 = sum(gather(sums))
-
   tol = 1.0e-9
   println("$(e_l2) < $(tol)")
   @test e_l2 < tol
+
+  # # Error norms and print solution
+  # sums = DistributedData(model, xh) do part, (model, gids), xh
+  #   trian = Triangulation(model)
+  #   owned_trian = remove_ghost_cells(trian, part, gids)
+
+  #   owned_quad = CellQuadrature(owned_trian, 2)
+  #   owned_xh = restrict(xh, owned_trian)
+
+  #   uh, ph = owned_xh
+
+  #   #writevtk(owned_trian, "results_$part", cellfields = ["uh" => uh])
+  #   e = u - uh
+  #   l2(u) = u ⋅ u
+  #   sum(integrate(l2(e), owned_trian, owned_quad))
+  # end
+  # e_l2 = sum(gather(sums))
+
+  # tol = 1.0e-9
+  # println("$(e_l2) < $(tol)")
+  # @test e_l2 < tol
 end
 
 subdomains = (2,2)
-SequentialCommunicator(subdomains) do comm
+function f(comm)
   run(comm,subdomains,"RowsComputedLocally", false)
   run(comm,subdomains,"OwnedCellsStrategy", false)
   run(comm,subdomains,"RowsComputedLocally", true)
   run(comm,subdomains,"OwnedCellsStrategy", true)
 end
+
+#SequentialCommunicator(f,subdomains)
 
 end # module

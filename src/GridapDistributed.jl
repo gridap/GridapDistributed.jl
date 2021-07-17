@@ -12,6 +12,7 @@ using SparseArrays
 using MPI
 using GridapDistributedPETScWrappers
 using FillArrays
+using SparseMatricesCSR
 
 export Communicator
 export num_parts
@@ -90,8 +91,6 @@ include("SequentialDistributedAssemblersInterfaces.jl")
 include("MPIPETScAlgebraInterfaces.jl")
 
 include("MPIPETScDistributedAssemblersInterfaces.jl")
-
-include("DistributedFETerms.jl")
 
 include("DistributedFEOperators.jl")
 

@@ -12,12 +12,12 @@ SequentialCommunicator(subdomains) do comm
   model = CartesianDiscreteModel(comm,subdomains,domain,cells)
   nsubdoms = prod(subdomains)
   vector_type = Vector{Float64}
+  reffe = ReferenceFE(lagrangian,Float64,1)
   V = FESpace(vector_type,
               model=model,
-              constraint=:zeromean,
-              valuetype=Float64,
-              reffe=:Lagrangian,
-              order=1)
+              reffe=reffe,
+              degree=1,
+              constraint=:zeromean)
   fv=zero_free_values(V)
   fv .= rand(length(fv))
   vh=FEFunction(V,fv)
@@ -26,9 +26,8 @@ SequentialCommunicator(subdomains) do comm
   sums = DistributedData(model, vh) do part, (model, gids), vh
     trian = Triangulation(model)
     owned_trian = remove_ghost_cells(trian, part, gids)
-    owned_quad = CellQuadrature(owned_trian, 1)
-    owned_vh = restrict(vh, owned_trian)
-    sum(integrate(owned_vh, owned_trian, owned_quad))
+    dΩ = Measure(owned_trian, 1)
+    sum(∫(vh)dΩ)
   end
   mean = sum(gather(sums))
   tol = 1.0e-10

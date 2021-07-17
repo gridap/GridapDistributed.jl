@@ -1,3 +1,30 @@
+function Gridap.FESpaces.collect_cell_matrix(
+  u::DistributedFESpace,v::DistributedFESpace,terms)
+  DistributedData(u,v,terms) do part, (u,_), (v,_), terms
+    collect_cell_matrix(u,v,terms)
+  end
+end
+
+function Gridap.FESpaces.collect_cell_vector(v::DistributedFESpace,terms)
+  DistributedData(v,terms) do part, (v,_), terms
+    collect_cell_vector(v,terms)
+  end
+end
+
+function Gridap.FESpaces.collect_cell_matrix_and_vector(
+  u::DistributedFESpace,v::DistributedFESpace,mterms,vterms)
+  DistributedData(u,v,mterms,vterms) do part, (u,_), (v,_), mterms, vterms
+    collect_cell_matrix_and_vector(u,v,mterms,vterms)
+  end
+end
+
+function Gridap.FESpaces.collect_cell_matrix_and_vector(
+  u::DistributedFESpace,v::DistributedFESpace,mterms,vterms,uhd::FEFunction)
+  DistributedData(u,v,mterms,vterms,uhd) do part, (u,_), (v,_), mterms, vterms, uhd
+    collect_cell_matrix_and_vector(u,v,mterms,vterms,uhd)
+  end
+end
+
 
 struct DistributedAssemblyStrategy{T<:AssemblyStrategy}
   strategies::DistributedData{T}
@@ -14,6 +41,12 @@ struct DistributedAssembler{M,V,AS} <: Assembler
   test::DistributedFESpace
   assems::DistributedData{<:Assembler}
   strategy::DistributedAssemblyStrategy{AS}
+end
+
+struct ArtificeSparseMatrixToLeverageDefaults{Tv,Ti} <: AbstractSparseMatrix{Tv,Ti} end
+
+function Gridap.Algebra.is_entry_stored(::Type{<:ArtificeSparseMatrixToLeverageDefaults},i,j)
+  true
 end
 
 """
@@ -75,29 +108,25 @@ function get_distributed_data(dassem::DistributedAssembler)
   dassem.assems
 end
 
-function Gridap.FESpaces.get_test(a::DistributedAssembler)
-  a.test
-end
-
-function Gridap.FESpaces.get_trial(a::DistributedAssembler)
-  a.trial
-end
-
 function Gridap.FESpaces.get_assembly_strategy(a::DistributedAssembler)
   a.strategy
 end
 
 function Gridap.FESpaces.allocate_matrix(dassem::DistributedAssembler,dmatdata)
-
-  dn = DistributedData(dassem,dmatdata) do part, assem, matdata
-    count_matrix_nnz_coo(assem,matdata)
+  dm1 = DistributedData(dassem,dmatdata) do part, assem, matdata
+    builder=SparseMatrixBuilder(ArtificeSparseMatrixToLeverageDefaults{Float64,Int64},MinMemory())
+    m1=nz_counter(builder,(get_rows(assem),get_cols(assem)))
+    symbolic_loop_matrix!(m1,assem,matdata)
   end
 
-  dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
+  dm2 = DistributedData(dm1,dassem,dmatdata) do part, m1, assem, matdata
+    m2=nz_allocation(m1)
+    symbolic_loop_matrix!(m2,assem,matdata)
+    m2
+  end
 
-  do_on_parts(dassem,dIJV,dmatdata) do part, assem, IJV, matdata
-    I,J,V = IJV
-    fill_matrix_coo_symbolic!(I,J,assem,matdata)
+  dIJV = DistributedData(dm2) do part, m2
+    m2.I,m2.J,m2.V
   end
 
   finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
@@ -114,24 +143,39 @@ function Gridap.FESpaces.allocate_vector(a::DistributedAssembler,dvecdata)
 end
 
 function Gridap.FESpaces.allocate_matrix_and_vector(dassem::DistributedAssembler,ddata)
-
-  dn = DistributedData(dassem,ddata) do part, assem, data
-    count_matrix_and_vector_nnz_coo(assem,data)
+  dm1 = DistributedData(dassem,ddata) do part, assem, data
+    mbuilder=SparseMatrixBuilder(ArtificeSparseMatrixToLeverageDefaults{Float64,Int64},MinMemory())
+    m1=nz_counter(mbuilder,(get_rows(assem),get_cols(assem)))
+    vbuilder=ArrayBuilder(get_local_vector_type(dassem.vector_type))
+    v1=nz_counter(vbuilder,(get_rows(assem),))
+    symbolic_loop_matrix_and_vector!(m1,v1,assem,data)
+    m1
   end
 
-  dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
-  do_on_parts(dassem,dIJV,ddata) do part, assem, IJV, data
-    I,J,V = IJV
-    fill_matrix_and_vector_coo_symbolic!(I,J,assem,data)
+  gids = dassem.test.gids
+  db = allocate_local_vector(dassem.strategy,dassem.vector_type,gids)
+
+  dm2 = DistributedData(dm1,db,dassem,ddata) do part, m1, b, assem, data
+    m2=nz_allocation(m1)
+    symbolic_loop_matrix_and_vector!(m2,b,assem,data)
+    m2
   end
+
+  dIJV = DistributedData(dm2) do part, m2
+    m2.I,m2.J,m2.V
+  end
+
   finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
   A = assemble_global_matrix(dassem.strategy,
                              dassem.matrix_type,
                              dIJV,
                              dassem.test.gids,
                              dassem.trial.gids)
-  gids = dassem.test.gids
-  b = allocate_vector(dassem.vector_type,gids)
+
+  b = assemble_global_vector(dassem.strategy,
+                             dassem.vector_type,
+                             db,
+                             dassem.test.gids)
   A,b
 end
 
@@ -170,16 +214,23 @@ function Gridap.FESpaces.assemble_matrix_and_vector_add!(dmat,dvec,dassem::Distr
 end
 
 function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dmatdata)
-  dn = DistributedData(dassem,dmatdata) do part, assem, matdata
-    count_matrix_nnz_coo(assem,matdata)
+  dm1 = DistributedData(dassem,dmatdata) do part, assem, matdata
+    builder=SparseMatrixBuilder(ArtificeSparseMatrixToLeverageDefaults{Float64,Int64},MinMemory())
+    m1=nz_counter(builder,(get_rows(assem),get_cols(assem)))
+    symbolic_loop_matrix!(m1,assem,matdata)
   end
-  dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
-  do_on_parts(dassem,dIJV,dmatdata) do part, assem, IJV, matdata
-    I,J,V = IJV
-    fill_matrix_coo_numeric!(I,J,V,assem,matdata)
-  end
-  finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
 
+  dm2 = DistributedData(dm1,dassem,dmatdata) do part, m1, assem, matdata
+    m2=nz_allocation(m1)
+    numeric_loop_matrix!(m2,assem,matdata)
+    m2
+  end
+
+  dIJV = DistributedData(dm2) do part, m2
+    m2.I,m2.J,m2.V
+  end
+
+  finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
   A = assemble_global_matrix(dassem.strategy,
                              dassem.matrix_type,
                              dIJV,
@@ -188,26 +239,41 @@ function Gridap.FESpaces.assemble_matrix(dassem::DistributedAssembler, dmatdata)
 end
 
 function Gridap.FESpaces.assemble_vector(dassem::DistributedAssembler, dvecdata)
-  vec = allocate_vector(dassem,dvecdata)
-  assemble_vector!(vec,dassem,dvecdata)
-  vec
+  gids = dassem.test.gids
+  db = allocate_local_vector(dassem.strategy,dassem.vector_type,gids)
+  do_on_parts(dassem,dvecdata,db) do part, assem, vecdata, b
+     numeric_loop_vector!(b,assem,vecdata)
+  end
+  b = assemble_global_vector(dassem.strategy,
+                             dassem.vector_type,
+                             db,
+                             dassem.test.gids)
 end
 
 function Gridap.FESpaces.assemble_matrix_and_vector(dassem::DistributedAssembler,ddata)
-  dn = DistributedData(dassem,ddata) do part, assem, data
-    count_matrix_and_vector_nnz_coo(assem,data)
+  dm1 = DistributedData(dassem,ddata) do part, assem, data
+    mbuilder=SparseMatrixBuilder(ArtificeSparseMatrixToLeverageDefaults{Float64,Int64},MinMemory())
+    m1=nz_counter(mbuilder,(get_rows(assem),get_cols(assem)))
+    vbuilder=ArrayBuilder(get_local_vector_type(dassem.vector_type))
+    v1=nz_counter(vbuilder,(get_rows(assem),))
+    symbolic_loop_matrix_and_vector!(m1,v1,assem,data)
+    m1
   end
 
   gids = dassem.test.gids
   db = allocate_local_vector(dassem.strategy,dassem.vector_type,gids)
 
-  dIJV = allocate_coo_vectors(dassem.matrix_type,dn)
-  do_on_parts(dassem,dIJV,ddata,db) do part, assem, IJV, data, b
-    I,J,V = IJV
-    fill_matrix_and_vector_coo_numeric!(I,J,V,b,assem,data)
+  dm2 = DistributedData(dm1,db,dassem,ddata) do part, m1, b, assem, data
+    m2=nz_allocation(m1)
+    numeric_loop_matrix_and_vector!(m2,b,assem,data)
+    m2
   end
-  finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
 
+  dIJV = DistributedData(dm2) do part, m2
+    m2.I,m2.J,m2.V
+  end
+
+  finalize_coo!(dassem.matrix_type,dIJV,dassem.test.gids,dassem.trial.gids)
   A = assemble_global_matrix(dassem.strategy,
                              dassem.matrix_type,
                              dIJV,
@@ -318,7 +384,7 @@ function Gridap.FESpaces.SparseMatrixAssembler(
 
   assems = DistributedData(
     dtrial.spaces,dtest.spaces,dstrategy) do part, U, V, strategy
-    SparseMatrixAssembler(get_local_matrix_type(matrix_type),  
+    SparseMatrixAssembler(get_local_matrix_type(matrix_type),
                           get_local_vector_type(vector_type),
                           U,
                           V,

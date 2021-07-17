@@ -6,8 +6,8 @@ using GridapDistributed
 using Test
 using SparseArrays
 
-subdomains = (2,2)
-SequentialCommunicator(subdomains) do comm
+
+function run_simulation(comm)
   T = Float64
   vector_type = Vector{T}
   matrix_type = SparseMatrixCSC{T,Int}
@@ -16,61 +16,72 @@ SequentialCommunicator(subdomains) do comm
   cells = (4,4)
   model = CartesianDiscreteModel(comm,subdomains,domain,cells)
 
-  V = FESpace(vector_type,model=model,valuetype=Float64,reffe=:Lagrangian,order=1)
-
+  reffe = ReferenceFE(lagrangian,Float64,1)
+  V = FESpace(vector_type,model=model,reffe=reffe)
   U = TrialFESpace(V)
 
-  strategy = RowsComputedLocally(V)
-
+  strategy = RowsComputedLocally(V; global_dofs=true)
   assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
-
-  function setup_terms(part,(model,gids))
+  function setup_dΩ(part,(model,gids))
     trian = Triangulation(model)
     degree = 2
-    quad = CellQuadrature(trian,degree)
-    a(u,v) = v*u
-    l(v) = 1*v
-    t1 = AffineFETerm(a,l,trian,quad)
-    (t1,)
+    Measure(trian,degree)
+  end
+  ddΩ = DistributedData(setup_dΩ,model)
+
+  veccont = DistributedData(V,ddΩ) do part, (VL, gids), dΩ
+     vl = get_fe_basis(VL)
+     ∫(1*vl)dΩ
   end
 
-  dterms = DistributedData(setup_terms,model)
-
-  vecdata = DistributedData(assem,dterms) do part, assem, terms
-    UL = get_trial(assem)
-    VL = get_test(assem)
-    u0 = zero(UL)
-    vl = get_cell_basis(VL)
-    collect_cell_vector(u0,vl,terms)
+  matcont = DistributedData(U,V,ddΩ) do part, (UL,Ugids), (VL,Vgids), dΩ
+    ul = get_trial_fe_basis(UL)
+    vl = get_fe_basis(VL)
+    ∫(vl*ul)dΩ
   end
 
-  matdata = DistributedData(assem,dterms) do part, assem, terms
-    UL = get_trial(assem)
-    VL = get_test(assem)
-    ul = get_cell_basis(UL)
-    vl = get_cell_basis(VL)
-    collect_cell_matrix(ul,vl,terms)
-  end
+  matdata=collect_cell_matrix(U,V,matcont)
+  A1 = assemble_matrix(assem,matdata)
+  vecdata=collect_cell_vector(V,veccont)
+  b1 = assemble_vector(assem,vecdata)
+  @test sum(b1) ≈ 1
+  @test ones(1,size(A1,1))*A1*ones(size(A1,2)) ≈ [1]
 
-  A = assemble_matrix(assem,matdata)
-  b = assemble_vector(assem,vecdata)
+  data = collect_cell_matrix_and_vector(U,V,matcont,veccont)
+  A2,b2 = assemble_matrix_and_vector(assem,data)
+  @test sum(b2) ≈ 1
+  @test ones(1,size(A2,1))*A2*ones(size(A2,2)) ≈ [1]
 
-  @test sum(b) ≈ 1
-  @test ones(1,size(A,1))*A*ones(size(A,2)) ≈ [1]
+  @test norm(A1-A2) ≈ 0.0
+  @test norm(b1-b2) ≈ 0.0
 
-  v = get_cell_basis(V)
-  du = get_cell_basis(U)
-  uh = zero(U)
+  A3 = allocate_matrix(assem,matdata)
+  @test findnz(A1)[1] == findnz(A3)[1]
+  @test findnz(A1)[2] == findnz(A3)[2]
+  assemble_matrix!(A3,assem,matdata)
+  @test norm(A1-A3) ≈ 0.0
 
-  matdata = collect_cell_matrix(du,v,dterms)
-  vecdata = collect_cell_vector(uh,v,dterms)
-  data = collect_cell_matrix_and_vector(uh,du,v,dterms)
-  test_assembler(assem,matdata,vecdata,data)
+  assemble_matrix_add!(A3,assem,matdata)
+  @test norm(2*A1-A3) ≈ 0.0
 
-  matdata = collect_cell_jacobian(uh,du,v,dterms)
-  vecdata = collect_cell_residual(uh,v,dterms)
-  data = collect_cell_jacobian_and_residual(uh,du,v,dterms)
-  test_assembler(assem,matdata,vecdata,data)
-end 
+  b3 = allocate_vector(assem,vecdata)
+  assemble_vector!(b3,assem,vecdata)
+  @test norm(b3-b1) ≈ 0.0
+
+  assemble_vector_add!(b3,assem,vecdata)
+  @test norm(b3-2*b1) ≈ 0.0
+
+  A4, b4 = allocate_matrix_and_vector(assem,data)
+  assemble_matrix_and_vector!(A4,b4,assem,data)
+  @test norm(A1-A4) ≈ 0.0
+  @test norm(b1-b4) ≈ 0.0
+  assemble_matrix_and_vector_add!(A4,b4,assem,data)
+  @test norm(b4-2*b1) ≈ 0.0
+  
+end
+
+
+subdomains = (2,2)
+SequentialCommunicator(run_simulation,subdomains)
 
 end # module
