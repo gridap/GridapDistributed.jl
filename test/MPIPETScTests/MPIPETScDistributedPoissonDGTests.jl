@@ -29,16 +29,14 @@ function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
   h = (domain[2] - domain[1]) / cells[1]
 
   # FE Spaces
-  order = 2
-  V = FESpace(
-    vector_type,
-    valuetype = Float64,
-    reffe = :Lagrangian,
-    order = order,
-    model = model,
-    conformity = :L2,
-  )
-
+  order  = 2
+  γ = 10
+  degree = 2*order
+  reffe = ReferenceFE(lagrangian,Float64,order)
+  V = FESpace(vector_type,
+              model=model,
+              reffe=reffe,
+              conformity=:L2)
   U = TrialFESpace(V)
 
   if (assembly_strategy == "RowsComputedLocally")
@@ -49,39 +47,44 @@ function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
     @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
   end
 
-  # Terms in the weak form
-  terms = DistributedData(model, strategy) do part, (model, gids), strategy
-    γ = 10
-    degree = 2 * order
+  function setup_dΩ(part,(model,gids),strategy)
+    trian = Triangulation(strategy,model)
+    Measure(trian,degree)
+  end
+  ddΩ = DistributedData(setup_dΩ,model,strategy)
 
-    trian = Triangulation(strategy, model)
-    btrian = BoundaryTriangulation(strategy, model)
-    strian = SkeletonTriangulation(strategy, model)
+  function setup_dΓ(part,(model,gids),strategy)
+    trian = BoundaryTriangulation(strategy,model)
+    Measure(trian,degree)
+  end
+  ddΓ = DistributedData(setup_dΓ,model,strategy)
 
-    quad = CellQuadrature(trian, degree)
-    bquad = CellQuadrature(btrian, degree)
-    squad = CellQuadrature(strian, degree)
+  function setup_dΛ(part,(model,gids),strategy)
+    trian = SkeletonTriangulation(strategy,model)
+    Measure(trian,degree)
+  end
+  ddΛ = DistributedData(setup_dΛ,model,strategy)
 
-    bn = get_normal_vector(btrian)
-    sn = get_normal_vector(strian)
-
-    a(u, v) = ∇(v)⋅∇(u)
-    l(v) = v * f
-    t_Ω = AffineFETerm(a, l, trian, quad)
-
-    a_Γd(u, v) = (γ / h) * v * u - v * (bn⋅∇(u)) - (bn⋅∇(v)) * u
-    l_Γd(v) = (γ / h) * v * ud - (bn⋅∇(v)) * ud
-    t_Γd = AffineFETerm(a_Γd, l_Γd, btrian, bquad)
-
-    a_Γ(u, v) = (γ / h) * jump(v * sn)⋅jump(u * sn) - jump(v * sn)⋅mean(∇(u)) -
-      mean(∇(v))⋅jump(u * sn)
-    t_Γ = LinearFETerm(a_Γ, strian, squad)
-    (t_Ω, t_Γ, t_Γd)
+  function a(u,v)
+    DistributedData(u,v,ddΩ,ddΓ,ddΛ) do part, ul, vl, dΩ, dΓ, dΛ
+      n_Γ = get_normal_vector(dΓ.quad.trian)
+      n_Λ = get_normal_vector(dΛ.quad.trian)
+      ∫( ∇(vl)⋅∇(ul) )*dΩ +
+      ∫( (γ/h)*vl*ul - vl*(n_Γ⋅∇(ul)) - (n_Γ⋅∇(vl))*ul )*dΓ +
+      ∫( (γ/h)*jump(vl*n_Λ)⋅jump(ul*n_Λ) - jump(vl*n_Λ)⋅mean(∇(ul)) -  mean(∇(vl))⋅jump(ul*n_Λ) )*dΛ
+    end
+  end
+  function l(v)
+    DistributedData(v,ddΩ,ddΓ) do part, vl, dΩ, dΓ
+      n_Γ = get_normal_vector(dΓ.quad.trian)
+      ∫( vl*f )*dΩ +
+      ∫( (γ/h)*vl*ud - (n_Γ⋅∇(vl))*ud )*dΓ
+    end
   end
 
   # Assembly
   assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
-  op = AffineFEOperator(assem, terms)
+  op = AffineFEOperator(a,l,U,V,assem)
 
   # FE solution
   ls = PETScLinearSolver(
@@ -99,14 +102,12 @@ function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
   sums = DistributedData(model, uh) do part, (model, gids), uh
     trian = Triangulation(model)
     owned_trian = remove_ghost_cells(trian, part, gids)
-    owned_quad = CellQuadrature(owned_trian, 2 * order)
-    owned_uh = restrict(uh, owned_trian)
-    writevtk(owned_trian, "results_$part", cellfields = ["uh" => owned_uh])
-    e = u - owned_uh
-    l2(u) = u * u
-    h1(u) = u * u + ∇(u) ⋅ ∇(u)
-    e_l2 = sum(integrate(l2(e), owned_trian, owned_quad))
-    e_h1 = sum(integrate(h1(e), owned_trian, owned_quad))
+    dΩ = Measure(owned_trian, degree)
+    e = u - uh
+    l2(u) = ∫( u⊙u )*dΩ
+    h1(u) = ∫( u⊙u + ∇(u)⊙∇(u) )*dΩ
+    e_l2 = sum(l2(e))
+    e_h1 = sum(h1(e))
     e_l2, e_h1
   end
   e_l2_h1 = gather(sums)
