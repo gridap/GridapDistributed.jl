@@ -102,7 +102,7 @@ function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
   dflux(∇du,∇u) = (p-2)*norm(∇u)^(p-4)*(∇u⋅∇du)*∇u + norm(∇u)^(p-2)*∇du
 
   # Discretization
-  subdomains = (1,1)
+  subdomains = (2,2)
   domain = (0,1,0,1)
   cells = (4,4)
   model = CartesianDiscreteModel(comm,subdomains,domain,cells)
