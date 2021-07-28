@@ -3,11 +3,11 @@ function filter_cells_when_needed(strategy::AssemblyStrategy, trian::Triangulati
   @abstractmethod
 end
 
-function filter_cells_when_needed(strategy::RowsComputedLocally, trian::Triangulation)
+function filter_cells_when_needed(strategy::OwnedAndGhostCellsAssemblyStrategy, trian::Triangulation)
   trian
 end
 
-function filter_cells_when_needed(strategy::OwnedCellsStrategy, trian::Triangulation)
+function filter_cells_when_needed(strategy::OwnedCellsAssemblyStrategy, trian::Triangulation)
   remove_ghost_cells(trian,strategy.part,strategy.cell_gids)
 end
 

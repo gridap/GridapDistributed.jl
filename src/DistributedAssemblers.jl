@@ -184,8 +184,17 @@ function Gridap.FESpaces.assemble_matrix!(dmat,dassem::DistributedAssembler, dma
   assemble_matrix_add!(dmat,dassem,dmatdata)
 end
 
-function Gridap.FESpaces.assemble_matrix_add!(dmat,dassem::DistributedAssembler, dmatdata)
-  do_on_parts(dassem,dmatdata,dmat) do part, assem, matdata, mat
+function is_seq_and_map_dofs_type_proc_local(dassem::DistributedAssembler{V,M,AS}) where {V,M,AS}
+  result=isa(dassem.assems,SequentialDistributedData)
+  mapdofstype=get_map_dofs_type(AS)
+  result=result && mapdofstype==MapDoFsTypeProcLocal
+end
+
+function Gridap.FESpaces.assemble_matrix_add!(dmat,
+                                              dassem::DistributedAssembler{V,M,AS},
+                                              dmatdata) where {V,M,AS}
+  @notimplementedif is_seq_and_map_dofs_type_proc_local(dassem)
+  do_on_parts(dassem,dassem.test.gids,dmatdata,dmat) do part, assem, gids, matdata, mat
     assemble_matrix_add!(mat,assem,matdata)
   end
 end
@@ -196,6 +205,7 @@ function Gridap.FESpaces.assemble_vector!(dvec,dassem::DistributedAssembler, dve
 end
 
 function Gridap.FESpaces.assemble_vector_add!(dvec,dassem::DistributedAssembler, dvecdata)
+  @notimplementedif is_seq_and_map_dofs_type_proc_local(dassem)
   do_on_parts(dassem,dvecdata,dvec) do part, assem, vecdata, vec
     assemble_vector_add!(vec,assem,vecdata)
   end
@@ -208,6 +218,7 @@ function Gridap.FESpaces.assemble_matrix_and_vector!(dmat,dvec,dassem::Distribut
 end
 
 function Gridap.FESpaces.assemble_matrix_and_vector_add!(dmat,dvec,dassem::DistributedAssembler, ddata)
+  @notimplementedif is_seq_and_map_dofs_type_proc_local(dassem)
   do_on_parts(dassem,ddata,dmat,dvec) do part, assem, data, mat, vec
     assemble_matrix_and_vector_add!(mat,vec,assem,data)
   end
@@ -287,91 +298,115 @@ function Gridap.FESpaces.assemble_matrix_and_vector(dassem::DistributedAssembler
   A,b
 end
 
+# Type trait hierarchy for
+# GridapDistributed AssemblyStrategy implementations
+abstract type MapDoFsType end;
+struct MapDoFsTypeProcLocal <: MapDoFsType end;
+struct MapDoFsTypeGlobal    <: MapDoFsType end;
+const DefaultMapDoFsType = MapDoFsTypeGlobal
+
 
 #
 # Specializations
 
 # This is one of the usual assembly strategies in parallel FE computations
-# (but not the one we have used in the parallel agfem paper)
 # Each proc owns a set of matrix / vector rows (and all cols in these rows)
 # Each proc computes locally all values in the owned rows
 # This typically requires to loop also over ghost cells
-struct RowsComputedLocally{GlobalDoFs} <: AssemblyStrategy
+struct OwnedAndGhostCellsAssemblyStrategy{MapDoFsType} <: AssemblyStrategy
   part::Int
   gids::IndexSet
 end
 
-function Gridap.FESpaces.row_map(a::RowsComputedLocally{true},row)
+function Gridap.FESpaces.row_map(a::OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeGlobal},row)
   a.gids.lid_to_gid[row]
 end
 
-function Gridap.FESpaces.col_map(a::RowsComputedLocally{true},col)
+function Gridap.FESpaces.col_map(a::OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeGlobal},col)
   a.gids.lid_to_gid[col]
 end
 
-function Gridap.FESpaces.row_map(a::RowsComputedLocally{false},row)
+function Gridap.FESpaces.row_map(a::OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeProcLocal},row)
   row
 end
 
-function Gridap.FESpaces.col_map(a::RowsComputedLocally{false},col)
+function Gridap.FESpaces.col_map(a::OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeProcLocal},col)
   col
 end
 
-function Gridap.FESpaces.row_mask(a::RowsComputedLocally,row)
+function Gridap.FESpaces.row_mask(a::OwnedAndGhostCellsAssemblyStrategy,row)
   a.part == a.gids.lid_to_owner[row]
 end
 
-function Gridap.FESpaces.col_mask(a::RowsComputedLocally,col)
+function Gridap.FESpaces.col_mask(a::OwnedAndGhostCellsAssemblyStrategy,col)
   true
 end
 
-function RowsComputedLocally(V::DistributedFESpace; global_dofs=true)
+function OwnedAndGhostCellsAssemblyStrategy(
+  map_dofs_type::Type{<:MapDoFsType},V::DistributedFESpace)
    dgids = V.gids
    strategies = DistributedData(dgids) do part, gids
-     RowsComputedLocally{global_dofs}(part,gids)
+     OwnedAndGhostCellsAssemblyStrategy{map_dofs_type}(part,gids)
    end
    DistributedAssemblyStrategy(strategies)
 end
 
-struct OwnedCellsStrategy{GlobalDoFs} <: AssemblyStrategy
+function OwnedAndGhostCellsAssemblyStrategy(V::DistributedFESpace,
+  map_dofs_type::MapDoFsType=DefaultMapDoFsType())
+  OwnedAndGhostCellsAssemblyStrategy(typeof(map_dofs_type),V)
+end
+
+struct OwnedCellsAssemblyStrategy{MapDoFsType} <: AssemblyStrategy
   part::Int
   dof_gids::IndexSet
   cell_gids::IndexSet
 end
 
-function Gridap.FESpaces.row_map(a::OwnedCellsStrategy{true},row)
+function Gridap.FESpaces.row_map(a::OwnedCellsAssemblyStrategy{MapDoFsTypeGlobal},row)
   a.dof_gids.lid_to_gid[row]
 end
 
-function Gridap.FESpaces.col_map(a::OwnedCellsStrategy{true},col)
+function Gridap.FESpaces.col_map(a::OwnedCellsAssemblyStrategy{MapDoFsTypeGlobal},col)
   a.dof_gids.lid_to_gid[col]
 end
 
-function Gridap.FESpaces.row_map(a::OwnedCellsStrategy{false},row)
+function Gridap.FESpaces.row_map(a::OwnedCellsAssemblyStrategy{MapDoFsTypeProcLocal},row)
   row
 end
 
-function Gridap.FESpaces.col_map(a::OwnedCellsStrategy{false},col)
+function Gridap.FESpaces.col_map(a::OwnedCellsAssemblyStrategy{MapDoFsTypeProcLocal},col)
   col
 end
 
-function Gridap.FESpaces.row_mask(a::OwnedCellsStrategy,row)
+function Gridap.FESpaces.row_mask(a::OwnedCellsAssemblyStrategy,row)
   true
 end
 
-function Gridap.FESpaces.col_mask(a::OwnedCellsStrategy,col)
+function Gridap.FESpaces.col_mask(a::OwnedCellsAssemblyStrategy,col)
   true
 end
 
-function OwnedCellsStrategy(M::DistributedDiscreteModel, V::DistributedFESpace; global_dofs=true)
-  dcell_gids = M.gids
+function OwnedCellsAssemblyStrategy(V::DistributedFESpace,
+                                    map_dofs_type::MapDoFsType=DefaultMapDoFsType())
+  OwnedCellsAssemblyStrategy(typeof(map_dofs_type),V)
+end
+
+function OwnedCellsAssemblyStrategy(map_dofs_type::Type{<:MapDoFsType}, V::DistributedFESpace)
+  dcell_gids = V.model.gids
   ddof_gids  = V.gids
-  strategies = DistributedData(ddof_gids,dcell_gids) do part, dof_gids, cell_gids
-    OwnedCellsStrategy{global_dofs}(part,dof_gids,cell_gids)
-  end
+  strategies =
+     DistributedData(ddof_gids,dcell_gids) do part, dof_gids, cell_gids
+         OwnedCellsAssemblyStrategy{map_dofs_type}(part,dof_gids,cell_gids)
+     end
   DistributedAssemblyStrategy(strategies)
 end
 
+const DefaultDistributedAssemblyStrategy = OwnedAndGhostCellsAssemblyStrategy
+get_map_dofs_type(::AssemblyStrategy)=@abstractmethod
+get_map_dofs_type(::OwnedAndGhostCellsAssemblyStrategy{T}) where {T}=T
+get_map_dofs_type(::OwnedCellsAssemblyStrategy{T}) where {T}=T
+get_map_dofs_type(::Type{OwnedAndGhostCellsAssemblyStrategy{T}}) where {T}=T
+get_map_dofs_type(::Type{OwnedCellsAssemblyStrategy{T}}) where {T}=T
 
 # TODO this assumes that the global matrix type is the same
 # as the local one
@@ -380,7 +415,7 @@ function Gridap.FESpaces.SparseMatrixAssembler(
   vector_type::Type,
   dtrial::DistributedFESpace,
   dtest::DistributedFESpace,
-  dstrategy::DistributedAssemblyStrategy)
+  dstrategy::DistributedAssemblyStrategy=DefaultDistributedAssemblyStrategy(dtest))
 
   assems = DistributedData(
     dtrial.spaces,dtest.spaces,dstrategy) do part, U, V, strategy

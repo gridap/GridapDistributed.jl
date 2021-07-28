@@ -6,7 +6,7 @@ using Gridap.FESpaces
 using GridapDistributed
 using SparseArrays
 
-function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Bool)
+function run(comm,subdomains)
   # Select matrix and vector types for discrete problem
   # Note that here we use serial vectors and matrices
   # but the assembly is distributed
@@ -35,15 +35,10 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
               dirichlet_tags="boundary")
   U = TrialFESpace(V, u)
 
-  if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(V; global_dofs=global_dofs)
-  elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model,V; global_dofs=global_dofs)
-  else
-    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
-  end
 
+  strategy = OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeGlobal())
   assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
+
   function setup_dΩ(part,(model,gids),strategy)
     trian = Triangulation(strategy,model)
     degree = 2*(order+1)
@@ -81,10 +76,7 @@ end
 
 subdomains = (2,2)
 SequentialCommunicator(subdomains) do comm
-  run(comm,subdomains,"RowsComputedLocally", false)
-  run(comm,subdomains,"OwnedCellsStrategy", false)
-  run(comm,subdomains,"RowsComputedLocally", true)
-  run(comm,subdomains,"OwnedCellsStrategy", true)
+  run(comm,subdomains)
 end
 
 end # module

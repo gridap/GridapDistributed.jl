@@ -14,7 +14,7 @@ function Gridap.FESpaces.num_dirichlet_dofs(f::Gridap.MultiField.MultiFieldFESpa
   result
 end
 
-function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Bool)
+function run(comm,subdomains)
   # Select matrix and vector types for discrete problem
   # Note that here we use serial vectors and matrices
   # but the assembly is distributed
@@ -71,13 +71,7 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
   P=TrialFESpace(Q)
   X=MultiFieldFESpace(Y,[U,P])
 
-  if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(Y; global_dofs=global_dofs)
-  elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model,Y; global_dofs=global_dofs)
-  else
-    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
-  end
+  strategy = OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeGlobal())
 
   function a(x,y)
     DistributedData(x,y,ddΩ,ddΓ) do part, xl, yl, dΩ, dΓ
@@ -127,35 +121,11 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
   tol = 1.0e-9
   println("$(e_l2) < $(tol)")
   @test e_l2 < tol
-
-  # # Error norms and print solution
-  # sums = DistributedData(model, xh) do part, (model, gids), xh
-  #   trian = Triangulation(model)
-  #   owned_trian = remove_ghost_cells(trian, part, gids)
-
-  #   owned_quad = CellQuadrature(owned_trian, 2)
-  #   owned_xh = restrict(xh, owned_trian)
-
-  #   uh, ph = owned_xh
-
-  #   #writevtk(owned_trian, "results_$part", cellfields = ["uh" => uh])
-  #   e = u - uh
-  #   l2(u) = u ⋅ u
-  #   sum(integrate(l2(e), owned_trian, owned_quad))
-  # end
-  # e_l2 = sum(gather(sums))
-
-  # tol = 1.0e-9
-  # println("$(e_l2) < $(tol)")
-  # @test e_l2 < tol
 end
 
 subdomains = (2,2)
 function f(comm)
-  run(comm,subdomains,"RowsComputedLocally", false)
-  run(comm,subdomains,"OwnedCellsStrategy", false)
-  run(comm,subdomains,"RowsComputedLocally", true)
-  run(comm,subdomains,"OwnedCellsStrategy", true)
+  run(comm,subdomains)
 end
 
 #SequentialCommunicator(f,subdomains)

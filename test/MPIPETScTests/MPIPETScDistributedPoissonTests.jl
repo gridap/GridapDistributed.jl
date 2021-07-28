@@ -28,7 +28,6 @@ end
 
 
 function run(comm,
-             assembly_strategy::AbstractString,
              subdomains=(2, 2),
              cells=(4, 4),
              domain = (0, 1, 0, 1))
@@ -55,14 +54,7 @@ function run(comm,
   U = TrialFESpace(V, u)
 
 
-  if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(V; global_dofs=false)
-  elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model, V; global_dofs=false)
-  else
-    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
-  end
-
+  strategy = OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeProcLocal())
   assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
   function setup_dΩ(part,(model,gids),strategy)
     trian = Triangulation(strategy,model)
@@ -116,8 +108,7 @@ subdomains = Tuple(parsed_args["subdomains"])
 partition = Tuple(parsed_args["partition"])
 
 MPIPETScCommunicator() do comm
-  run(comm, "RowsComputedLocally", subdomains,partition)
-  run(comm, "OwnedCellsStrategy",subdomains,partition)
+  run(comm, subdomains,partition)
 end
 
 end # module

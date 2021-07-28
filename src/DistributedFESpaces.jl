@@ -53,6 +53,7 @@ end
 # TO-DO: Better name?
 struct DistributedFESpaceFromLocalFESpaces{V} <: DistributedFESpace
     vector_type::Type{V}
+    model::DistributedDiscreteModel
     spaces::DistributedData{<:FESpace}
     gids::DistributedIndexSet
 end
@@ -83,7 +84,7 @@ function Gridap.TrialFESpace(V::DistributedFESpaceFromLocalFESpaces, args...)
     spaces = DistributedData(V.spaces) do part, space
         TrialFESpace(space, args...)
     end
-    DistributedFESpaceFromLocalFESpaces(get_vector_type(V), spaces, V.gids)
+    DistributedFESpaceFromLocalFESpaces(get_vector_type(V), V.model, spaces, V.gids)
 end
 
 function DistributedFESpaceFromLocalFESpaces(::Type{V};
@@ -102,7 +103,7 @@ function DistributedFESpaceFromLocalFESpaces(::Type{V},
                                              model::DistributedDiscreteModel,
                                              spaces::DistributedData{<:FESpace}) where {V}
     gids = _compute_distributed_index_set(model, spaces)
-    DistributedFESpaceFromLocalFESpaces(V, spaces, gids)
+    DistributedFESpaceFromLocalFESpaces(V, model, spaces, gids)
 end
 
 function _compute_distributed_index_set(

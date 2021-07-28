@@ -16,7 +16,7 @@ function Gridap.FESpaces.num_dirichlet_dofs(f::Gridap.MultiField.MultiFieldFESpa
   result
 end
 
-function run(comm,assembly_strategy::AbstractString, global_dofs::Bool)
+function run(comm)
   # Select matrix and vector types for discrete problem
   # Note that here we use serial vectors and matrices
   # but the assembly is distributed
@@ -74,13 +74,7 @@ function run(comm,assembly_strategy::AbstractString, global_dofs::Bool)
   P=TrialFESpace(Q)
   X=MultiFieldFESpace(Y,[U,P])
 
-  if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(Y; global_dofs=global_dofs)
-  elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model,Y; global_dofs=global_dofs)
-  else
-    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
-  end
+  strategy = OwnedAndGhostCellsAssemblyStrategy(Y,MapDoFsTypeProcLocal())
 
   function a(x,y)
     DistributedData(x,y,ddΩ,ddΓ) do part, xl, yl, dΩ, dΓ
@@ -146,8 +140,7 @@ function run(comm,assembly_strategy::AbstractString, global_dofs::Bool)
 end
 
 MPIPETScCommunicator() do comm
-  run(comm,"RowsComputedLocally", false)
-  run(comm,"OwnedCellsStrategy", false)
+  run(comm)
 end
 
 end # module

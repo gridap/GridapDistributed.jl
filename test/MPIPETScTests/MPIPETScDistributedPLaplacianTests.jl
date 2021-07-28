@@ -85,7 +85,7 @@ function (dist::Distances.SqEuclidean)(a::GridapDistributedPETScWrappers.Vec{Flo
 end
 
 
-function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
+function run(comm)
   # Select matrix and vector types for discrete problem
   # Note that here we use serial vectors and matrices
   # but the assembly is distributed
@@ -118,14 +118,7 @@ function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
               dirichlet_tags="boundary")
   U = TrialFESpace(V,u)
 
-  # Choose parallel assembly strategy
-  if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(V;global_dofs=global_dofs)
-  elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model, V; global_dofs=global_dofs)
-  else
-    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
-  end
+  strategy = OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeProcLocal())
 
   function setup_dΩ(part,(model,gids),strategy)
     trian = Triangulation(strategy,model)
@@ -182,8 +175,7 @@ function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
 end
 
 MPIPETScCommunicator() do comm
-  run(comm,"RowsComputedLocally",false)
-  run(comm,"OwnedCellsStrategy",false)
+  run(comm)
 end
 
 end # module

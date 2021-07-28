@@ -6,7 +6,7 @@ function Gridap.Algebra.allocate_vector(::Type{V},gids::DistributedIndexSet) whe
 end
 
 function allocate_local_vector(
-  strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{false}},DistributedAssemblyStrategy{OwnedCellsStrategy{false}}},
+  strat::Union{DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeProcLocal}},DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{MapDoFsTypeProcLocal}}},
   ::Type{V},
   indices::SequentialDistributedIndexSet,
 ) where V<:Vector
@@ -19,7 +19,7 @@ function allocate_local_vector(
 end
 
 function allocate_local_vector(
-  strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{true}},DistributedAssemblyStrategy{OwnedCellsStrategy{true}}},
+  strat::Union{DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeGlobal}},DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{MapDoFsTypeGlobal}}},
   ::Type{V},
   indices::SequentialDistributedIndexSet,
 ) where V<:Vector
@@ -30,12 +30,12 @@ function allocate_local_vector(
 end
 
 
-function assemble_global_matrix(strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{T}},DistributedAssemblyStrategy{OwnedCellsStrategy{T}}},
+function assemble_global_matrix(strat::Union{DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{T}},DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{T}}},
                                 ::Type{M},
                                 dIJV::SequentialDistributedData,
                                 m::DistributedIndexSet,
                                 n::DistributedIndexSet) where {T,M}
-  if (!T)
+  if (T==MapDoFsTypeProcLocal)
      do_on_parts(dIJV,m,n) do part, IJV, mindexset, nindexset
         I,J,V = IJV
         for i=1:length(I)
@@ -59,7 +59,7 @@ function assemble_global_matrix(strat::Union{DistributedAssemblyStrategy{RowsCom
   A=sparse_from_coo(M,I,J,V,num_gids(m),num_gids(n))
 end
 
-function assemble_global_vector(strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{false}},DistributedAssemblyStrategy{OwnedCellsStrategy{false}}},
+function assemble_global_vector(strat::Union{DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeProcLocal}},DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{MapDoFsTypeProcLocal}}},
                                 ::Type{M},
                                 db::DistributedData,
                                 m::DistributedIndexSet) where M <: Vector
@@ -72,7 +72,7 @@ function assemble_global_vector(strat::Union{DistributedAssemblyStrategy{RowsCom
   b
 end
 
-function assemble_global_vector(strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{true}},DistributedAssemblyStrategy{OwnedCellsStrategy{true}}},
+function assemble_global_vector(strat::Union{DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeGlobal}},DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{MapDoFsTypeGlobal}}},
                                 ::Type{M},
                                 b::M,
                                 m::DistributedIndexSet) where M <: Vector

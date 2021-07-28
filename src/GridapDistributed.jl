@@ -38,8 +38,10 @@ export num_gids
 export DistributedVector
 export exchange!
 
-export RowsComputedLocally
-export OwnedCellsStrategy
+export OwnedAndGhostCellsAssemblyStrategy
+export OwnedCellsAssemblyStrategy
+export MapDoFsTypeGlobal
+export MapDoFsTypeProcLocal
 
 export remove_ghost_cells
 export include_ghost_cells

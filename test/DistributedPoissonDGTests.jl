@@ -6,48 +6,48 @@ using Gridap.FESpaces
 using GridapDistributed
 using SparseArrays
 
-function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Bool)
-  # Select matrix and vector types for discrete problem
-  # Note that here we use serial vectors and matrices
-  # but the assembly is distributed
-  T = Float64
-  vector_type = Vector{T}
-  matrix_type = SparseMatrixCSC{T,Int}
+# Select matrix and vector types for discrete problem
+# Note that here we use serial vectors and matrices
+# but the assembly is distributed
+const T = Float64
+const vector_type = Vector{T}
+const matrix_type = SparseMatrixCSC{T,Int}
 
-  # Manufactured solution
-  function u(x)
-    #rintln("$(x[1]) $(x[2]) $(x[1] * (x[1] - 1) * x[2] * (x[2] - 1))")
-    x[1] * (x[1] - 1) * x[2] * (x[2] - 1)
-  end
-  f(x) = -Δ(u)(x)
-  ud(x) = zero(x[1])
+# Manufactured solution
+function u(x)
+  x[1] * (x[1] - 1) * x[2] * (x[2] - 1)
+end
+f(x) = -Δ(u)(x)
+ud(x) = zero(x[1])
 
+# Model
+const domain = (0, 1, 0, 1)
+const cells  = (4, 4)
+const h      = (domain[2] - domain[1]) / cells[1]
+
+# FE Spaces
+const order  = 2
+const γ = 10
+const degree = 2*order
+
+function setup_model(comm)
   # Discretization
   subdomains = (2, 2)
-  domain = (0, 1, 0, 1)
-  cells = (4, 4)
   comm = SequentialCommunicator(subdomains)
   model = CartesianDiscreteModel(comm, subdomains, domain, cells)
-  h = (domain[2] - domain[1]) / cells[1]
+end
 
-  # FE Spaces
-  order  = 2
-  γ = 10
-  degree = 2*order
+function setup_fe_spaces(model)
   reffe = ReferenceFE(lagrangian,Float64,order)
   V = FESpace(vector_type,
               model=model,
               reffe=reffe,
               conformity=:L2)
   U = TrialFESpace(V)
+  U,V
+end
 
-  if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(V; global_dofs=global_dofs)
-  elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model,V; global_dofs=global_dofs)
-  else
-    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
-  end
+function run(comm,model,U,V,strategy)
 
   function setup_dΩ(part,(model,gids),strategy)
     trian = Triangulation(strategy,model)
@@ -116,10 +116,12 @@ end
 
 subdomains = (2,2)
 SequentialCommunicator(subdomains) do comm
-  run(comm,subdomains,"RowsComputedLocally", false)
-  run(comm,subdomains,"OwnedCellsStrategy", false)
-  run(comm,subdomains,"RowsComputedLocally", true)
-  run(comm,subdomains,"OwnedCellsStrategy", true)
+  model=setup_model(comm)
+  U,V=setup_fe_spaces(model)
+  strategy = OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeGlobal())
+  run(comm,model,U,V,strategy)
+  strategy = OwnedCellsAssemblyStrategy(V,MapDoFsTypeGlobal())
+  run(comm,model,U,V,strategy)
 end
 
 end # module#

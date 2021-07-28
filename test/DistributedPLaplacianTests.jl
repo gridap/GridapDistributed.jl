@@ -7,7 +7,7 @@ using GridapDistributed
 using SparseArrays
 using LinearAlgebra: norm
 
-function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Bool)
+function run(comm,subdomains)
   # Select matrix and vector types for discrete problem
   # Note that here we use serial vectors and matrices
   # but the assembly is distributed
@@ -41,13 +41,7 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
   U = TrialFESpace(V,u)
 
   # Choose parallel assembly strategy
-  if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(V;global_dofs=global_dofs)
-  elseif (assembly_strategy == "OwnedCellsStrategy"; globals_dofs=global_dofs)
-    strategy = OwnedCellsStrategy(model, V; global_dofs=global_dofs)
-  else
-    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
-  end
+  strategy = OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeGlobal())
 
   function setup_dΩ(part,(model,gids),strategy)
     trian = Triangulation(strategy,model)
@@ -95,8 +89,7 @@ end
 
 subdomains = (2,2)
 SequentialCommunicator(subdomains) do comm
-  run(comm,subdomains,"RowsComputedLocally",true)
-  run(comm,subdomains,"OwnedCellsStrategy",true)
+  run(comm,subdomains)
 end
 
 end # module
