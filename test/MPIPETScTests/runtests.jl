@@ -38,7 +38,7 @@ testfiles = sort(filter(istest, readdir(testdir)))
      elseif f in ["MPIPETScDistributedPoissonTests.jl"]
        np = 4
        extra_args = "-s 2 2 -p 4 4"
-     elseif f in ["MPIPETScDistributedPoissonDGTests.jl","MPIPETScDistributedPLaplacianTests.jl","MPIPETScDistributedStokesTests.jl"]
+     else
        np = 4
      end
      if ! image_file_exists

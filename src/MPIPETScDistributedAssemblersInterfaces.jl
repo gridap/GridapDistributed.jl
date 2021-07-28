@@ -21,7 +21,15 @@ function Gridap.Algebra.fill_entries!(a::GridapDistributedPETScWrappers.Mat{Floa
   a
 end
 
+function is_mpipetsc_and_map_dofs_type_global(dassem::DistributedAssembler{V,M,AS}) where {V,M,AS}
+  result=isa(dassem.assems,MPIPETScDistributedData)
+  mapdofstype=get_map_dofs_type(AS)
+  result=result && mapdofstype==MapDoFsTypeGlobal
+end
+
+
 function Gridap.FESpaces.assemble_matrix_and_vector_add!(dmat::GridapDistributedPETScWrappers.Mat{Float64},dvec::GridapDistributedPETScWrappers.Vec{Float64},dassem::DistributedAssembler, ddata)
+  @notimplementedif is_mpipetsc_and_map_dofs_type_global(dassem)
   do_on_parts(dassem,ddata,dmat,dvec) do part, assem, data, mat, vec
     assemble_matrix_and_vector_add!(mat,vec,assem,data)
   end
@@ -30,6 +38,7 @@ function Gridap.FESpaces.assemble_matrix_and_vector_add!(dmat::GridapDistributed
 end
 
 function Gridap.FESpaces.assemble_matrix_add!(dmat::GridapDistributedPETScWrappers.Mat{Float64},dassem::DistributedAssembler, ddata)
+  @notimplementedif is_mpipetsc_and_map_dofs_type_global(dassem)
   do_on_parts(dassem,ddata,dmat) do part, assem, data, mat
     assemble_matrix_add!(mat,assem,data)
   end
@@ -37,6 +46,7 @@ function Gridap.FESpaces.assemble_matrix_add!(dmat::GridapDistributedPETScWrappe
 end
 
 function Gridap.FESpaces.assemble_vector_add!(dvec::GridapDistributedPETScWrappers.Vec{Float64},dassem::DistributedAssembler, ddata)
+  @notimplementedif is_mpipetsc_and_map_dofs_type_global(dassem)
   do_on_parts(dassem,ddata,dvec) do part, assem, data, vec
     assemble_vector_add!(vec,assem,data)
   end
@@ -54,7 +64,7 @@ function get_local_matrix_type(::Type{GridapDistributedPETScWrappers.Mat{Float64
 end
 
 function allocate_local_vector(
-  strat::Union{DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{false}},DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{false}}},
+  strat::Union{DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeProcLocal}},DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{MapDoFsTypeProcLocal}}},
   ::Type{GridapDistributedPETScWrappers.Vec{Float64}},
   indices::MPIPETScDistributedIndexSet,
 )
@@ -79,7 +89,7 @@ function _convert_buf_to_petscint(buf)
 end
 
 function assemble_global_matrix(
-  strat::DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{false}},
+  strat::DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeProcLocal}},
   ::Type{GridapDistributedPETScWrappers.Mat{Float64}},
   IJV::MPIPETScDistributedData,
   m::MPIPETScDistributedIndexSet,
@@ -368,7 +378,7 @@ function build_petsc_matrix_from_local_portion(m,n,Alocal)
 end
 
 function assemble_global_matrix(
-  strat::DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{false}},
+  strat::DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{MapDoFsTypeProcLocal}},
   ::Type{GridapDistributedPETScWrappers.Mat{Float64}},
   IJV::MPIPETScDistributedData,
   m::MPIPETScDistributedIndexSet,
@@ -400,7 +410,7 @@ function assemble_global_matrix(
 end
 
 function assemble_global_vector(
-  strat::DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{false}},
+  strat::DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{MapDoFsTypeProcLocal}},
   ::Type{GridapDistributedPETScWrappers.Vec{Float64}},
   db::MPIPETScDistributedData,
   indices::MPIPETScDistributedIndexSet)
@@ -412,7 +422,7 @@ function assemble_global_vector(
 end
 
 function assemble_global_vector(
-  strat::DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{false}},
+  strat::DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeProcLocal}},
   ::Type{GridapDistributedPETScWrappers.Vec{Float64}},
   db::MPIPETScDistributedData,
   indices::MPIPETScDistributedIndexSet)
