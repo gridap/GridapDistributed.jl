@@ -401,7 +401,21 @@ function OwnedCellsAssemblyStrategy(map_dofs_type::Type{<:MapDoFsType}, V::Distr
   DistributedAssemblyStrategy(strategies)
 end
 
-const DefaultDistributedAssemblyStrategy = OwnedAndGhostCellsAssemblyStrategy
+function default_distributed_assembly_strategy_type(::Communicator)
+  @abstractmethod
+end
+
+function default_map_dofs_type(::Communicator)
+  @abstractmethod
+end
+
+
+function default_distributed_assembly_strategy(V::DistributedFESpace)
+  das=default_distributed_assembly_strategy_type(get_comm(V))
+  mdt=default_map_dofs_type(get_comm(V))
+  das(V,mdt())
+end
+
 get_map_dofs_type(::AssemblyStrategy)=@abstractmethod
 get_map_dofs_type(::OwnedAndGhostCellsAssemblyStrategy{T}) where {T}=T
 get_map_dofs_type(::OwnedCellsAssemblyStrategy{T}) where {T}=T
@@ -415,7 +429,7 @@ function Gridap.FESpaces.SparseMatrixAssembler(
   vector_type::Type,
   dtrial::DistributedFESpace,
   dtest::DistributedFESpace,
-  dstrategy::DistributedAssemblyStrategy=DefaultDistributedAssemblyStrategy(dtest))
+  dstrategy::DistributedAssemblyStrategy=default_distributed_assembly_strategy(dtest))
 
   assems = DistributedData(
     dtrial.spaces,dtest.spaces,dstrategy) do part, U, V, strategy

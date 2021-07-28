@@ -33,7 +33,6 @@ const degree = 2*order
 function setup_model(comm)
   # Discretization
   subdomains = (2, 2)
-  comm = SequentialCommunicator(subdomains)
   model = CartesianDiscreteModel(comm, subdomains, domain, cells)
 end
 

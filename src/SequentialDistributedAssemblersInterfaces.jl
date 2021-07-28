@@ -1,5 +1,14 @@
 # Assembly related
 
+function default_distributed_assembly_strategy_type(::SequentialCommunicator)
+  OwnedAndGhostCellsAssemblyStrategy
+end
+
+function default_map_dofs_type(::SequentialCommunicator)
+  MapDoFsTypeGlobal
+end
+
+
 function Gridap.Algebra.allocate_vector(::Type{V},gids::DistributedIndexSet) where V <: AbstractVector
   ngids = num_gids(gids)
   allocate_vector(V,ngids)

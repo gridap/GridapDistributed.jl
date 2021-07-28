@@ -1,4 +1,12 @@
 
+function default_distributed_assembly_strategy_type(::MPIPETScCommunicator)
+  OwnedAndGhostCellsAssemblyStrategy
+end
+
+function default_map_dofs_type(::MPIPETScCommunicator)
+  MapDoFsTypeProcLocal
+end
+
 """
     allocate_vector(::Type{V},indices) where V
 

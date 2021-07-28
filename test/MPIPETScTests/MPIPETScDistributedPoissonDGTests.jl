@@ -7,45 +7,47 @@ using GridapDistributed
 using SparseArrays
 using GridapDistributedPETScWrappers
 
+# Select matrix and vector types for discrete problem
+# Note that here we use serial vectors and matrices
+# but the assembly is distributed
+const T = Float64
+const vector_type = GridapDistributedPETScWrappers.Vec{T}
+const matrix_type = GridapDistributedPETScWrappers.Mat{T}
 
-function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
-  # Select matrix and vector types for discrete problem
-  # Note that here we use serial vectors and matrices
-  # but the assembly is distributed
-  T = Float64
-  vector_type = GridapDistributedPETScWrappers.Vec{T}
-  matrix_type = GridapDistributedPETScWrappers.Mat{T}
+# Manufactured solution
+function u(x)
+  x[1] * (x[1] - 1) * x[2] * (x[2] - 1)
+end
+f(x) = -Δ(u)(x)
+ud(x) = zero(x[1])
 
-  # Manufactured solution
-  u(x) = x[1] * (x[1] - 1) * x[2] * (x[2] - 1)
-  f(x) = -Δ(u)(x)
-  ud(x) = zero(x[1])
+# Model
+const domain = (0, 1, 0, 1)
+const cells  = (4, 4)
+const h      = (domain[2] - domain[1]) / cells[1]
 
+# FE Spaces
+const order  = 2
+const γ = 10
+const degree = 2*order
+
+function setup_model(comm)
   # Discretization
   subdomains = (2, 2)
-  domain = (0, 1, 0, 1)
-  cells = (4, 4)
   model = CartesianDiscreteModel(comm, subdomains, domain, cells)
-  h = (domain[2] - domain[1]) / cells[1]
+end
 
-  # FE Spaces
-  order  = 2
-  γ = 10
-  degree = 2*order
+function setup_fe_spaces(model)
   reffe = ReferenceFE(lagrangian,Float64,order)
   V = FESpace(vector_type,
               model=model,
               reffe=reffe,
               conformity=:L2)
   U = TrialFESpace(V)
+  U,V
+end
 
-  if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(V; global_dofs=global_dofs)
-  elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model,V; global_dofs=global_dofs)
-  else
-    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
-  end
+function run(comm,model,U,V,strategy)
 
   function setup_dΩ(part,(model,gids),strategy)
     trian = Triangulation(strategy,model)
@@ -64,6 +66,7 @@ function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
     Measure(trian,degree)
   end
   ddΛ = DistributedData(setup_dΛ,model,strategy)
+
 
   function a(u,v)
     DistributedData(u,v,ddΩ,ddΓ,ddΛ) do part, ul, vl, dΩ, dΓ, dΛ
@@ -123,8 +126,12 @@ function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
 end
 
 MPIPETScCommunicator() do comm
-  run(comm, "RowsComputedLocally",false)
-  run(comm, "OwnedCellsStrategy",false)
+  model=setup_model(comm)
+  U,V=setup_fe_spaces(model)
+  strategy = OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeProcLocal())
+  run(comm,model,U,V,strategy)
+  strategy = OwnedCellsAssemblyStrategy(V,MapDoFsTypeProcLocal())
+  run(comm,model,U,V,strategy)
 end
 
 end # module#
