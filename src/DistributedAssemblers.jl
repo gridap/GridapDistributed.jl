@@ -401,7 +401,7 @@ function OwnedCellsAssemblyStrategy(map_dofs_type::Type{<:MapDoFsType}, V::Distr
   DistributedAssemblyStrategy(strategies)
 end
 
-function default_distributed_assembly_strategy_type(::Communicator)
+function default_assembly_strategy_type(::Communicator)
   @abstractmethod
 end
 
@@ -409,9 +409,16 @@ function default_map_dofs_type(::Communicator)
   @abstractmethod
 end
 
+get_proc_local_triangulation_portion_type(a::AssemblyStrategy)=get_proc_local_triangulation_portion_type(typeof(a))
+
+get_proc_local_triangulation_portion_type(a::Type{<:AssemblyStrategy})=@abstractmethod
+
+get_proc_local_triangulation_portion_type(a::Type{<:OwnedCellsAssemblyStrategy})=OwnedCells
+
+get_proc_local_triangulation_portion_type(a::Type{<:OwnedAndGhostCellsAssemblyStrategy})=OwnedAndGhostCells
 
 function default_distributed_assembly_strategy(V::DistributedFESpace)
-  das=default_distributed_assembly_strategy_type(get_comm(V))
+  das=default_assembly_strategy_type(get_comm(V))
   mdt=default_map_dofs_type(get_comm(V))
   das(V,mdt())
 end
@@ -447,3 +454,40 @@ function Gridap.FESpaces.SparseMatrixAssembler(
                        assems,
                        dstrategy)
 end
+
+function Gridap.Geometry.Triangulation(model::DistributedDiscreteModel,
+  args_triangulation...)#;kwargs_triangulation...)
+  AS=default_assembly_strategy_type(get_comm(model))
+  Triangulation(AS, model, args_triangulation...)#;kwargs_triangulation...)
+end
+
+function Gridap.Geometry.Triangulation(strategy::Type{<:AssemblyStrategy},
+  model::DistributedDiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  DistributedData(model) do part, (model,gids)
+    Triangulation(strategy,model,part,gids,args_triangulation...)#;kwargs_triangulation)
+  end
+end
+
+function Gridap.Geometry.Triangulation(strategy::AssemblyStrategy,
+  part,gids,model::DiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  Triangulation(typeof(strategy),model,part,gids,args_triangulation...)#;kwargs_triangulation)
+end
+
+function Gridap.Geometry.Triangulation(strategy::Type{<:AssemblyStrategy},
+  model::DiscreteModel,part,gids,args_triangulation...)#;kwargs_triangulation...)
+  portion=get_proc_local_triangulation_portion_type(strategy)
+  Triangulation(portion,part,gids,model,args_triangulation...)#;kwargs_triangulation)
+end
+
+function Gridap.Geometry.Triangulation(strategy::DistributedAssemblyStrategy,
+  model::DistributedDiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  DistributedData(model,strategy) do part, (model,gids), strategy
+     Triangulation(strategy,part,gids,model,args_triangulation...)#;kwargs_triangulation)
+  end
+end
+
+# function Gridap.Geometry.Triangulation(strategy::AssemblyStrategy,
+#   model::DiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+#   portion_type=get_proc_local_triangulation_portion_type(typeof(strategy))
+#   Triangulation(portion_type, model, args_triangulation...)#;kwargs_triangulation...)
+# end

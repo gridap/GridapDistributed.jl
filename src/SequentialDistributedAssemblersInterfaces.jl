@@ -1,6 +1,6 @@
 # Assembly related
 
-function default_distributed_assembly_strategy_type(::SequentialCommunicator)
+function default_assembly_strategy_type(::SequentialCommunicator)
   OwnedAndGhostCellsAssemblyStrategy
 end
 

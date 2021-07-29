@@ -1,12 +1,8 @@
 function test_assemble(comm,model,U,V,das)
   assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, das)
-  function setup_dΩ(part,(model,gids),strategy)
-    trian = Triangulation(strategy,model)
-    degree = 2
-    Measure(trian,degree)
-  end
-  ddΩ = DistributedData(setup_dΩ,model,das)
-
+  trian=Triangulation(das,model)
+  degree=2
+  ddΩ=Measure(trian,degree)
   veccont = DistributedData(V,ddΩ) do part, (VL, gids), dΩ
      vl = get_fe_basis(VL)
      ∫(1*vl)dΩ
@@ -34,13 +30,9 @@ end
 
 function test_allocate_assemble_add(comm,model,U,V,das)
   assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, das)
-  function setup_dΩ(part,(model,gids),strategy)
-    trian = Triangulation(strategy,model)
-    degree = 2
-    Measure(trian,degree)
-  end
-  ddΩ = DistributedData(setup_dΩ,model,das)
-
+  trian=Triangulation(das,model)
+  degree=2
+  ddΩ=Measure(trian,degree)
   veccont = DistributedData(V,ddΩ) do part, (VL, gids), dΩ
      vl = get_fe_basis(VL)
      ∫(1*vl)dΩ

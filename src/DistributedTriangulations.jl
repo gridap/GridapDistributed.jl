@@ -1,31 +1,71 @@
+abstract type ProcLocalTriangulationPortion end;
+struct OwnedCells         <: ProcLocalTriangulationPortion end;
+struct OwnedAndGhostCells <: ProcLocalTriangulationPortion end;
 
-function filter_cells_when_needed(strategy::AssemblyStrategy, trian::Triangulation)
+function filter_cells_when_needed(portion::ProcLocalTriangulationPortion,
+                                  trian::Triangulation,
+                                  args...)
+   filter_cells_when_needed(typeof(portion), trian, args...)
+end
+
+function filter_cells_when_needed(portion::Type{<:ProcLocalTriangulationPortion},
+                                  trian::Triangulation,
+                                  args...)
   @abstractmethod
 end
 
-function filter_cells_when_needed(strategy::OwnedAndGhostCellsAssemblyStrategy, trian::Triangulation)
+function filter_cells_when_needed(portion::Type{OwnedAndGhostCells},
+                                  trian::Triangulation,
+                                  args...)
   trian
 end
 
-function filter_cells_when_needed(strategy::OwnedCellsAssemblyStrategy, trian::Triangulation)
-  remove_ghost_cells(trian,strategy.part,strategy.cell_gids)
+function filter_cells_when_needed(portion::Type{OwnedCells},
+                                  trian::Triangulation,
+                                  part,
+                                  cell_gids)
+  remove_ghost_cells(trian,part,cell_gids)
 end
 
-function Gridap.Geometry.Triangulation(strategy::AssemblyStrategy,model::DiscreteModel,args...)
-  trian = Triangulation(model,args...)
-  filter_cells_when_needed(strategy,trian)
+function Gridap.Geometry.Triangulation(portion::Type{<:ProcLocalTriangulationPortion},
+  part,gids,model::DiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  @abstractmethod
 end
 
-function Gridap.Geometry.BoundaryTriangulation(
-  strategy::AssemblyStrategy,
-  model::DiscreteModel, args...;kwargs...)
-  trian = BoundaryTriangulation(model,args...;kwargs...)
-  filter_cells_when_needed(strategy,trian)
+function Gridap.Geometry.Triangulation(portion::Type{OwnedCells},
+  part,gids,model::DiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  trian=Triangulation(model,args_triangulation...)#;kwargs_triangulation...)
+  filter_cells_when_needed(portion,trian,part,gids)
 end
 
-function Gridap.Geometry.SkeletonTriangulation(strategy::AssemblyStrategy,model::DiscreteModel,args...)
-  trian = SkeletonTriangulation(model,args...)
-  filter_cells_when_needed(strategy,trian)
+function Gridap.Geometry.Triangulation(portion::Type{OwnedAndGhostCells},
+  part,gids,model::DiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  trian=Triangulation(model,args_triangulation...)#;kwargs_triangulation...)
+  filter_cells_when_needed(portion,trian)
+end
+
+#TO-DO: what does it mean OwnedCells and OwnedAndGhostCells for a BoundaryTriangulation?
+#       Perhaps we should use a different type, with a more intention revealing name!
+function Gridap.Geometry.BoundaryTriangulation(portion::Type{OwnedCells},
+  model::DiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  @notimplemented
+end
+
+function Gridap.Geometry.BoundaryTriangulation(portion::Type{OwnedAndGhostCells},
+  model::DistributedDiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  @notimplemented
+end
+
+#TO-DO: what does it mean OwnedCells and OwnedAndGhostCells for a SkeletonTriangulation?
+#       Perhaps we should use a different type, with a more intention revealing name!
+function Gridap.Geometry.SkeletonTriangulation(portion::Type{OwnedCells},
+  model::DistributedDiscreteModel,args_triangulation...;kwargs_triangulation...)
+  @notimplemented
+end
+
+function Gridap.Geometry.SkeletonTriangulation(portion::Type{OwnedAndGhostCells},
+  model::DistributedDiscreteModel,args_triangulation...;kwargs_triangulation...)
+  @notimplemented
 end
 
 function remove_ghost_cells(trian::Triangulation, part::Integer, gids::IndexSet)

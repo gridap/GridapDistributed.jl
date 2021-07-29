@@ -86,6 +86,8 @@ include("MultiFieldDistributedFESpaces.jl")
 
 include("DistributedFESpaceFactories.jl")
 
+include("DistributedTriangulations.jl")
+
 include("DistributedAssemblers.jl")
 
 include("SequentialDistributedAssemblersInterfaces.jl")
@@ -96,8 +98,8 @@ include("MPIPETScDistributedAssemblersInterfaces.jl")
 
 include("DistributedFEOperators.jl")
 
-include("DistributedTriangulations.jl")
-
 include("MPIPETScLinearSolvers.jl")
+
+include("GridapHighLevelAPI.jl")
 
 end # module

@@ -35,16 +35,10 @@ function run(comm,subdomains)
               dirichlet_tags="boundary")
   U = TrialFESpace(V, u)
 
+  trian=Triangulation(model)
+  ddΩ=Measure(trian,2*(order+1))
 
-  strategy = OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeGlobal())
-  assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
-
-  function setup_dΩ(part,(model,gids),strategy)
-    trian = Triangulation(strategy,model)
-    degree = 2*(order+1)
-    Measure(trian,degree)
-  end
-  ddΩ = DistributedData(setup_dΩ,model,strategy)
+  assem = SparseMatrixAssembler(matrix_type, vector_type, U, V)
 
   function a(u,v)
     DistributedData(u,v,ddΩ) do part, ul, vl, dΩ

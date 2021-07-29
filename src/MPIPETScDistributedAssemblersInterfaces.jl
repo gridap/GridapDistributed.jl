@@ -1,5 +1,5 @@
 
-function default_distributed_assembly_strategy_type(::MPIPETScCommunicator)
+function default_assembly_strategy_type(::MPIPETScCommunicator)
   OwnedAndGhostCellsAssemblyStrategy
 end
 

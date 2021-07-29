@@ -40,14 +40,8 @@ function run(comm,subdomains)
               dirichlet_tags="boundary")
   U = TrialFESpace(V,u)
 
-  # Choose parallel assembly strategy
-  strategy = OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeGlobal())
-
-  function setup_dΩ(part,(model,gids),strategy)
-    trian = Triangulation(strategy,model)
-    Measure(trian,degree)
-  end
-  ddΩ = DistributedData(setup_dΩ,model,strategy)
+  trian=Triangulation(model)
+  ddΩ=Measure(trian,degree)
 
   function res(u,v)
     DistributedData(u,v,ddΩ) do part, ul, vl, dΩ
@@ -61,7 +55,7 @@ function run(comm,subdomains)
   end
 
   # Assembler
-  assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
+  assem = SparseMatrixAssembler(matrix_type, vector_type, U, V)
 
   # Non linear solver
   nls = NLSolver(show_trace=true, method=:newton)
