@@ -7,6 +7,16 @@ function default_map_dofs_type(::MPIPETScCommunicator)
   MapDoFsTypeProcLocal
 end
 
+function default_global_vector_type(::MPIPETScCommunicator)
+  T = Float64
+  GridapDistributedPETScWrappers.Vec{T}
+end
+
+function default_global_matrix_type(::MPIPETScCommunicator)
+  T = Float64
+  GridapDistributedPETScWrappers.Mat{T}
+end
+
 """
     allocate_vector(::Type{V},indices) where V
 

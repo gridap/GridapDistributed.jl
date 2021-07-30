@@ -32,6 +32,13 @@ function Gridap.Geometry.Triangulation(portion::Type{<:ProcLocalTriangulationPor
   @abstractmethod
 end
 
+function Gridap.Geometry.Triangulation(portion::Type{<:ProcLocalTriangulationPortion},
+  model::DistributedDiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  DistributedData(model) do part, (model,gids)
+    Triangulation(portion,part,gids,model,args_triangulation...)
+  end
+end
+
 function Gridap.Geometry.Triangulation(portion::Type{OwnedCells},
   part,gids,model::DiscreteModel,args_triangulation...)#;kwargs_triangulation...)
   trian=Triangulation(model,args_triangulation...)#;kwargs_triangulation...)

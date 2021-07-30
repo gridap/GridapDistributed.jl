@@ -5,7 +5,6 @@ using Gridap
 using Gridap.FESpaces
 using GridapDistributed
 using SparseArrays
-using GridapDistributedPETScWrappers
 
 using ArgParse
 
@@ -32,50 +31,36 @@ function run(comm,
              cells=(4, 4),
              domain = (0, 1, 0, 1))
 
-  T = Float64
-  vector_type = GridapDistributedPETScWrappers.Vec{T}
-  matrix_type = GridapDistributedPETScWrappers.Mat{T}
-
   # Manufactured solution
   u(x) = x[1] + x[2]
   f(x) = -Δ(u)(x)
 
   # Discretization
+  domain = (0, 1, 0, 1)
+  cells = (4, 4)
   model = CartesianDiscreteModel(comm, subdomains, domain, cells)
 
   # FE Spaces
   order=1
   reffe = ReferenceFE(lagrangian,Float64,order)
-  V = FESpace(vector_type,
-              model=model,
+  V = FESpace(model=model,
               reffe=reffe,
               conformity=:H1,
               dirichlet_tags="boundary")
   U = TrialFESpace(V, u)
 
-
-  strategy = OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeProcLocal())
-  assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
-  function setup_dΩ(part,(model,gids),strategy)
-    trian = Triangulation(strategy,model)
-    degree = 2*(order+1)
-    Measure(trian,degree)
-  end
-  ddΩ = DistributedData(setup_dΩ,model,strategy)
+  trian=Triangulation(model)
+  dΩ=Measure(trian,2*(order+1))
 
   function a(u,v)
-    DistributedData(u,v,ddΩ) do part, ul, vl, dΩ
-      ∫(∇(vl)⋅∇(ul))dΩ
-    end
+    ∫(∇(v)⋅∇(u))dΩ
   end
   function l(v)
-    DistributedData(v,ddΩ) do part, vl, dΩ
-      ∫(vl*f)dΩ
-    end
+    ∫(v*f)dΩ
   end
 
   # FE solution
-  op = AffineFEOperator(a,l,U,V,assem)
+  op = AffineFEOperator(a,l,U,V)
   ls = PETScLinearSolver(
     Float64;
     ksp_type = "cg",
@@ -88,15 +73,10 @@ function run(comm,
   uh = solve(fels, op)
 
   # Error norms and print solution
-  sums = DistributedData(model, uh) do part, (model, gids), uh
-    trian = Triangulation(model)
-    owned_trian = remove_ghost_cells(trian, part, gids)
-    dΩ = Measure(owned_trian, 2*order)
-    e = u-uh
-    sum(∫(e*e)dΩ)
-  end
-  e_l2 = sum(gather(sums))
-
+  trian=Triangulation(OwnedCells,model)
+  dΩ=Measure(trian,2*order)
+  e = u-uh
+  e_l2 = sum(∫(e*e)dΩ)
   tol = 1.0e-9
   @test e_l2 < tol
   if (i_am_master(comm)) println("$(e_l2) < $(tol)\n") end

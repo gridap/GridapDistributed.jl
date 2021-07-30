@@ -409,13 +409,23 @@ function default_map_dofs_type(::Communicator)
   @abstractmethod
 end
 
-get_proc_local_triangulation_portion_type(a::AssemblyStrategy)=get_proc_local_triangulation_portion_type(typeof(a))
+function default_global_vector_type(::Communicator)
+  @abstractmethod
+end
 
-get_proc_local_triangulation_portion_type(a::Type{<:AssemblyStrategy})=@abstractmethod
+function default_global_matrix_type(::Communicator)
+  @abstractmethod
+end
 
-get_proc_local_triangulation_portion_type(a::Type{<:OwnedCellsAssemblyStrategy})=OwnedCells
 
-get_proc_local_triangulation_portion_type(a::Type{<:OwnedAndGhostCellsAssemblyStrategy})=OwnedAndGhostCells
+
+proc_local_triangulation_portion_type(a::AssemblyStrategy)=proc_local_triangulation_portion_type(typeof(a))
+
+proc_local_triangulation_portion_type(a::Type{<:AssemblyStrategy})=@abstractmethod
+
+proc_local_triangulation_portion_type(a::Type{<:OwnedCellsAssemblyStrategy})=OwnedCells
+
+proc_local_triangulation_portion_type(a::Type{<:OwnedAndGhostCellsAssemblyStrategy})=OwnedAndGhostCells
 
 function default_distributed_assembly_strategy(V::DistributedFESpace)
   das=default_assembly_strategy_type(get_comm(V))
@@ -429,8 +439,30 @@ get_map_dofs_type(::OwnedCellsAssemblyStrategy{T}) where {T}=T
 get_map_dofs_type(::Type{OwnedAndGhostCellsAssemblyStrategy{T}}) where {T}=T
 get_map_dofs_type(::Type{OwnedCellsAssemblyStrategy{T}}) where {T}=T
 
-# TODO this assumes that the global matrix type is the same
-# as the local one
+
+function Gridap.FESpaces.SparseMatrixAssembler(
+  dtrial::DistributedFESpace,
+  dtest::DistributedFESpace,
+  dstrategy::DistributedAssemblyStrategy=default_distributed_assembly_strategy(dtest))
+
+  matrix_type=default_global_matrix_type(get_comm(dtrial))
+  vector_type=default_global_vector_type(get_comm(dtrial))
+  assems = DistributedData(
+    dtrial.spaces,dtest.spaces,dstrategy) do part, U, V, strategy
+    SparseMatrixAssembler(get_local_matrix_type(matrix_type),
+                          get_local_vector_type(vector_type),
+                          U,
+                          V,
+                          strategy)
+  end
+  DistributedAssembler(matrix_type,
+                       vector_type,
+                       dtrial,
+                       dtest,
+                       assems,
+                       dstrategy)
+end
+
 function Gridap.FESpaces.SparseMatrixAssembler(
   matrix_type::Type,
   vector_type::Type,
@@ -475,7 +507,7 @@ end
 
 function Gridap.Geometry.Triangulation(strategy::Type{<:AssemblyStrategy},
   model::DiscreteModel,part,gids,args_triangulation...)#;kwargs_triangulation...)
-  portion=get_proc_local_triangulation_portion_type(strategy)
+  portion=proc_local_triangulation_portion_type(strategy)
   Triangulation(portion,part,gids,model,args_triangulation...)#;kwargs_triangulation)
 end
 

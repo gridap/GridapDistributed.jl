@@ -8,6 +8,17 @@ function default_map_dofs_type(::SequentialCommunicator)
   MapDoFsTypeGlobal
 end
 
+function default_global_vector_type(::SequentialCommunicator)
+  T = Float64
+  Vector{Float64}
+
+end
+
+function default_global_matrix_type(::SequentialCommunicator)
+  T = Float64
+  SparseMatrixCSC{T}
+end
+
 
 function Gridap.Algebra.allocate_vector(::Type{V},gids::DistributedIndexSet) where V <: AbstractVector
   ngids = num_gids(gids)

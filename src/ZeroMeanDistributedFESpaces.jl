@@ -84,7 +84,6 @@ function constant_fixed(V::FESpaceWithConstantFixed)
    false
 end
 
-
 function ZeroMeanDistributedFESpace(::Type{V};
                                     model::DistributedDiscreteModel,
                                     reffe,

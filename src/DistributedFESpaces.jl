@@ -39,14 +39,12 @@ function Gridap.FESpaces.get_trial_fe_basis(f::DistributedFESpace)
     bases = DistributedData(f.spaces) do part, space
         get_trial_fe_basis(space)
     end
-    DistributedFEBasis(bases)
 end
 
 function Gridap.FESpaces.get_fe_basis(f::DistributedFESpace)
   bases = DistributedData(f.spaces) do part, space
       get_fe_basis(space)
   end
-  DistributedFEBasis(bases)
 end
 
 
@@ -399,12 +397,3 @@ Gridap.FESpaces.get_free_dof_values(a::DistributedFEFunction) = a.vals
 Gridap.FESpaces.get_fe_space(a::DistributedFEFunction) = a.space
 
 # TO-DO Gridap.FESpaces.is_a_fe_function(a::DistributedFEFunction) = true
-
-# Cell basis
-struct DistributedFEBasis
-    bases::DistributedData
-end
-
-# TO-DO Gridap.FESpaces.FECellBasisStyle(::Type{DistributedFEBasis}) = Val{true}()
-
-get_distributed_data(u::DistributedFEBasis) = u.bases
