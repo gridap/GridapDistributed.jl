@@ -8,13 +8,6 @@ using SparseArrays
 using LinearAlgebra: norm
 
 function run(comm,subdomains)
-  # Select matrix and vector types for discrete problem
-  # Note that here we use serial vectors and matrices
-  # but the assembly is distributed
-  T = Float64
-  vector_type = Vector{T}
-  matrix_type = SparseMatrixCSC{T,Int}
-
   # Manufactured solution
   u(x) = x[1] + x[2] + 1
   f(x) = - Δ(u)(x)
@@ -33,49 +26,37 @@ function run(comm,subdomains)
   order=3
   degree=2*order
   reffe = ReferenceFE(lagrangian,Float64,order)
-  V = FESpace(vector_type,
-              model=model,
+  V = FESpace(model=model,
               reffe=reffe,
               conformity=:H1,
               dirichlet_tags="boundary")
   U = TrialFESpace(V,u)
 
   trian=Triangulation(model)
-  ddΩ=Measure(trian,degree)
+  dΩ=Measure(trian,degree)
 
   function res(u,v)
-    DistributedData(u,v,ddΩ) do part, ul, vl, dΩ
-      ∫( ∇(vl)⋅(flux∘∇(ul)) )*dΩ
-    end
+     ∫(∇(v)⋅(flux∘∇(u)))*dΩ
   end
   function jac(u,du,v)
-    DistributedData(u,du,v,ddΩ) do part, ul,dul,vl, dΩ
-      ∫( ∇(vl)⋅(dflux∘(∇(dul),∇(ul))) )*dΩ
-    end
+     ∫( ∇(v)⋅(dflux∘(∇(du),∇(u))) )*dΩ
   end
-
-  # Assembler
-  assem = SparseMatrixAssembler(matrix_type, vector_type, U, V)
 
   # Non linear solver
   nls = NLSolver(show_trace=true, method=:newton)
   solver = FESolver(nls)
 
   # FE solution
-  op = FEOperator(res,jac,U,V,assem)
-  x = rand(T,num_free_dofs(U))
+  op = FEOperator(res,jac,U,V)
+  x = rand(num_free_dofs(U))
   uh0 = FEFunction(U,x)
   uh, = solve!(uh0,solver,op)
 
   # Error norms and print solution
-  sums = DistributedData(model, uh) do part, (model, gids), uh
-    trian = Triangulation(model)
-    owned_trian = remove_ghost_cells(trian, part, gids)
-    dΩ = Measure(owned_trian, degree)
-    e = u-uh
-    sum(∫(e*e)dΩ)
-  end
-  e_l2 = sum(gather(sums))
+  trian=Triangulation(OwnedCells,model)
+  dΩ=Measure(trian,2*order)
+  e = u-uh
+  e_l2 = sum(∫(e*e)dΩ)
   tol = 1.0e-9
   println("$(e_l2) < $(tol)")
   @test e_l2 < tol

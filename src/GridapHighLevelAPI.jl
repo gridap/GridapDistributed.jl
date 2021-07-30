@@ -36,3 +36,95 @@ function Base.sum(a::DistributedData{<:Gridap.CellData.DomainContribution})
    end
    sum(gather(g))
 end
+
+# Composition (this replaces the @law macro)
+for T in (DistributedData{<:CellField},DistributedFEFunction)
+  @eval begin
+    function Base.:(∘)(f::Function,g::$T)
+      DistributedData(g) do part, g
+        Operation(f)(g)
+      end
+    end
+    function Base.:(∘)(f::Function,g::Tuple{$T,$T})
+      DistributedData(g...) do part, g...
+        Operation(f)(g...)
+      end
+     end
+    #  function Base.:(∘)(f::Function,g::Tuple{Vararg{Union{AbstractArray{<:Number},$T}}})
+    #     Operation(f)(g...)
+    #  end
+    #  function Base.:(∘)(f::Function,g::Tuple{Vararg{Union{Function,$T}}})
+    #     Operation(f)(g...)
+    #  end
+  end
+end
+
+# Define some of the well known arithmetic ops
+
+#TO-DO: get the list of operators, e.g., from a Gridap constant
+for T in (DistributedData{<:CellField},DistributedFEFunction)
+  for op in (:symmetric_part,:inv,:det,:abs,:abs2,:+,:-,:tr,:transpose,:adjoint,:grad2curl,:real,:imag,:conj)
+     @eval begin
+       function ($op)(a::$T)
+         DistributedData(a) do part, a
+            Operation($op)(a)
+         end
+       end
+     end
+  end
+ end
+
+ # Binary ops
+ for T in (DistributedData{<:CellField},DistributedFEFunction)
+  for op in (:inner,:outer,:double_contraction,:+,:-,:*,:cross,:dot,:/)
+   @eval begin
+     function ($op)(a::$T,b::$T)
+       DistributedData(a,b) do part, a, b
+         Operation($op)(a,b)
+       end
+     end
+     function ($op)(a::$T,b::Number)
+       DistributedData(a) do part, a
+         Operation($op)(a,b)
+       end
+     end
+     function ($op)(a::Number,b::$T)
+       DistributedData(b) do part, b
+         Operation($op)(a,b)
+       end
+     end
+     function ($op)(a::$T,b::Function)
+       DistributedData(a) do part, a
+         Operation($op)(a,b)
+       end
+     end
+     function ($op)(a::Function,b::$T)
+       DistributedData(b) do part, b
+         Operation($op)(a,b)
+       end
+     end
+     function ($op)(a::$T,b::AbstractArray{<:Number})
+       DistributedData(a) do part, a
+         Operation($op)(a,b)
+       end
+     end
+     function ($op)(a::AbstractArray{<:Number},b::$T)
+       DistributedData(b) do part, b
+         Operation($op)(a,b)
+       end
+     end
+   end
+  end
+ end
+
+ function (a::typeof(gradient))(x::DistributedData{<:CellField})
+   DistributedData(x) do part, x
+     a(x)
+   end
+ end
+
+ function (a::typeof(gradient))(x::DistributedFEFunction)
+  DistributedData(x) do part, x
+    a(x)
+  end
+end

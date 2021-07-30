@@ -88,11 +88,6 @@ include("MultiFieldDistributedFESpaces.jl")
 
 include("DistributedFESpaceFactories.jl")
 
-import Gridap.TensorValues: inner, outer, double_contraction, symmetric_part
-import LinearAlgebra: det, tr, cross, dot, ⋅
-import Base: inv, abs, abs2, *, +, -, /, adjoint, transpose, real, imag, conj
-include("DistributedCellFields.jl")
-
 include("DistributedTriangulations.jl")
 
 include("DistributedAssemblers.jl")
@@ -107,6 +102,10 @@ include("DistributedFEOperators.jl")
 
 include("MPIPETScLinearSolvers.jl")
 
+import Gridap.TensorValues: inner, outer, double_contraction, symmetric_part
+import LinearAlgebra: det, tr, cross, dot, ⋅
+import Base: inv, abs, abs2, *, +, -, /, adjoint, transpose, real, imag, conj
 include("GridapHighLevelAPI.jl")
+
 
 end # module
