@@ -388,12 +388,8 @@ struct DistributedFEFunction <: FEFunction
     space::DistributedFESpace
 end
 
-# TO-DO Gridap.FESpaces.FEFunctionStyle(::Type{DistributedFEFunction}) = Val{true}()
-
 get_distributed_data(u::DistributedFEFunction) = u.funs
 
 Gridap.FESpaces.get_free_dof_values(a::DistributedFEFunction) = a.vals
 
 Gridap.FESpaces.get_fe_space(a::DistributedFEFunction) = a.space
-
-# TO-DO Gridap.FESpaces.is_a_fe_function(a::DistributedFEFunction) = true

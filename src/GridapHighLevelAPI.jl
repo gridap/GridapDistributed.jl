@@ -117,6 +117,28 @@ for T in (DistributedData{<:CellField},DistributedFEFunction)
   end
  end
 
+function (+)(a::DistributedData{<:Gridap.CellData.DomainContribution},
+             b::DistributedData{<:Gridap.CellData.DomainContribution})
+   DistributedData(a,b) do part, a, b
+     a+b
+   end
+end
+
+function (-)(a::DistributedData{<:Gridap.CellData.DomainContribution},
+             b::DistributedData{<:Gridap.CellData.DomainContribution})
+   DistributedData(a,b) do part, a, b
+     a-b
+   end
+end
+
+function (*)(a::Number,b::DistributedData{<:Gridap.CellData.DomainContribution})
+  DistributedData(b) do part, b
+    a*b
+  end
+end
+
+(*)(a::DistributedData{<:Gridap.CellData.DomainContribution},b::Number) = b*a
+
  function (a::typeof(gradient))(x::DistributedData{<:CellField})
    DistributedData(x) do part, x
      a(x)
@@ -126,5 +148,42 @@ for T in (DistributedData{<:CellField},DistributedFEFunction)
  function (a::typeof(gradient))(x::DistributedFEFunction)
   DistributedData(x) do part, x
     a(x)
+  end
+end
+
+function dot(::typeof(∇),f::DistributedData{<:CellField})
+  DistributedData(f) do part, f
+    divergence(f)
+  end
+end
+
+
+function Base.iterate(a::DistributedData{<:MultiFieldCellField})
+  if _num_fields(a)==0
+    return nothing
+  end
+  sf=_get_field(a,1)
+  (sf,2)
+end
+
+function Base.iterate(a::DistributedData{<:MultiFieldCellField},state)
+  if state > _num_fields(a)
+     return nothing
+  end
+  sf=_get_field(a,state)
+  (sf,state+1)
+end
+
+function _num_fields(a::DistributedData{<:MultiFieldCellField})
+  num_fields=0
+  do_on_parts(a) do part, a
+    num_fields=length(a.single_fields)
+  end
+  num_fields
+end
+
+function _get_field(a::DistributedData{<:MultiFieldCellField},field_id)
+  DistributedData(a) do part, a
+     a.single_fields[field_id]
   end
 end

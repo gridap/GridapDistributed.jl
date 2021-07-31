@@ -15,13 +15,6 @@ function Gridap.FESpaces.num_dirichlet_dofs(f::Gridap.MultiField.MultiFieldFESpa
 end
 
 function run(comm,subdomains)
-  # Select matrix and vector types for discrete problem
-  # Note that here we use serial vectors and matrices
-  # but the assembly is distributed
-  T = Float64
-  vector_type = Vector{T}
-  matrix_type = SparseMatrixCSC{T,Int}
-
   # Manufactured solution
   ux(x)=2*x[1]*x[2]
   uy(x)=-x[2]^2
@@ -37,21 +30,16 @@ function run(comm,subdomains)
   cells = (4, 4)
   model = CartesianDiscreteModel(comm, subdomains, domain, cells)
 
-  # Define Dirichlet and Neumann boundaries for local models
-  do_on_parts(model) do part, (model,gids)
-    labels = get_face_labeling(model)
-    add_tag_from_tags!(labels,"diri0",[1,2,3,4,6,7,8])
-    add_tag_from_tags!(labels,"diri1",[1,2,3,4,6,7,8])
-    add_tag_from_tags!(labels,"neumann",[5])
-  end
-
+  labels = get_face_labeling(model)
+  add_tag_from_tags!(labels,"diri0",[1,2,3,4,6,7,8])
+  add_tag_from_tags!(labels,"diri1",[1,2,3,4,6,7,8])
+  add_tag_from_tags!(labels,"neumann",[5])
 
   # FE Spaces
   order = 2
   reffeᵤ = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
   reffeₚ = Gridap.ReferenceFEs.LagrangianRefFE(Float64,QUAD,order-1;space=:P)
   V = FESpace(
-        vector_type,
         model=model,
         reffe=reffeᵤ,
         conformity=:H1,
@@ -59,7 +47,6 @@ function run(comm,subdomains)
       )
 
   Q = FESpace(
-       vector_type,
        model=model,
        reffe=reffeₚ,
        conformity=:L2)
@@ -71,53 +58,30 @@ function run(comm,subdomains)
   P=TrialFESpace(Q)
   X=MultiFieldFESpace(Y,[U,P])
 
-  strategy = OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeGlobal())
+  trian=Triangulation(model)
+  degree = 2*(order+1)
+  dΩ = Measure(trian,degree)
 
-  function a(x,y)
-    DistributedData(x,y,ddΩ,ddΓ) do part, xl, yl, dΩ, dΓ
-        ul,pl=xl
-        vl,ql=yl
-        ∫( ∇(vl)⊙∇(ul) - (∇⋅vl)*pl + ql*(∇⋅ul) )dΩ
-    end
+  btrian=BoundaryTriangulation(model;tags="neumann")
+  dΓ = Measure(btrian,degree)
+
+  function a((u,p),(v,q))
+    ∫( ∇(v)⊙∇(u) - (∇⋅v)*p + q*(∇⋅u) )dΩ
   end
 
-  function l(y)
-    DistributedData(y,ddΩ,ddΓ) do part, yl, dΩ, dΓ
-      vl,_=yl
-      ∫( vl⋅f )dΩ + ∫( vl⋅s )dΓ
-    end
+  function l((v,q))
+    ∫( v⋅f )dΩ + ∫( v⋅s )dΓ
   end
-
-   # Assembler
-   assem = SparseMatrixAssembler(matrix_type, vector_type, X, Y, strategy)
-
-   function setup_dΩ(part,(model,gids),strategy)
-     trian = Triangulation(strategy,model)
-     degree = 2*(order+1)
-     Measure(trian,degree)
-   end
-   ddΩ = DistributedData(setup_dΩ,model,strategy)
-
-   function setup_dΓ(part,(model,gids),strategy)
-     btrian=BoundaryTriangulation(strategy,model;tags="neumann")
-     degree = 2*(order+1)
-     Measure(btrian,degree)
-   end
-   ddΓ = DistributedData(setup_dΓ,model,strategy)
 
   # #  # FE solution
-  op = AffineFEOperator(a,l,X,Y,assem)
+  op = AffineFEOperator(a,l,X,Y)
   xh = solve(op)
+  uh,_ = xh
 
-  sums = DistributedData(model, xh) do part, (model, gids), xh
-    trian = Triangulation(model)
-    owned_trian = remove_ghost_cells(trian, part, gids)
-    dΩ = Measure(owned_trian, 2*order)
-    uh,_ = xh
-    e = u-uh
-    sum(∫(e⋅e)dΩ)
-  end
-  e_l2 = sum(gather(sums))
+  trian=Triangulation(OwnedCells,model)
+  dΩ=Measure(trian,2*order)
+  e = u-uh
+  e_l2 = sum(∫(e⋅e)dΩ)
   tol = 1.0e-9
   println("$(e_l2) < $(tol)")
   @test e_l2 < tol
@@ -128,6 +92,6 @@ function f(comm)
   run(comm,subdomains)
 end
 
-#SequentialCommunicator(f,subdomains)
+SequentialCommunicator(f,subdomains)
 
 end # module

@@ -53,20 +53,34 @@ end
 
 #TO-DO: what does it mean OwnedCells and OwnedAndGhostCells for a BoundaryTriangulation?
 #       Perhaps we should use a different type, with a more intention revealing name!
+function Gridap.Geometry.BoundaryTriangulation(portion::Type{<:ProcLocalTriangulationPortion},
+  part,gids,model::DiscreteModel;kwargs_triangulation...)
+  @abstractmethod
+end
+
+function Gridap.Geometry.BoundaryTriangulation(portion::Type{<:ProcLocalTriangulationPortion},
+  model::DistributedDiscreteModel;kwargs_triangulation...)
+  DistributedData(model) do part, (model,gids)
+    BoundaryTriangulation(portion,part,gids,model;kwargs_triangulation...)
+  end
+end
+
 function Gridap.Geometry.BoundaryTriangulation(portion::Type{OwnedCells},
-  model::DiscreteModel,args_triangulation...)#;kwargs_triangulation...)
-  @notimplemented
+  part,gids,model::DiscreteModel;kwargs_triangulation...)
+  trian=BoundaryTriangulation(model;kwargs_triangulation...)
+  filter_cells_when_needed(portion,trian,part,gids)
 end
 
 function Gridap.Geometry.BoundaryTriangulation(portion::Type{OwnedAndGhostCells},
-  model::DistributedDiscreteModel,args_triangulation...)#;kwargs_triangulation...)
-  @notimplemented
+  part,gids,model::DiscreteModel;kwargs_triangulation...)
+  trian=BoundaryTriangulation(model;kwargs_triangulation...)
+  filter_cells_when_needed(portion,trian)
 end
 
 #TO-DO: what does it mean OwnedCells and OwnedAndGhostCells for a SkeletonTriangulation?
 #       Perhaps we should use a different type, with a more intention revealing name!
 function Gridap.Geometry.SkeletonTriangulation(portion::Type{OwnedCells},
-  model::DistributedDiscreteModel,args_triangulation...;kwargs_triangulation...)
+  model::DistributedDiscreteModel;kwargs_triangulation...)
   @notimplemented
 end
 
