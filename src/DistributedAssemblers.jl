@@ -544,6 +544,36 @@ end
 function Gridap.Geometry.BoundaryTriangulation(strategy::DistributedAssemblyStrategy,
   model::DistributedDiscreteModel;kwargs_triangulation...)
   DistributedData(model,strategy) do part, (model,gids), strategy
-     BoundaryTriangulation(strategy,part,gids,model;kwargs_triangulation...)
+    BoundaryTriangulation(strategy,part,gids,model;kwargs_triangulation...)
+  end
+end
+
+function Gridap.Geometry.SkeletonTriangulation(model::DistributedDiscreteModel;kwargs_triangulation...)
+  AS=default_assembly_strategy_type(get_comm(model))
+  SkeletonTriangulation(AS, model; kwargs_triangulation...)
+end
+
+function Gridap.Geometry.SkeletonTriangulation(strategy::Type{<:AssemblyStrategy},
+  model::DistributedDiscreteModel;kwargs_triangulation...)
+  DistributedData(model) do part, (model,gids)
+    SkeletonTriangulation(strategy,part,gids,model;kwargs_triangulation...)
+  end
+end
+
+function Gridap.Geometry.SkeletonTriangulation(strategy::AssemblyStrategy,
+  part,gids,model::DiscreteModel;kwargs_triangulation...)
+  SkeletonTriangulation(typeof(strategy),part,gids,model;kwargs_triangulation...)
+end
+
+function Gridap.Geometry.SkeletonTriangulation(strategy::Type{<:AssemblyStrategy},
+  part,gids,model::DiscreteModel;kwargs_triangulation...)
+  portion=proc_local_triangulation_portion_type(strategy)
+  SkeletonTriangulation(portion,part,gids,model;kwargs_triangulation...)
+end
+
+function Gridap.Geometry.SkeletonTriangulation(strategy::DistributedAssemblyStrategy,
+  model::DistributedDiscreteModel;kwargs_triangulation...)
+  DistributedData(model,strategy) do part, (model,gids), strategy
+     SkeletonTriangulation(strategy,part,gids,model;kwargs_triangulation...)
   end
 end

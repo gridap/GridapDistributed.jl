@@ -187,3 +187,36 @@ function _get_field(a::DistributedData{<:MultiFieldCellField},field_id)
      a.single_fields[field_id]
   end
 end
+
+function Gridap.CellData.jump(a::DistributedData{<:CellField})
+  DistributedData(a) do part, a
+     jump(a)
+  end
+end
+
+function Gridap.CellData.jump(a::DistributedData{<:SkeletonPair{<:CellField}})
+  DistributedData(a) do part, a
+     jump(a)
+  end
+end
+
+function Gridap.CellData.mean(a::DistributedData{<:CellField})
+  DistributedData(a) do part, a
+     mean(a)
+  end
+end
+
+for op in (:outer,:*,:dot)
+  @eval begin
+    function ($op)(a::DistributedData{<:CellField},b::DistributedData{<:SkeletonPair{<:CellField}})
+      DistributedData(a,b) do part, a, b
+        Operation($op)(a,b)
+      end
+    end
+    function ($op)(a::DistributedData{<:SkeletonPair{<:CellField}},b::DistributedData{<:CellField})
+      DistributedData(a,b) do part, a, b
+        Operation($op)(a,b)
+      end
+    end
+  end
+end

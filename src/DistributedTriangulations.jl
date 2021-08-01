@@ -79,14 +79,28 @@ end
 
 #TO-DO: what does it mean OwnedCells and OwnedAndGhostCells for a SkeletonTriangulation?
 #       Perhaps we should use a different type, with a more intention revealing name!
-function Gridap.Geometry.SkeletonTriangulation(portion::Type{OwnedCells},
+function Gridap.Geometry.SkeletonTriangulation(portion::Type{<:ProcLocalTriangulationPortion},
+  part,gids,model::DiscreteModel;kwargs_triangulation...)
+  @abstractmethod
+end
+
+function Gridap.Geometry.SkeletonTriangulation(portion::Type{<:ProcLocalTriangulationPortion},
   model::DistributedDiscreteModel;kwargs_triangulation...)
-  @notimplemented
+  DistributedData(model) do part, (model,gids)
+    SkeletonTriangulation(portion,part,gids,model;kwargs_triangulation...)
+  end
+end
+
+function Gridap.Geometry.SkeletonTriangulation(portion::Type{OwnedCells},
+  part,gids,model::DiscreteModel;kwargs_triangulation...)
+  trian=SkeletonTriangulation(model;kwargs_triangulation...)
+  filter_cells_when_needed(portion,trian,part,gids)
 end
 
 function Gridap.Geometry.SkeletonTriangulation(portion::Type{OwnedAndGhostCells},
-  model::DistributedDiscreteModel,args_triangulation...;kwargs_triangulation...)
-  @notimplemented
+  part,gids,model::DiscreteModel;kwargs_triangulation...)
+  trian=SkeletonTriangulation(model;kwargs_triangulation...)
+  filter_cells_when_needed(portion,trian)
 end
 
 function remove_ghost_cells(trian::Triangulation, part::Integer, gids::IndexSet)
@@ -124,4 +138,10 @@ end
 
 function include_ghost_cells(trian::RestrictedTriangulation)
     trian.oldtrian
+end
+
+function Gridap.CellData.get_normal_vector(trian::DistributedData{<:Triangulation})
+  DistributedData(trian) do part, trian
+    Gridap.CellData.get_normal_vector(trian)
+  end
 end
