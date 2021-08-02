@@ -39,20 +39,19 @@ function Gridap.FESpaces.get_trial_fe_basis(f::DistributedFESpace)
     bases = DistributedData(f.spaces) do part, space
         get_trial_fe_basis(space)
     end
-    DistributedFEBasis(bases)
 end
 
 function Gridap.FESpaces.get_fe_basis(f::DistributedFESpace)
   bases = DistributedData(f.spaces) do part, space
       get_fe_basis(space)
   end
-  DistributedFEBasis(bases)
 end
 
 
 # TO-DO: Better name?
 struct DistributedFESpaceFromLocalFESpaces{V} <: DistributedFESpace
     vector_type::Type{V}
+    model::DistributedDiscreteModel
     spaces::DistributedData{<:FESpace}
     gids::DistributedIndexSet
 end
@@ -83,7 +82,7 @@ function Gridap.TrialFESpace(V::DistributedFESpaceFromLocalFESpaces, args...)
     spaces = DistributedData(V.spaces) do part, space
         TrialFESpace(space, args...)
     end
-    DistributedFESpaceFromLocalFESpaces(get_vector_type(V), spaces, V.gids)
+    DistributedFESpaceFromLocalFESpaces(get_vector_type(V), V.model, spaces, V.gids)
 end
 
 function DistributedFESpaceFromLocalFESpaces(::Type{V};
@@ -102,7 +101,7 @@ function DistributedFESpaceFromLocalFESpaces(::Type{V},
                                              model::DistributedDiscreteModel,
                                              spaces::DistributedData{<:FESpace}) where {V}
     gids = _compute_distributed_index_set(model, spaces)
-    DistributedFESpaceFromLocalFESpaces(V, spaces, gids)
+    DistributedFESpaceFromLocalFESpaces(V, model, spaces, gids)
 end
 
 function _compute_distributed_index_set(
@@ -389,21 +388,8 @@ struct DistributedFEFunction <: FEFunction
     space::DistributedFESpace
 end
 
-# TO-DO Gridap.FESpaces.FEFunctionStyle(::Type{DistributedFEFunction}) = Val{true}()
-
 get_distributed_data(u::DistributedFEFunction) = u.funs
 
 Gridap.FESpaces.get_free_dof_values(a::DistributedFEFunction) = a.vals
 
 Gridap.FESpaces.get_fe_space(a::DistributedFEFunction) = a.space
-
-# TO-DO Gridap.FESpaces.is_a_fe_function(a::DistributedFEFunction) = true
-
-# Cell basis
-struct DistributedFEBasis
-    bases::DistributedData
-end
-
-# TO-DO Gridap.FESpaces.FECellBasisStyle(::Type{DistributedFEBasis}) = Val{true}()
-
-get_distributed_data(u::DistributedFEBasis) = u.bases

@@ -184,8 +184,17 @@ function Gridap.FESpaces.assemble_matrix!(dmat,dassem::DistributedAssembler, dma
   assemble_matrix_add!(dmat,dassem,dmatdata)
 end
 
-function Gridap.FESpaces.assemble_matrix_add!(dmat,dassem::DistributedAssembler, dmatdata)
-  do_on_parts(dassem,dmatdata,dmat) do part, assem, matdata, mat
+function is_seq_and_map_dofs_type_proc_local(dassem::DistributedAssembler{V,M,AS}) where {V,M,AS}
+  result=isa(dassem.assems,SequentialDistributedData)
+  mapdofstype=get_map_dofs_type(AS)
+  result=result && mapdofstype==MapDoFsTypeProcLocal
+end
+
+function Gridap.FESpaces.assemble_matrix_add!(dmat,
+                                              dassem::DistributedAssembler{V,M,AS},
+                                              dmatdata) where {V,M,AS}
+  @notimplementedif is_seq_and_map_dofs_type_proc_local(dassem)
+  do_on_parts(dassem,dassem.test.gids,dmatdata,dmat) do part, assem, gids, matdata, mat
     assemble_matrix_add!(mat,assem,matdata)
   end
 end
@@ -196,6 +205,7 @@ function Gridap.FESpaces.assemble_vector!(dvec,dassem::DistributedAssembler, dve
 end
 
 function Gridap.FESpaces.assemble_vector_add!(dvec,dassem::DistributedAssembler, dvecdata)
+  @notimplementedif is_seq_and_map_dofs_type_proc_local(dassem)
   do_on_parts(dassem,dvecdata,dvec) do part, assem, vecdata, vec
     assemble_vector_add!(vec,assem,vecdata)
   end
@@ -208,6 +218,7 @@ function Gridap.FESpaces.assemble_matrix_and_vector!(dmat,dvec,dassem::Distribut
 end
 
 function Gridap.FESpaces.assemble_matrix_and_vector_add!(dmat,dvec,dassem::DistributedAssembler, ddata)
+  @notimplementedif is_seq_and_map_dofs_type_proc_local(dassem)
   do_on_parts(dassem,ddata,dmat,dvec) do part, assem, data, mat, vec
     assemble_matrix_and_vector_add!(mat,vec,assem,data)
   end
@@ -287,100 +298,177 @@ function Gridap.FESpaces.assemble_matrix_and_vector(dassem::DistributedAssembler
   A,b
 end
 
+# Type trait hierarchy for
+# GridapDistributed AssemblyStrategy implementations
+abstract type MapDoFsType end;
+struct MapDoFsTypeProcLocal <: MapDoFsType end;
+struct MapDoFsTypeGlobal    <: MapDoFsType end;
+const DefaultMapDoFsType = MapDoFsTypeGlobal
+
 
 #
 # Specializations
 
 # This is one of the usual assembly strategies in parallel FE computations
-# (but not the one we have used in the parallel agfem paper)
 # Each proc owns a set of matrix / vector rows (and all cols in these rows)
 # Each proc computes locally all values in the owned rows
 # This typically requires to loop also over ghost cells
-struct RowsComputedLocally{GlobalDoFs} <: AssemblyStrategy
+struct OwnedAndGhostCellsAssemblyStrategy{MapDoFsType} <: AssemblyStrategy
   part::Int
   gids::IndexSet
 end
 
-function Gridap.FESpaces.row_map(a::RowsComputedLocally{true},row)
+function Gridap.FESpaces.row_map(a::OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeGlobal},row)
   a.gids.lid_to_gid[row]
 end
 
-function Gridap.FESpaces.col_map(a::RowsComputedLocally{true},col)
+function Gridap.FESpaces.col_map(a::OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeGlobal},col)
   a.gids.lid_to_gid[col]
 end
 
-function Gridap.FESpaces.row_map(a::RowsComputedLocally{false},row)
+function Gridap.FESpaces.row_map(a::OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeProcLocal},row)
   row
 end
 
-function Gridap.FESpaces.col_map(a::RowsComputedLocally{false},col)
+function Gridap.FESpaces.col_map(a::OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeProcLocal},col)
   col
 end
 
-function Gridap.FESpaces.row_mask(a::RowsComputedLocally,row)
+function Gridap.FESpaces.row_mask(a::OwnedAndGhostCellsAssemblyStrategy,row)
   a.part == a.gids.lid_to_owner[row]
 end
 
-function Gridap.FESpaces.col_mask(a::RowsComputedLocally,col)
+function Gridap.FESpaces.col_mask(a::OwnedAndGhostCellsAssemblyStrategy,col)
   true
 end
 
-function RowsComputedLocally(V::DistributedFESpace; global_dofs=true)
+function OwnedAndGhostCellsAssemblyStrategy(
+  map_dofs_type::Type{<:MapDoFsType},V::DistributedFESpace)
    dgids = V.gids
    strategies = DistributedData(dgids) do part, gids
-     RowsComputedLocally{global_dofs}(part,gids)
+     OwnedAndGhostCellsAssemblyStrategy{map_dofs_type}(part,gids)
    end
    DistributedAssemblyStrategy(strategies)
 end
 
-struct OwnedCellsStrategy{GlobalDoFs} <: AssemblyStrategy
+function OwnedAndGhostCellsAssemblyStrategy(V::DistributedFESpace,
+  map_dofs_type::MapDoFsType=DefaultMapDoFsType())
+  OwnedAndGhostCellsAssemblyStrategy(typeof(map_dofs_type),V)
+end
+
+struct OwnedCellsAssemblyStrategy{MapDoFsType} <: AssemblyStrategy
   part::Int
   dof_gids::IndexSet
   cell_gids::IndexSet
 end
 
-function Gridap.FESpaces.row_map(a::OwnedCellsStrategy{true},row)
+function Gridap.FESpaces.row_map(a::OwnedCellsAssemblyStrategy{MapDoFsTypeGlobal},row)
   a.dof_gids.lid_to_gid[row]
 end
 
-function Gridap.FESpaces.col_map(a::OwnedCellsStrategy{true},col)
+function Gridap.FESpaces.col_map(a::OwnedCellsAssemblyStrategy{MapDoFsTypeGlobal},col)
   a.dof_gids.lid_to_gid[col]
 end
 
-function Gridap.FESpaces.row_map(a::OwnedCellsStrategy{false},row)
+function Gridap.FESpaces.row_map(a::OwnedCellsAssemblyStrategy{MapDoFsTypeProcLocal},row)
   row
 end
 
-function Gridap.FESpaces.col_map(a::OwnedCellsStrategy{false},col)
+function Gridap.FESpaces.col_map(a::OwnedCellsAssemblyStrategy{MapDoFsTypeProcLocal},col)
   col
 end
 
-function Gridap.FESpaces.row_mask(a::OwnedCellsStrategy,row)
+function Gridap.FESpaces.row_mask(a::OwnedCellsAssemblyStrategy,row)
   true
 end
 
-function Gridap.FESpaces.col_mask(a::OwnedCellsStrategy,col)
+function Gridap.FESpaces.col_mask(a::OwnedCellsAssemblyStrategy,col)
   true
 end
 
-function OwnedCellsStrategy(M::DistributedDiscreteModel, V::DistributedFESpace; global_dofs=true)
-  dcell_gids = M.gids
+function OwnedCellsAssemblyStrategy(V::DistributedFESpace,
+                                    map_dofs_type::MapDoFsType=DefaultMapDoFsType())
+  OwnedCellsAssemblyStrategy(typeof(map_dofs_type),V)
+end
+
+function OwnedCellsAssemblyStrategy(map_dofs_type::Type{<:MapDoFsType}, V::DistributedFESpace)
+  dcell_gids = V.model.gids
   ddof_gids  = V.gids
-  strategies = DistributedData(ddof_gids,dcell_gids) do part, dof_gids, cell_gids
-    OwnedCellsStrategy{global_dofs}(part,dof_gids,cell_gids)
-  end
+  strategies =
+     DistributedData(ddof_gids,dcell_gids) do part, dof_gids, cell_gids
+         OwnedCellsAssemblyStrategy{map_dofs_type}(part,dof_gids,cell_gids)
+     end
   DistributedAssemblyStrategy(strategies)
 end
 
+function default_assembly_strategy_type(::Communicator)
+  @abstractmethod
+end
 
-# TODO this assumes that the global matrix type is the same
-# as the local one
+function default_map_dofs_type(::Communicator)
+  @abstractmethod
+end
+
+function default_global_vector_type(::Communicator)
+  @abstractmethod
+end
+
+function default_global_matrix_type(::Communicator)
+  @abstractmethod
+end
+
+
+
+proc_local_triangulation_portion_type(a::AssemblyStrategy)=proc_local_triangulation_portion_type(typeof(a))
+
+proc_local_triangulation_portion_type(a::Type{<:AssemblyStrategy})=@abstractmethod
+
+proc_local_triangulation_portion_type(a::Type{<:OwnedCellsAssemblyStrategy})=OwnedCells
+
+proc_local_triangulation_portion_type(a::Type{<:OwnedAndGhostCellsAssemblyStrategy})=OwnedAndGhostCells
+
+function default_distributed_assembly_strategy(V::DistributedFESpace)
+  das=default_assembly_strategy_type(get_comm(V))
+  mdt=default_map_dofs_type(get_comm(V))
+  das(V,mdt())
+end
+
+get_map_dofs_type(::AssemblyStrategy)=@abstractmethod
+get_map_dofs_type(::OwnedAndGhostCellsAssemblyStrategy{T}) where {T}=T
+get_map_dofs_type(::OwnedCellsAssemblyStrategy{T}) where {T}=T
+get_map_dofs_type(::Type{OwnedAndGhostCellsAssemblyStrategy{T}}) where {T}=T
+get_map_dofs_type(::Type{OwnedCellsAssemblyStrategy{T}}) where {T}=T
+
+
+function Gridap.FESpaces.SparseMatrixAssembler(
+  dtrial::DistributedFESpace,
+  dtest::DistributedFESpace,
+  dstrategy::DistributedAssemblyStrategy=default_distributed_assembly_strategy(dtest))
+
+  matrix_type=default_global_matrix_type(get_comm(dtrial))
+  vector_type=default_global_vector_type(get_comm(dtrial))
+  assems = DistributedData(
+    dtrial.spaces,dtest.spaces,dstrategy) do part, U, V, strategy
+    SparseMatrixAssembler(get_local_matrix_type(matrix_type),
+                          get_local_vector_type(vector_type),
+                          U,
+                          V,
+                          strategy)
+  end
+  DistributedAssembler(matrix_type,
+                       vector_type,
+                       dtrial,
+                       dtest,
+                       assems,
+                       dstrategy)
+end
+
 function Gridap.FESpaces.SparseMatrixAssembler(
   matrix_type::Type,
   vector_type::Type,
   dtrial::DistributedFESpace,
   dtest::DistributedFESpace,
-  dstrategy::DistributedAssemblyStrategy)
+  dstrategy::DistributedAssemblyStrategy=default_distributed_assembly_strategy(dtest))
 
   assems = DistributedData(
     dtrial.spaces,dtest.spaces,dstrategy) do part, U, V, strategy
@@ -397,4 +485,95 @@ function Gridap.FESpaces.SparseMatrixAssembler(
                        dtest,
                        assems,
                        dstrategy)
+end
+
+function Gridap.Geometry.Triangulation(model::DistributedDiscreteModel,
+  args_triangulation...)#;kwargs_triangulation...)
+  AS=default_assembly_strategy_type(get_comm(model))
+  Triangulation(AS, model, args_triangulation...)#;kwargs_triangulation...)
+end
+
+function Gridap.Geometry.Triangulation(strategy::Type{<:AssemblyStrategy},
+  model::DistributedDiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  DistributedData(model) do part, (model,gids)
+    Triangulation(strategy,part,gids,model,args_triangulation...)#;kwargs_triangulation)
+  end
+end
+
+function Gridap.Geometry.Triangulation(strategy::AssemblyStrategy,
+  part,gids,model::DiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  Triangulation(typeof(strategy),part,gids,model,args_triangulation...)#;kwargs_triangulation)
+end
+
+function Gridap.Geometry.Triangulation(strategy::Type{<:AssemblyStrategy},
+  part,gids,model::DiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  portion=proc_local_triangulation_portion_type(strategy)
+  Triangulation(portion,part,gids,model,args_triangulation...)#;kwargs_triangulation)
+end
+
+function Gridap.Geometry.Triangulation(strategy::DistributedAssemblyStrategy,
+  model::DistributedDiscreteModel,args_triangulation...)#;kwargs_triangulation...)
+  DistributedData(model,strategy) do part, (model,gids), strategy
+     Triangulation(strategy,part,gids,model,args_triangulation...)#;kwargs_triangulation)
+  end
+end
+
+function Gridap.Geometry.BoundaryTriangulation(model::DistributedDiscreteModel;kwargs_triangulation...)
+  AS=default_assembly_strategy_type(get_comm(model))
+  BoundaryTriangulation(AS, model; kwargs_triangulation...)
+end
+
+function Gridap.Geometry.BoundaryTriangulation(strategy::Type{<:AssemblyStrategy},
+  model::DistributedDiscreteModel;kwargs_triangulation...)
+  DistributedData(model) do part, (model,gids)
+    BoundaryTriangulation(strategy,part,gids,model;kwargs_triangulation...)
+  end
+end
+
+function Gridap.Geometry.BoundaryTriangulation(strategy::AssemblyStrategy,
+  part,gids,model::DiscreteModel;kwargs_triangulation...)
+  BoundaryTriangulation(typeof(strategy),part,gids,model;kwargs_triangulation...)
+end
+
+function Gridap.Geometry.BoundaryTriangulation(strategy::Type{<:AssemblyStrategy},
+  part,gids,model::DiscreteModel;kwargs_triangulation...)
+  portion=proc_local_triangulation_portion_type(strategy)
+  BoundaryTriangulation(portion,part,gids,model;kwargs_triangulation...)
+end
+
+function Gridap.Geometry.BoundaryTriangulation(strategy::DistributedAssemblyStrategy,
+  model::DistributedDiscreteModel;kwargs_triangulation...)
+  DistributedData(model,strategy) do part, (model,gids), strategy
+    BoundaryTriangulation(strategy,part,gids,model;kwargs_triangulation...)
+  end
+end
+
+function Gridap.Geometry.SkeletonTriangulation(model::DistributedDiscreteModel;kwargs_triangulation...)
+  AS=default_assembly_strategy_type(get_comm(model))
+  SkeletonTriangulation(AS, model; kwargs_triangulation...)
+end
+
+function Gridap.Geometry.SkeletonTriangulation(strategy::Type{<:AssemblyStrategy},
+  model::DistributedDiscreteModel;kwargs_triangulation...)
+  DistributedData(model) do part, (model,gids)
+    SkeletonTriangulation(strategy,part,gids,model;kwargs_triangulation...)
+  end
+end
+
+function Gridap.Geometry.SkeletonTriangulation(strategy::AssemblyStrategy,
+  part,gids,model::DiscreteModel;kwargs_triangulation...)
+  SkeletonTriangulation(typeof(strategy),part,gids,model;kwargs_triangulation...)
+end
+
+function Gridap.Geometry.SkeletonTriangulation(strategy::Type{<:AssemblyStrategy},
+  part,gids,model::DiscreteModel;kwargs_triangulation...)
+  portion=proc_local_triangulation_portion_type(strategy)
+  SkeletonTriangulation(portion,part,gids,model;kwargs_triangulation...)
+end
+
+function Gridap.Geometry.SkeletonTriangulation(strategy::DistributedAssemblyStrategy,
+  model::DistributedDiscreteModel;kwargs_triangulation...)
+  DistributedData(model,strategy) do part, (model,gids), strategy
+     SkeletonTriangulation(strategy,part,gids,model;kwargs_triangulation...)
+  end
 end

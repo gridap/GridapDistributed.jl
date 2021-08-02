@@ -1,5 +1,6 @@
 struct ZeroMeanDistributedFESpace{V} <: DistributedFESpace
    vector_type :: Type{V}
+   model       :: DistributedDiscreteModel
    spaces      :: DistributedData{<:FESpace}
    gids        :: DistributedIndexSet
    vol_i       :: DistributedData{Vector{Float64}}
@@ -15,7 +16,7 @@ function Gridap.TrialFESpace(V::ZeroMeanDistributedFESpace,args...)
   spaces = DistributedData(V.spaces) do part, space
     TrialFESpace(space,args...)
   end
-  ZeroMeanDistributedFESpace(get_vector_type(V),spaces,V.gids,V.vol_i,V.vol)
+  ZeroMeanDistributedFESpace(get_vector_type(V),V.model,spaces,V.gids,V.vol_i,V.vol)
 end
 
 # U = TrialFESpace(f.space)
@@ -83,7 +84,6 @@ function constant_fixed(V::FESpaceWithConstantFixed)
    false
 end
 
-
 function ZeroMeanDistributedFESpace(::Type{V};
                                     model::DistributedDiscreteModel,
                                     reffe,
@@ -111,7 +111,7 @@ function ZeroMeanDistributedFESpace(::Type{V};
 
   dvol_i, dvol = _setup_vols(model,spaces,degree)
   gids=_compute_distributed_index_set(model, spaces_dof_removed)
-  ZeroMeanDistributedFESpace(V,spaces_dof_removed,gids,dvol_i,dvol)
+  ZeroMeanDistributedFESpace(V,model,spaces_dof_removed,gids,dvol_i,dvol)
 end
 
 
