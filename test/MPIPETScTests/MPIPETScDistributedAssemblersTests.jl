@@ -31,14 +31,6 @@ MPIPETScCommunicator() do comm
   model=setup_model(comm)
   U,V=setup_fe_spaces(model)
 
-  # das=OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeGlobal())
-  # test_assemble(comm,model,U,V,das)
-  # test_allocate_assemble_add(comm,model,U,V,das)
-
-  # das=OwnedCellsAssemblyStrategy(V,MapDoFsTypeGlobal())
-  # test_assemble(comm,model,U,V,das)
-  # test_allocate_assemble_add(comm,model,U,V,das)
-
   das=OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeProcLocal())
   test_assemble(comm,model,U,V,das)
   test_allocate_assemble_add(comm,model,U,V,das)
