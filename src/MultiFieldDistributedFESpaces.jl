@@ -13,7 +13,7 @@ function Gridap.MultiFieldFESpace(test_space::MultiFieldDistributedFESpace{V},
                                    trial_spaces::Vector{<:DistributedFESpace}) where V
 
     spaces = DistributedData(test_space.spaces, trial_spaces...) do part, lspace, spaces_and_gids...
-        MultiFieldFESpace([s[1] for s in spaces_and_gids],MultiFieldStyle(lspace))
+        MultiFieldFESpace([s[1] for s in spaces_and_gids])
     end
     MultiFieldDistributedFESpace(V, trial_spaces, spaces, test_space.gids)
 end
@@ -38,7 +38,7 @@ function _gen_multifield_distributed_fe_function(dV::MultiFieldDistributedFESpac
         mf_lids = 1:length(mfv)
         current = 1
         for (field_id,fun) in enumerate(fe_functions)
-            fv = get_free_values(fun)
+            fv = get_free_dof_values(fun)
             sf_lids=Gridap.MultiField.restrict_to_field(V,mf_lids,field_id)
             for i = 1:length(sf_lids)
                 mfv[sf_lids[i]] = fv[i]
@@ -201,20 +201,20 @@ end
 
 
 # FE Function
-struct MultiFieldDistributedFEFunction
+struct MultiFieldDistributedFEFunction <: FEFunction
     single_fe_functions::Vector{DistributedFEFunction}
     multifield_fe_function::DistributedFEFunction
     space::MultiFieldDistributedFESpace
 end
 
-Gridap.FESpaces.FEFunctionStyle(::Type{MultiFieldDistributedFEFunction}) = Val{true}()
-
 get_distributed_data(u::MultiFieldDistributedFEFunction) =
      get_distributed_data(u.multifield_fe_function)
 
-Gridap.FESpaces.get_free_values(a::MultiFieldDistributedFEFunction) =
-     get_free_values(a.multifield_fe_function)
+Gridap.FESpaces.get_free_dof_values(a::MultiFieldDistributedFEFunction) =
+     get_free_dof_values(a.multifield_fe_function)
 
 Gridap.FESpaces.get_fe_space(a::MultiFieldDistributedFEFunction) = a.space
 
-Gridap.FESpaces.is_a_fe_function(a::MultiFieldDistributedFEFunction) = true
+Base.iterate(m::MultiFieldDistributedFEFunction)=iterate(m.single_fe_functions)
+Base.iterate(m::MultiFieldDistributedFEFunction,state) = iterate(m.single_fe_functions,state)
+Base.getindex(m::MultiFieldDistributedFEFunction,field_id::Integer) = m.single_fe_functions[field_id]

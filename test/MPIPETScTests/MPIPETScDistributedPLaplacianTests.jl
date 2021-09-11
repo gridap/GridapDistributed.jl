@@ -68,36 +68,6 @@ function Base.copyto!(v::GridapDistributedPETScWrappers.Vec{Float64}, bc::Base.B
    end
 end
 
-function Gridap.FESpaces._assemble_matrix_and_vector!(A,b,vals_cache,rows_cache,cols_cache,cell_vals,cell_rows,cell_cols,strategy)
-  @assert length(cell_cols) == length(cell_rows)
-  @assert length(cell_vals) == length(cell_rows)
-  for cell in 1:length(cell_cols)
-    rows = getindex!(rows_cache,cell_rows,cell)
-    cols = getindex!(cols_cache,cell_cols,cell)
-    vals = getindex!(vals_cache,cell_vals,cell)
-    matvals, vecvals = vals
-    for (j,gidcol) in enumerate(cols)
-      if gidcol > 0 && col_mask(strategy,gidcol)
-        _gidcol = col_map(strategy,gidcol)
-        for (i,gidrow) in enumerate(rows)
-          if gidrow > 0 && row_mask(strategy,gidrow)
-            _gidrow = row_map(strategy,gidrow)
-            v = matvals[i,j]
-            Gridap.Algebra.add_entry!(A,v,_gidrow,_gidcol)
-          end
-        end
-      end
-    end
-    for (i,gidrow) in enumerate(rows)
-      if gidrow > 0 && row_mask(strategy,gidrow)
-        _gidrow = row_map(strategy,gidrow)
-        bi = vecvals[i]
-        Gridap.Algebra.add_entry!(b,bi,_gidrow)
-      end
-    end
-  end
-end
-
 function Base.maximum(::typeof(Base.abs), x::GridapDistributedPETScWrappers.Vec{Float64})
   norm(x,Inf)
 end
@@ -114,22 +84,14 @@ function (dist::Distances.SqEuclidean)(a::GridapDistributedPETScWrappers.Vec{Flo
   norm(a-b,2)^2
 end
 
-
-function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
-  # Select matrix and vector types for discrete problem
-  # Note that here we use serial vectors and matrices
-  # but the assembly is distributed
-  T = Float64
-  vector_type = GridapDistributedPETScWrappers.Vec{T}
-  matrix_type = GridapDistributedPETScWrappers.Mat{T}
-
+function run(comm)
   # Manufactured solution
   u(x) = x[1] + x[2] + 1
   f(x) = - Δ(u)(x)
 
   p = 3
-  @law flux(∇u) = norm(∇u)^(p-2) * ∇u
-  @law dflux(∇du,∇u) = (p-2)*norm(∇u)^(p-4)*(∇u⋅∇du)*∇u + norm(∇u)^(p-2)*∇du
+  flux(∇u) = norm(∇u)^(p-2) * ∇u
+  dflux(∇du,∇u) = (p-2)*norm(∇u)^(p-4)*(∇u⋅∇du)*∇u + norm(∇u)^(p-2)*∇du
 
   # Discretization
   subdomains = (2,2)
@@ -138,35 +100,25 @@ function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
   model = CartesianDiscreteModel(comm,subdomains,domain,cells)
 
   # FE Spaces
-  order = 3
-  V = FESpace(
-  vector_type, valuetype=Float64, reffe=:Lagrangian, order=order,
-  model=model, conformity=:H1, dirichlet_tags="boundary")
-
+  order=3
+  degree=2*order
+  reffe = ReferenceFE(lagrangian,Float64,order)
+  V = FESpace(model=model,
+              reffe=reffe,
+              conformity=:H1,
+              dirichlet_tags="boundary")
   U = TrialFESpace(V,u)
 
-  # Choose parallel assembly strategy
-  if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(V;global_dofs=global_dofs)
-  elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model, V; global_dofs=global_dofs)
-  else
-    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
+  trian=Triangulation(model)
+  dΩ=Measure(trian,degree)
+
+  function res(u,v)
+     ∫(∇(v)⋅(flux∘∇(u)))*dΩ
   end
 
-  # Terms in the weak form
-  terms = DistributedData(model,strategy) do part, (model,gids), strategy
-    trian = Triangulation(strategy,model)
-    degree = 2*order
-    quad = CellQuadrature(trian,degree)
-    res(u,v) = ∇(v)⋅flux(∇(u)) - v*f
-    jac(u,du,v) = ∇(v)⋅dflux(∇(du),∇(u))
-    t_Ω = FETerm(res,jac,trian,quad)
-    (t_Ω,)
+  function jac(u,du,v)
+     ∫( ∇(v)⋅(dflux∘(∇(du),∇(u))) )*dΩ
   end
-
-  # Assembler
-  assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
 
   # Non linear solver
   ls = PETScLinearSolver(
@@ -180,34 +132,26 @@ function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
   solver = FESolver(nls)
 
   # FE solution
-  op = FEOperator(assem,terms)
+  op = FEOperator(res,jac,U,V)
   x = zero_free_values(U)
   x .= 1.0
   uh0 = FEFunction(U,x)
   uh, = Gridap.solve!(uh0,solver,op)
 
   # Error norms and print solution
-  sums = DistributedData(model,uh) do part, (model,gids), uh
-    trian = Triangulation(model)
-    owned_trian = remove_ghost_cells(trian,part,gids)
-    owned_quad = CellQuadrature(owned_trian,2*order)
-    owned_uh = restrict(uh,owned_trian)
-    #writevtk(owned_trian,"results_plaplacian_$part",cellfields=["uh"=>owned_uh])
-    e = u - owned_uh
-    l2(u) = u*u
-    sum(integrate(l2(e),owned_trian,owned_quad))
-  end
-  e_l2 = sum(gather(sums))
+  trian=Triangulation(OwnedCells,model)
+  dΩ=Measure(trian,2*order)
+  e = u-uh
+  e_l2 = sum(∫(e*e)dΩ)
   tol = 1.0e-9
+  @test e_l2 < tol
   if (i_am_master(comm))
     println("$(e_l2) < $(tol)")
   end
-  @test e_l2 < tol
 end
 
 MPIPETScCommunicator() do comm
-  run(comm,"RowsComputedLocally",false)
-  run(comm,"OwnedCellsStrategy",false)
+  run(comm)
 end
 
 end # module

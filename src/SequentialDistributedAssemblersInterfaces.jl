@@ -1,11 +1,24 @@
 # Assembly related
 
-struct SequentialIJV{A,B}
-  dIJV::A
-  gIJV::B
+function default_assembly_strategy_type(::SequentialCommunicator)
+  OwnedAndGhostCellsAssemblyStrategy
 end
 
-get_distributed_data(a::SequentialIJV) = a.dIJV
+function default_map_dofs_type(::SequentialCommunicator)
+  MapDoFsTypeGlobal
+end
+
+function default_global_vector_type(::SequentialCommunicator)
+  T = Float64
+  Vector{Float64}
+
+end
+
+function default_global_matrix_type(::SequentialCommunicator)
+  T = Float64
+  SparseMatrixCSC{T}
+end
+
 
 function Gridap.Algebra.allocate_vector(::Type{V},gids::DistributedIndexSet) where V <: AbstractVector
   ngids = num_gids(gids)
@@ -13,7 +26,7 @@ function Gridap.Algebra.allocate_vector(::Type{V},gids::DistributedIndexSet) whe
 end
 
 function allocate_local_vector(
-  strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{false}},DistributedAssemblyStrategy{OwnedCellsStrategy{false}}},
+  strat::Union{DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeProcLocal}},DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{MapDoFsTypeProcLocal}}},
   ::Type{V},
   indices::SequentialDistributedIndexSet,
 ) where V<:Vector
@@ -26,7 +39,7 @@ function allocate_local_vector(
 end
 
 function allocate_local_vector(
-  strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{true}},DistributedAssemblyStrategy{OwnedCellsStrategy{true}}},
+  strat::Union{DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeGlobal}},DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{MapDoFsTypeGlobal}}},
   ::Type{V},
   indices::SequentialDistributedIndexSet,
 ) where V<:Vector
@@ -37,13 +50,13 @@ function allocate_local_vector(
 end
 
 
-function assemble_global_matrix(strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{T}},DistributedAssemblyStrategy{OwnedCellsStrategy{T}}},
+function assemble_global_matrix(strat::Union{DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{T}},DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{T}}},
                                 ::Type{M},
-                                IJV::SequentialIJV,
+                                dIJV::SequentialDistributedData,
                                 m::DistributedIndexSet,
                                 n::DistributedIndexSet) where {T,M}
-  if (!T)
-     do_on_parts(IJV.dIJV,m,n) do part, IJV, mindexset, nindexset
+  if (T==MapDoFsTypeProcLocal)
+     do_on_parts(dIJV,m,n) do part, IJV, mindexset, nindexset
         I,J,V = IJV
         for i=1:length(I)
           I[i]=mindexset.lid_to_gid[I[i]]
@@ -51,11 +64,22 @@ function assemble_global_matrix(strat::Union{DistributedAssemblyStrategy{RowsCom
         end
      end
   end
-  I,J,V = IJV.gIJV
+  if (length(dIJV.parts)==1)
+    I,J,V=dIJV.parts[1]
+  else
+    I=lazy_append(dIJV.parts[1][1],dIJV.parts[2][1])
+    J=lazy_append(dIJV.parts[1][2],dIJV.parts[2][2])
+    V=lazy_append(dIJV.parts[1][3],dIJV.parts[2][3])
+    for part=3:length(dIJV.parts)
+      I=lazy_append(I,dIJV.parts[part][1])
+      J=lazy_append(J,dIJV.parts[part][2])
+      V=lazy_append(V,dIJV.parts[part][3])
+    end
+  end
   A=sparse_from_coo(M,I,J,V,num_gids(m),num_gids(n))
 end
 
-function assemble_global_vector(strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{false}},DistributedAssemblyStrategy{OwnedCellsStrategy{false}}},
+function assemble_global_vector(strat::Union{DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeProcLocal}},DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{MapDoFsTypeProcLocal}}},
                                 ::Type{M},
                                 db::DistributedData,
                                 m::DistributedIndexSet) where M <: Vector
@@ -68,38 +92,19 @@ function assemble_global_vector(strat::Union{DistributedAssemblyStrategy{RowsCom
   b
 end
 
-
-
-function assemble_global_vector(strat::Union{DistributedAssemblyStrategy{RowsComputedLocally{true}},DistributedAssemblyStrategy{OwnedCellsStrategy{true}}},
+function assemble_global_vector(strat::Union{DistributedAssemblyStrategy{OwnedAndGhostCellsAssemblyStrategy{MapDoFsTypeGlobal}},DistributedAssemblyStrategy{OwnedCellsAssemblyStrategy{MapDoFsTypeGlobal}}},
                                 ::Type{M},
                                 b::M,
                                 m::DistributedIndexSet) where M <: Vector
   b
 end
 
-function Gridap.Algebra.allocate_coo_vectors(::Type{M},dn::DistributedData) where M <: AbstractMatrix
-
-  part_to_n = gather(dn)
-  n = sum(part_to_n)
-  gIJV = allocate_coo_vectors(M,n)
-
-  _fill_offsets!(part_to_n)
-
-  dIJV = DistributedData(get_comm(dn), part_to_n) do part, part_to_n
-    spos=part_to_n[part]+1
-    if (part == length(part_to_n))
-      epos=n
-    else
-      epos=part_to_n[part+1]
-    end
-    map( i -> SubVector(i,spos,epos), gIJV)
-  end
-
-  SequentialIJV(dIJV,gIJV)
-end
-
 function Gridap.Algebra.finalize_coo!(
-  ::Type{M},IJV::SequentialIJV,m::DistributedIndexSet,n::DistributedIndexSet) where M <: AbstractMatrix
-  I,J,V = IJV.gIJV
-  finalize_coo!(M,I,J,V,num_gids(m),num_gids(n))
+  ::Type{M},
+  IJV::SequentialDistributedData,
+  m::DistributedIndexSet,
+  n::DistributedIndexSet) where M <: AbstractMatrix
+  for part in IJV.parts
+    finalize_coo!(M,part[1],part[2],part[3],num_gids(m),num_gids(n))
+  end
 end

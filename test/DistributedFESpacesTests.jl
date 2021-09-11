@@ -12,10 +12,11 @@ SequentialCommunicator(subdomains) do comm
   model = CartesianDiscreteModel(comm,subdomains,domain,cells)
   nsubdoms = prod(subdomains)
   vector_type = Vector{Float64}
-  V = FESpace(vector_type,model=model,valuetype=Float64,reffe=:Lagrangian,order=1)
+  reffe = ReferenceFE(lagrangian,Float64,1)
+  V = FESpace(vector_type,model=model,reffe=reffe)
   do_on_parts(V, model) do part,(space,gids), (model,_)
-    uh_gids = FEFunction(space,gids.lid_to_gid)
-    uh_owner = FEFunction(space,gids.lid_to_owner)
+    uh_gids = FEFunction(space,convert(Vector{Float64},gids.lid_to_gid))
+    uh_owner = FEFunction(space,convert(Vector{Float64},gids.lid_to_owner))
     trian = Triangulation(model)
     writevtk(trian,"results_$(part)",cellfields=["gid"=>uh_gids,"owner"=>uh_owner])
   end

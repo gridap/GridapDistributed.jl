@@ -24,4 +24,33 @@ function Gridap.writevtk(model::DistributedDiscreteModel,filebase::String)
 
 end
 
+function Gridap.Geometry.get_face_labeling(model::DistributedDiscreteModel)
+  DistributedData(model) do part, (model,gids)
+     get_face_labeling(model)
+  end
+end
 
+"""
+    add_tag_from_tags!(lab::FaceLabeling, name::String, tags::Vector{Int})
+    add_tag_from_tags!(lab::FaceLabeling, name::String, tags::Vector{String})
+    add_tag_from_tags!(lab::FaceLabeling, name::String, tag::Int)
+    add_tag_from_tags!(lab::FaceLabeling, name::String, tag::String)
+"""
+function Gridap.Geometry.add_tag_from_tags!(lab::DistributedData{<:FaceLabeling}, name::String, tags::Vector{Int})
+  do_on_parts(lab) do part, lab
+    add_tag_from_tags!(lab, name, tags)
+  end
+end
+
+function Gridap.Geometry.add_tag_from_tags!(
+  labels::DistributedData{<:FaceLabeling}, name::String, names::Vector{String})
+  @notimplemented
+end
+
+function Gridap.Geometry.add_tag_from_tags!(labels::DistributedData{<:FaceLabeling}, name::String, tag::Int)
+  @notimplemented
+end
+
+function Gridap.Geometry.add_tag_from_tags!(labels::DistributedData{<:FaceLabeling}, name::String, tag::String)
+  @notimplemented
+end

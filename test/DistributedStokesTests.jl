@@ -14,14 +14,7 @@ function Gridap.FESpaces.num_dirichlet_dofs(f::Gridap.MultiField.MultiFieldFESpa
   result
 end
 
-function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Bool)
-  # Select matrix and vector types for discrete problem
-  # Note that here we use serial vectors and matrices
-  # but the assembly is distributed
-  T = Float64
-  vector_type = Vector{T}
-  matrix_type = SparseMatrixCSC{T,Int}
-
+function run(comm,subdomains)
   # Manufactured solution
   ux(x)=2*x[1]*x[2]
   uy(x)=-x[2]^2
@@ -37,34 +30,26 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
   cells = (4, 4)
   model = CartesianDiscreteModel(comm, subdomains, domain, cells)
 
-  # Define Dirichlet and Neumann boundaries for local models
-  do_on_parts(model) do part, (model,gids)
-    labels = get_face_labeling(model)
-    add_tag_from_tags!(labels,"diri0",[1,2,3,4,6,7,8])
-    add_tag_from_tags!(labels,"diri1",[1,2,3,4,6,7,8])
-    add_tag_from_tags!(labels,"neumann",[5])
-  end
-
+  labels = get_face_labeling(model)
+  add_tag_from_tags!(labels,"diri0",[1,2,3,4,6,7,8])
+  add_tag_from_tags!(labels,"diri1",[1,2,3,4,6,7,8])
+  add_tag_from_tags!(labels,"neumann",[5])
 
   # FE Spaces
   order = 2
+  reffeᵤ = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
+  reffeₚ = Gridap.ReferenceFEs.LagrangianRefFE(Float64,QUAD,order-1;space=:P)
   V = FESpace(
-        vector_type,
-        valuetype = VectorValue{2,Float64},
-        reffe=:QLagrangian,
-        order = order,
-        model = model,
-        conformity = :H1,
+        model=model,
+        reffe=reffeᵤ,
+        conformity=:H1,
         dirichlet_tags=["diri0","diri1"],
       )
 
   Q = FESpace(
-       vector_type,
-       reffe=:PLagrangian,
-       conformity=:L2,
-       valuetype=Float64,
        model=model,
-       order=order-1)
+       reffe=reffeₚ,
+       conformity=:L2)
        #constraint=:zeromean)
 
   Y=MultiFieldFESpace(model,[V,Q])
@@ -73,76 +58,40 @@ function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Boo
   P=TrialFESpace(Q)
   X=MultiFieldFESpace(Y,[U,P])
 
-  if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(Y; global_dofs=global_dofs)
-  elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model,Y; global_dofs=global_dofs)
-  else
-    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
+  trian=Triangulation(model)
+  degree = 2*(order+1)
+  dΩ = Measure(trian,degree)
+
+  btrian=BoundaryTriangulation(model;tags="neumann")
+  dΓ = Measure(btrian,degree)
+
+  function a((u,p),(v,q))
+    ∫( ∇(v)⊙∇(u) - (∇⋅v)*p + q*(∇⋅u) )dΩ
   end
 
-  # Terms in the weak form
-  terms = DistributedData(model, strategy) do part, (model, gids), strategy
-    trian = Triangulation(strategy, model)
-    btrian=BoundaryTriangulation(strategy,model,"neumann")
-
-    degree=2
-    quad=CellQuadrature(trian, degree)
-    bquad=CellQuadrature(btrian,degree)
-
-    function a(x,y)
-      v,q = y
-      y,z = x
-      ∇(v)⊙∇(y) - (∇⋅v)*z + q*(∇⋅y)
-    end
-    function l(y)
-      v,q = y
-      f⋅v
-    end
-    function lΓ(y)
-      v,q = y
-      s⋅v
-    end
-    t_Ω = AffineFETerm(a,l,trian,quad)
-    t_Γ = FESource(lΓ,btrian,bquad)
-    (t_Ω,t_Γ)
+  function l((v,q))
+    ∫( v⋅f )dΩ + ∫( v⋅s )dΓ
   end
 
-   # Assembler
-   assem = SparseMatrixAssembler(matrix_type, vector_type, X, Y, strategy)
+  # #  # FE solution
+  op = AffineFEOperator(a,l,X,Y)
+  xh = solve(op)
+  uh,_ = xh
 
-  #  # FE solution
-   op = AffineFEOperator(assem, terms)
-   xh = solve(op)
-
-  # Error norms and print solution
-  sums = DistributedData(model, xh) do part, (model, gids), xh
-    trian = Triangulation(model)
-    owned_trian = remove_ghost_cells(trian, part, gids)
-
-    owned_quad = CellQuadrature(owned_trian, 2)
-    owned_xh = restrict(xh, owned_trian)
-
-    uh, ph = owned_xh
-
-    #writevtk(owned_trian, "results_$part", cellfields = ["uh" => uh])
-    e = u - uh
-    l2(u) = u ⋅ u
-    sum(integrate(l2(e), owned_trian, owned_quad))
-  end
-  e_l2 = sum(gather(sums))
-
+  trian=Triangulation(OwnedCells,model)
+  dΩ=Measure(trian,2*order)
+  e = u-uh
+  e_l2 = sum(∫(e⋅e)dΩ)
   tol = 1.0e-9
   println("$(e_l2) < $(tol)")
   @test e_l2 < tol
 end
 
 subdomains = (2,2)
-SequentialCommunicator(subdomains) do comm
-  run(comm,subdomains,"RowsComputedLocally", false)
-  run(comm,subdomains,"OwnedCellsStrategy", false)
-  run(comm,subdomains,"RowsComputedLocally", true)
-  run(comm,subdomains,"OwnedCellsStrategy", true)
+function f(comm)
+  run(comm,subdomains)
 end
+
+SequentialCommunicator(f,subdomains)
 
 end # module

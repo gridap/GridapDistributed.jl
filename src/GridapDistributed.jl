@@ -12,6 +12,7 @@ using SparseArrays
 using MPI
 using GridapDistributedPETScWrappers
 using FillArrays
+using SparseMatricesCSR
 
 export Communicator
 export num_parts
@@ -37,8 +38,12 @@ export num_gids
 export DistributedVector
 export exchange!
 
-export RowsComputedLocally
-export OwnedCellsStrategy
+export OwnedAndGhostCellsAssemblyStrategy
+export OwnedCellsAssemblyStrategy
+export MapDoFsTypeGlobal
+export MapDoFsTypeProcLocal
+export OwnedCells
+export OwnedAndGhostCells
 
 export remove_ghost_cells
 export include_ghost_cells
@@ -83,6 +88,8 @@ include("MultiFieldDistributedFESpaces.jl")
 
 include("DistributedFESpaceFactories.jl")
 
+include("DistributedTriangulations.jl")
+
 include("DistributedAssemblers.jl")
 
 include("SequentialDistributedAssemblersInterfaces.jl")
@@ -91,12 +98,14 @@ include("MPIPETScAlgebraInterfaces.jl")
 
 include("MPIPETScDistributedAssemblersInterfaces.jl")
 
-include("DistributedFETerms.jl")
-
 include("DistributedFEOperators.jl")
 
-include("DistributedTriangulations.jl")
-
 include("MPIPETScLinearSolvers.jl")
+
+import Gridap.TensorValues: inner, outer, double_contraction, symmetric_part
+import LinearAlgebra: det, tr, cross, dot, ⋅
+import Base: inv, abs, abs2, *, +, -, /, adjoint, transpose, real, imag, conj
+include("GridapHighLevelAPI.jl")
+
 
 end # module

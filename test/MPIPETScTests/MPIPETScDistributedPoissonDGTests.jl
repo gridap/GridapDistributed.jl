@@ -7,81 +7,72 @@ using GridapDistributed
 using SparseArrays
 using GridapDistributedPETScWrappers
 
+# Select matrix and vector types for discrete problem
+# Note that here we use serial vectors and matrices
+# but the assembly is distributed
+const T = Float64
+const vector_type = GridapDistributedPETScWrappers.Vec{T}
+const matrix_type = GridapDistributedPETScWrappers.Mat{T}
 
-function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
-  # Select matrix and vector types for discrete problem
-  # Note that here we use serial vectors and matrices
-  # but the assembly is distributed
-  T = Float64
-  vector_type = GridapDistributedPETScWrappers.Vec{T}
-  matrix_type = GridapDistributedPETScWrappers.Mat{T}
+# Manufactured solution
+function u(x)
+  x[1] * (x[1] - 1) * x[2] * (x[2] - 1)
+end
+f(x) = -Δ(u)(x)
+ud(x) = zero(x[1])
 
-  # Manufactured solution
-  u(x) = x[1] * (x[1] - 1) * x[2] * (x[2] - 1)
-  f(x) = -Δ(u)(x)
-  ud(x) = zero(x[1])
+# Model
+const domain = (0, 1, 0, 1)
+const cells  = (4, 4)
+const h      = (domain[2] - domain[1]) / cells[1]
 
+# FE Spaces
+const order  = 2
+const γ = 10
+const degree = 2*order
+
+function setup_model(comm)
   # Discretization
   subdomains = (2, 2)
-  domain = (0, 1, 0, 1)
-  cells = (4, 4)
   model = CartesianDiscreteModel(comm, subdomains, domain, cells)
-  h = (domain[2] - domain[1]) / cells[1]
+end
 
-  # FE Spaces
-  order = 2
-  V = FESpace(
-    vector_type,
-    valuetype = Float64,
-    reffe = :Lagrangian,
-    order = order,
-    model = model,
-    conformity = :L2,
-  )
-
+function setup_fe_spaces(model)
+  reffe = ReferenceFE(lagrangian,Float64,order)
+  V = FESpace(vector_type,
+              model=model,
+              reffe=reffe,
+              conformity=:L2)
   U = TrialFESpace(V)
+  U,V
+end
 
-  if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(V; global_dofs=global_dofs)
-  elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model,V; global_dofs=global_dofs)
-  else
-    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
+function run(comm,model,U,V,strategy)
+  trian=Triangulation(strategy,model)
+  dΩ=Measure(trian,degree)
+
+  btrian=BoundaryTriangulation(strategy,model)
+  dΓ = Measure(btrian,degree)
+
+  strian=SkeletonTriangulation(strategy,model)
+  dΛ = Measure(strian,degree)
+
+  n_Γ = get_normal_vector(btrian)
+  n_Λ = get_normal_vector(strian)
+
+  function a(u,v)
+      ∫( ∇(v)⋅∇(u) )*dΩ +
+      ∫( (γ/h)*v*u - v*(n_Γ⋅∇(u)) - (n_Γ⋅∇(v))*u )*dΓ +
+      ∫( (γ/h)*jump(v*n_Λ)⋅jump(u*n_Λ) - jump(v*n_Λ)⋅mean(∇(u)) -  mean(∇(v))⋅jump(u*n_Λ) )*dΛ
   end
-
-  # Terms in the weak form
-  terms = DistributedData(model, strategy) do part, (model, gids), strategy
-    γ = 10
-    degree = 2 * order
-
-    trian = Triangulation(strategy, model)
-    btrian = BoundaryTriangulation(strategy, model)
-    strian = SkeletonTriangulation(strategy, model)
-
-    quad = CellQuadrature(trian, degree)
-    bquad = CellQuadrature(btrian, degree)
-    squad = CellQuadrature(strian, degree)
-
-    bn = get_normal_vector(btrian)
-    sn = get_normal_vector(strian)
-
-    a(u, v) = ∇(v)⋅∇(u)
-    l(v) = v * f
-    t_Ω = AffineFETerm(a, l, trian, quad)
-
-    a_Γd(u, v) = (γ / h) * v * u - v * (bn⋅∇(u)) - (bn⋅∇(v)) * u
-    l_Γd(v) = (γ / h) * v * ud - (bn⋅∇(v)) * ud
-    t_Γd = AffineFETerm(a_Γd, l_Γd, btrian, bquad)
-
-    a_Γ(u, v) = (γ / h) * jump(v * sn)⋅jump(u * sn) - jump(v * sn)⋅mean(∇(u)) -
-      mean(∇(v))⋅jump(u * sn)
-    t_Γ = LinearFETerm(a_Γ, strian, squad)
-    (t_Ω, t_Γ, t_Γd)
+  function l(v)
+      ∫( v*f )*dΩ +
+      ∫( (γ/h)*v*ud - (n_Γ⋅∇(v))*ud )*dΓ
   end
 
   # Assembly
   assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
-  op = AffineFEOperator(assem, terms)
+  op = AffineFEOperator(a,l,U,V,assem)
 
   # FE solution
   ls = PETScLinearSolver(
@@ -95,23 +86,13 @@ function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
   fels = LinearFESolver(ls)
   uh = solve(fels, op)
 
-  # Error norms and print solution
-  sums = DistributedData(model, uh) do part, (model, gids), uh
-    trian = Triangulation(model)
-    owned_trian = remove_ghost_cells(trian, part, gids)
-    owned_quad = CellQuadrature(owned_trian, 2 * order)
-    owned_uh = restrict(uh, owned_trian)
-    writevtk(owned_trian, "results_$part", cellfields = ["uh" => owned_uh])
-    e = u - owned_uh
-    l2(u) = u * u
-    h1(u) = u * u + ∇(u) ⋅ ∇(u)
-    e_l2 = sum(integrate(l2(e), owned_trian, owned_quad))
-    e_h1 = sum(integrate(h1(e), owned_trian, owned_quad))
-    e_l2, e_h1
-  end
-  e_l2_h1 = gather(sums)
-  e_l2 = sum(map(i -> i[1], e_l2_h1))
-  e_h1 = sum(map(i -> i[2], e_l2_h1))
+  trian = Triangulation(OwnedCells,model)
+  dΩ = Measure(trian,degree)
+  e = u - uh
+  l2(u) = ∫( u⊙u )*dΩ
+  h1(u) = ∫( u⊙u + ∇(u)⊙∇(u) )*dΩ
+  e_l2 = sum(l2(e))
+  e_h1 = sum(h1(e))
   tol = 1.0e-9
   @test e_l2 < tol
   @test e_h1 < tol
@@ -122,8 +103,12 @@ function run(comm, assembly_strategy::AbstractString, global_dofs::Bool)
 end
 
 MPIPETScCommunicator() do comm
-  run(comm, "RowsComputedLocally",false)
-  run(comm, "OwnedCellsStrategy",false)
+  model=setup_model(comm)
+  U,V=setup_fe_spaces(model)
+  strategy = OwnedAndGhostCellsAssemblyStrategy(V,MapDoFsTypeProcLocal())
+  run(comm,model,U,V,strategy)
+  strategy = OwnedCellsAssemblyStrategy(V,MapDoFsTypeProcLocal())
+  run(comm,model,U,V,strategy)
 end
 
 end # module#

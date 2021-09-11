@@ -36,7 +36,7 @@ As an example, the MPI-parallel `GridapDistributed.jl` driver `MPIPETScCommunica
 $MPIRUN -np 2 julia --project=. -J ../Gridap.jl/compile/Gridapv0.14.1.so test/MPIPETScTests/MPIPETScCommunicatorsTests.jl
 ```
 
-where `-J ../Gridap.jl/compile/Gridapv0.14.1.so` is optional, but highly recommended in order to reduce JIT compilation times. More details about how to generate this file can be found [here](https://github.com/gridap/Gridap.jl/tree/master/compile).
+where `-J ../Gridap.jl/compile/Gridapv0.14.1.so` is optional, but highly recommended in order to reduce JIT compilation times. More details about how to generate this file can be found [here](https://github.com/gridap/GridapDistributed.jl/blob/master/compile/README.md).
 
 
 Two big warnings when executing MPI-parallel drivers:

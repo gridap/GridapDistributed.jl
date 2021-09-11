@@ -6,8 +6,9 @@ This method implementation (at present) assumes the following:
   (1) i,j are local identifiers, and A has been set up a LocalToGlobalMapping IS.
   (2) The insertion mode of A is GridapDistributedPETScWrappers.ADD_VALUES
 """
-function Gridap.Algebra.add_entry!(A::GridapDistributedPETScWrappers.Mat{Float64},
-                                   v,
+function Gridap.Algebra.add_entry!(::typeof(+),
+                                   A::GridapDistributedPETScWrappers.Mat{Float64},
+                                   v::Float64,
                                    i::Integer,
                                    j::Integer)
   GridapDistributedPETScWrappers.set_values_local!(A,
@@ -24,8 +25,9 @@ This method implementation (at present) assumes the following:
   (1) i,j are local identifiers, and A has been set up a LocalToGlobalMapping IS.
   (2) The insertion mode of A is GridapDistributedPETScWrappers.ADD_VALUES
 """
-function Gridap.Algebra.add_entry!(A::GridapDistributedPETScWrappers.Vec{Float64},
-                                   v,
+function Gridap.Algebra.add_entry!(::typeof(+),
+                                   A::GridapDistributedPETScWrappers.Vec{Float64},
+                                   v::Float64,
                                    i::Integer)
   GridapDistributedPETScWrappers.set_values_local!(A,
                           GridapDistributedPETScWrappers.PetscInt[i-1],

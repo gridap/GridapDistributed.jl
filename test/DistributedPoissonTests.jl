@@ -6,88 +6,51 @@ using Gridap.FESpaces
 using GridapDistributed
 using SparseArrays
 
-function run(comm,subdomains,assembly_strategy::AbstractString, global_dofs::Bool)
-  # Select matrix and vector types for discrete problem
-  # Note that here we use serial vectors and matrices
-  # but the assembly is distributed
-  T = Float64
-  vector_type = Vector{T}
-  matrix_type = SparseMatrixCSC{T,Int}
-
+function run(comm,subdomains)
   # Manufactured solution
   u(x) = x[1] + x[2]
   f(x) = -Δ(u)(x)
 
   # Discretization
-  subdomains = (2, 2)
   domain = (0, 1, 0, 1)
   cells = (4, 4)
-  comm = SequentialCommunicator(subdomains)
   model = CartesianDiscreteModel(comm, subdomains, domain, cells)
 
   # FE Spaces
-  order = 1
-  V = FESpace(
-    vector_type,
-    valuetype = Float64,
-    reffe = :Lagrangian,
-    order = order,
-    model = model,
-    conformity = :H1,
-    dirichlet_tags = "boundary",
-  )
-
+  order=1
+  reffe = ReferenceFE(lagrangian,Float64,order)
+  V = FESpace(model=model,
+              reffe=reffe,
+              conformity=:H1,
+              dirichlet_tags="boundary")
   U = TrialFESpace(V, u)
 
-  if (assembly_strategy == "RowsComputedLocally")
-    strategy = RowsComputedLocally(V; global_dofs=global_dofs)
-  elseif (assembly_strategy == "OwnedCellsStrategy")
-    strategy = OwnedCellsStrategy(model,V; global_dofs=global_dofs)
-  else
-    @assert false "Unknown AssemblyStrategy: $(assembly_strategy)"
-  end
+  trian=Triangulation(model)
+  dΩ=Measure(trian,2*(order+1))
 
-  # Terms in the weak form
-  terms = DistributedData(model, strategy) do part, (model, gids), strategy
-    trian = Triangulation(strategy, model)
-    degree = 2 * order
-    quad = CellQuadrature(trian, degree)
-    a(u, v) = ∇(v)⋅∇(u)
-    l(v) = v * f
-    t1 = AffineFETerm(a, l, trian, quad)
-    (t1,)
+  function a(u,v)
+    ∫(∇(v)⋅∇(u))dΩ
   end
-
-  # Assembler
-  assem = SparseMatrixAssembler(matrix_type, vector_type, U, V, strategy)
+  function l(v)
+    ∫(v*f)dΩ
+  end
 
   # FE solution
-  op = AffineFEOperator(assem, terms)
+  op = AffineFEOperator(a,l,U,V)
   uh = solve(op)
 
-  # Error norms and print solution
-  sums = DistributedData(model, uh) do part, (model, gids), uh
-    trian = Triangulation(model)
-    owned_trian = remove_ghost_cells(trian, part, gids)
-    owned_quad = CellQuadrature(owned_trian, 2 * order)
-    owned_uh = restrict(uh, owned_trian)
-    writevtk(owned_trian, "results_$part", cellfields = ["uh" => owned_uh])
-    e = u - owned_uh
-    l2(u) = u * u
-    sum(integrate(l2(e), owned_trian, owned_quad))
-  end
-  e_l2 = sum(gather(sums))
-
+  trian=Triangulation(OwnedCells,model)
+  dΩ=Measure(trian,2*order)
+  e = u-uh
+  e_l2 = sum(∫(e*e)dΩ)
   tol = 1.0e-9
+  println("$(e_l2) < $(tol)")
   @test e_l2 < tol
 end
 
 subdomains = (2,2)
 SequentialCommunicator(subdomains) do comm
-  run(comm,subdomains,"RowsComputedLocally", false)
-  run(comm,subdomains,"OwnedCellsStrategy", false)
-  run(comm,subdomains,"RowsComputedLocally", true)
-  run(comm,subdomains,"OwnedCellsStrategy", true)
+  run(comm,subdomains)
 end
 
 end # module
