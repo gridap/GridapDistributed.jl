@@ -11,6 +11,7 @@ using Gridap.MultiField
 using SparseArrays
 using MPI
 using GridapDistributedPETScWrappers
+using p4est_wrapper
 using FillArrays
 using SparseMatricesCSR
 
@@ -49,6 +50,8 @@ export remove_ghost_cells
 export include_ghost_cells
 
 export PETScLinearSolver
+export UniformlyRefinedForestOfOctreesDiscreteModel
+
 
 include("Communicators.jl")
 
@@ -79,6 +82,8 @@ include("MPIPETScDistributedVectors.jl")
 include("DistributedDiscreteModels.jl")
 
 include("CartesianDiscreteModels.jl")
+
+include("UniformlyRefinedForestOfOctreesDiscreteModels.jl")
 
 include("DistributedFESpaces.jl")
 

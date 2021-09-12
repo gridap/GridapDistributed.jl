@@ -1,10 +1,3 @@
-using MPI
-using p4est_wrapper
-using Gridap
-using GridapDistributed
-using Test
-using FillArrays
-
 const P4EST_2_GRIDAP_FACE_2D  = [ 3, 4, 1, 2 ]
 const GRIDAP_2_P4EST_FACE_2D  = [ 3, 4, 1, 2 ]
 
@@ -22,9 +15,7 @@ function p4est_get_quadrant_vertex_coordinates(connectivity::Ptr{p4est_connectiv
       p4est_quadrant_t(x,y,level,Int8(0),Int16(0),
                        p4est_wrapper.quadrant_data(Clong(0))))
     neighbour=Ref{p4est_quadrant_t}(myself[])
-    if corner == 0
-       #neighbour[] = myself[]
-    elseif corner == 1
+    if corner == 1
        p4est_quadrant_face_neighbor(myself,corner,neighbour)
     elseif corner == 2
        p4est_quadrant_face_neighbor(myself,corner+1,neighbour)
@@ -40,33 +31,26 @@ function p4est_get_quadrant_vertex_coordinates(connectivity::Ptr{p4est_connectiv
                            vxy)
 end
 
+function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
+                                                      coarse_discrete_model::DiscreteModel,
+                                                      num_uniform_refinements::Int)
 
-MPIPETScCommunicator() do comm
-
-  # Initialize MPI if not initialized yet
-  if !MPI.Initialized()
-     MPI.Init()
-  end
-
-  #############################################################################
-  # Main program
-  #############################################################################
 
   mpicomm = comm.comm #p4est_wrapper.P4EST_ENABLE_MPI ? MPI.COMM_WORLD : Cint(0)
 
   # Create a connectivity structure for the unit square.
   unitsquare_connectivity = p4est_connectivity_new_unitsquare()
-  @test unitsquare_connectivity != C_NULL
+  @assert unitsquare_connectivity != C_NULL
 
   # Create a new forest
   unitsquare_forest = p4est_new_ext(mpicomm,
                                     unitsquare_connectivity,
-                                    Cint(0), Cint(2), Cint(1), Cint(0),
+                                    Cint(0), Cint(num_uniform_refinements), Cint(1), Cint(0),
                                     C_NULL, C_NULL)
-  @test unitsquare_forest != C_NULL
+  @assert unitsquare_forest != C_NULL
 
   unitsquare_ghost=p4est_ghost_new(unitsquare_forest,p4est_wrapper.P4EST_CONNECT_FULL)
-  @test unitsquare_ghost != C_NULL
+  @assert unitsquare_ghost != C_NULL
 
   # Build the ghost layer.
   p4est_ghost = unitsquare_ghost[]
@@ -109,7 +93,7 @@ MPIPETScCommunicator() do comm
   end
 
   ptr_unitsquare_lnodes=p4est_lnodes_new(unitsquare_forest, unitsquare_ghost, Cint(1))
-  @test ptr_unitsquare_lnodes != C_NULL
+  @assert ptr_unitsquare_lnodes != C_NULL
 
   unitsquare_lnodes=ptr_unitsquare_lnodes[]
 
@@ -239,7 +223,6 @@ MPIPETScCommunicator() do comm
   end
 
 
-  coarse_discrete_model = CartesianDiscreteModel((0,1,0,1),(1,1))
   coarse_grid_topology  = Gridap.Geometry.get_grid_topology(coarse_discrete_model)
   coarse_grid_labeling  = Gridap.Geometry.get_face_labeling(coarse_discrete_model)
 
@@ -255,9 +238,9 @@ MPIPETScCommunicator() do comm
     tree = p4est_tree_array_index(p4est.trees, itree-1)[]
     owned_trees_offset[itree+1]=owned_trees_offset[itree]+tree.quadrants.elem_count
   end
-  if (MPI.Comm_rank(comm.comm)==0)
-    println("ZZZZZZZZ ",owned_trees_offset)
-  end
+  # if (MPI.Comm_rank(comm.comm)==0)
+  #   println("ZZZZZZZZ ",owned_trees_offset)
+  # end
 
   dface_labeling=DistributedData(dgrid_and_topology) do part, (grid,topology)
      # Iterate over corners
@@ -420,26 +403,6 @@ MPIPETScCommunicator() do comm
   # Destroy the connectivity
   p4est_connectivity_destroy(unitsquare_connectivity)
 
-  # Finalize MPI if initialized and session is not interactive
-  # if (MPI.Initialized() && !isinteractive())
-  #   MPI.Finalize()
-  # end
-end
+  DistributedDiscreteModel(ddiscretemodel,cellindices)
 
-# /** The information that is available to the user-defined p4est_iter_volume_t
-#  * callback function.
-#  *
-#  * \a treeid gives the index in \a p4est->trees of the tree to which
-#  *    \a quad belongs.
-#  * \a quadid gives the index of \a quad within \a tree's quadrants array.
-#  */
-# typedef struct p4est_iter_volume_info
-# {
-#   p4est_t            *p4est;
-#   p4est_ghost_t      *ghost_layer;
-#   p4est_quadrant_t   *quad;    /**< the quadrant of the callback */
-#   p4est_locidx_t      quadid;  /**< id in \a quad's tree array (see
-#                                     p4est_tree_t) */
-#   p4est_topidx_t      treeid;  /**< the tree containing \a quad */
-# }
-# p4est_iter_volume_info_t;
+end
