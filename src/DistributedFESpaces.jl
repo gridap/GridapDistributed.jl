@@ -115,6 +115,9 @@ function _compute_distributed_index_set(
         lid_to_owner = zeros(Int, nlids)
         cell_to_part = cell_gids.lid_to_owner
         cell_to_lids = Table(get_cell_dof_ids(lspace))
+        # if (part==1)
+        #   println(cell_to_lids)
+        # end
         _fill_max_part_around!(lid_to_owner, cell_to_part, cell_to_lids)
         lid_to_owner
     end
@@ -148,7 +151,12 @@ function _compute_distributed_index_set(
                                                      offsets)
 
     function init_free_gids(part, lid_to_gid, lid_to_owner, ngids)
-        IndexSet(ngids, lid_to_gid, lid_to_owner)
+      #  if (part==1)
+      #   println("$(ngids)")
+      #   println("$(lid_to_gid)")
+      #   println("$(lid_to_owner)")
+      #  end
+       IndexSet(ngids, lid_to_gid, lid_to_owner)
     end
 
     gids = DistributedIndexSet(init_free_gids,
@@ -330,6 +338,7 @@ end
 function update_lid_to_owner(part, lid_to_owner, lspace, cell_to_owners)
     cell_to_lids = Table(get_cell_dof_ids(lspace))
     _update_lid_to_owner!(lid_to_owner, cell_to_lids, cell_to_owners)
+
 end
 
 function _update_lid_to_owner!(lid_to_owner, cell_to_lids, cell_to_owners)
@@ -339,7 +348,7 @@ function _update_lid_to_owner!(lid_to_owner, cell_to_lids, cell_to_owners)
         pend = cell_to_lids.ptrs[cell + 1] - 1
         for (i, p) in enumerate(pini:pend)
             lid = cell_to_lids.data[p]
-            if lid > 0
+            if lid > 0 && i_to_owner[i] > 0
                 owner = i_to_owner[i]
                 lid_to_owner[lid] = owner
             end

@@ -31,6 +31,135 @@ function p4est_get_quadrant_vertex_coordinates(connectivity::Ptr{p4est_connectiv
                            vxy)
 end
 
+
+function coarse_discrete_model_to_p4est_connectivity(coarse_discrete_model::DiscreteModel)
+
+  trian=Triangulation(coarse_discrete_model)
+  node_coordinates=Gridap.Geometry.get_node_coordinates(trian)
+  cell_nodes_ids=Gridap.Geometry.get_cell_node_ids(trian)
+  D=num_cell_dims(coarse_discrete_model)
+
+  pconn=p4est_connectivity_new(
+    p4est_topidx_t(length(node_coordinates)),         # num_vertices
+    p4est_topidx_t(num_cells(coarse_discrete_model)), # num_trees
+    p4est_topidx_t(0),
+    p4est_topidx_t(0))
+
+  conn=pconn[]
+
+  vertices=unsafe_wrap(Array, conn.vertices, length(node_coordinates)*3)
+  current=1
+  for i=1:length(node_coordinates)
+    p=node_coordinates[i]
+    for j=1:D
+      vertices[current]=Cdouble(p[j]) #::Ptr{Cdouble}
+      current=current+1
+    end
+    vertices[current]=Cdouble(0.0) # Z coordinate always to 0.0 in 2D
+    current=current+1
+  end
+  #print("XXX", vertices, "\n")
+
+  tree_to_vertex=unsafe_wrap(Array, conn.tree_to_vertex, length(cell_nodes_ids)*(2^D))
+  c=Gridap.Arrays.array_cache(cell_nodes_ids)
+  current=1
+  for j=1:length(cell_nodes_ids)
+     ids=Gridap.Arrays.getindex!(c,cell_nodes_ids,j)
+     for id in ids
+      tree_to_vertex[current]=p4est_topidx_t(id-1)
+      current=current+1
+     end
+  end
+
+  # /*
+  #  * Fill tree_to_tree and tree_to_face to make sure we have a valid
+  #  * connectivity.
+  #  */
+  tree_to_tree=unsafe_wrap(Array, conn.tree_to_tree, conn.num_trees*p4est_wrapper.P4EST_FACES )
+  tree_to_face=unsafe_wrap(Array, conn.tree_to_face, conn.num_trees*p4est_wrapper.P4EST_FACES )
+  for tree=1:conn.num_trees
+    for face=1:p4est_wrapper.P4EST_FACES
+      tree_to_tree[p4est_wrapper.P4EST_FACES * (tree-1) + face] = tree-1
+      tree_to_face[p4est_wrapper.P4EST_FACES * (tree-1) + face] = face-1
+    end
+  end
+  p4est_connectivity_complete(pconn)
+  @assert Bool(p4est_connectivity_is_valid(pconn))
+
+  pconn
+end
+
+function p4est_connectivity_print(pconn::Ptr{p4est_connectivity_t})
+  # struct p4est_connectivity
+  #   num_vertices::p4est_topidx_t
+  #   num_trees::p4est_topidx_t
+  #   num_corners::p4est_topidx_t
+  #   vertices::Ptr{Cdouble}
+  #   tree_to_vertex::Ptr{p4est_topidx_t}
+  #   tree_attr_bytes::Csize_t
+  #   tree_to_attr::Cstring
+  #   tree_to_tree::Ptr{p4est_topidx_t}
+  #   tree_to_face::Ptr{Int8}
+  #   tree_to_corner::Ptr{p4est_topidx_t}
+  #   ctt_offset::Ptr{p4est_topidx_t}
+  #   corner_to_tree::Ptr{p4est_topidx_t}
+  #   corner_to_corner::Ptr{Int8}
+  # end
+  conn = pconn[]
+  println("num_vertices=$(conn.num_vertices)")
+  println("num_trees=$(conn.num_trees)")
+  println("num_corners=$(conn.num_corners)")
+  vertices=unsafe_wrap(Array, conn.vertices, conn.num_vertices*3)
+  println("vertices=$(vertices)")
+end
+
+function init_cell_to_face_entity(part,
+                                  num_faces_x_cell,
+                                  cell_to_faces,
+                                  face_to_entity)
+  ptrs = Vector{eltype(num_faces_x_cell)}(undef,length(cell_to_faces) + 1)
+  ptrs[2:end] .= num_faces_x_cell
+  Gridap.Arrays.length_to_ptrs!(ptrs)
+  data = Vector{eltype(face_to_entity)}(undef, ptrs[end] - 1)
+  cell_to_face_entity = lazy_map(Broadcasting(Reindex(face_to_entity)),cell_to_faces)
+  k = 1
+  for i = 1:length(cell_to_face_entity)
+    for j = 1:length(cell_to_face_entity[i])
+      k=_fill_data!(data,cell_to_face_entity[i][j],k)
+    end
+  end
+  return Gridap.Arrays.Table(data, ptrs)
+end
+
+function update_face_to_entity!(part,face_to_entity, cell_to_faces, cell_to_face_entity)
+  for cell in 1:length(cell_to_faces)
+      i_to_entity = cell_to_face_entity[cell]
+      pini = cell_to_faces.ptrs[cell]
+      pend = cell_to_faces.ptrs[cell + 1] - 1
+      for (i, p) in enumerate(pini:pend)
+        lid = cell_to_faces.data[p]
+        face_to_entity[lid] = i_to_entity[i]
+      end
+  end
+end
+
+function update_face_to_entity_with_ghost_data!(
+   face_to_entity,cell_gids,num_faces_x_cell,cell_to_faces)
+
+   part_to_cell_to_entity = DistributedVector(init_cell_to_face_entity,
+                                               cell_gids,
+                                               num_faces_x_cell,
+                                               cell_to_faces,
+                                               face_to_entity)
+    exchange!(part_to_cell_to_entity)
+    do_on_parts(update_face_to_entity!,
+                get_comm(cell_gids),
+                face_to_entity,
+                cell_to_faces,
+                part_to_cell_to_entity)
+end
+
+
 function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
                                                       coarse_discrete_model::DiscreteModel,
                                                       num_uniform_refinements::Int)
@@ -38,9 +167,20 @@ function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
 
   mpicomm = comm.comm #p4est_wrapper.P4EST_ENABLE_MPI ? MPI.COMM_WORLD : Cint(0)
 
-  # Create a connectivity structure for the unit square.
-  unitsquare_connectivity = p4est_connectivity_new_unitsquare()
+  unitsquare_connectivity=coarse_discrete_model_to_p4est_connectivity(coarse_discrete_model)
   @assert unitsquare_connectivity != C_NULL
+
+  # if (MPI.Comm_rank(comm.comm)==0)
+  #   p4est_connectivity_print(unitsquare_connectivity)
+  # end
+
+  # Create a connectivity structure for the unit square.
+  # unitsquare_connectivity = p4est_connectivity_new_unitsquare()
+  # @assert unitsquare_connectivity != C_NULL
+
+  # if (MPI.Comm_rank(comm.comm)==0)
+  #   p4est_connectivity_print(unitsquare_connectivity)
+  # end
 
   # Create a new forest
   unitsquare_forest = p4est_new_ext(mpicomm,
@@ -85,9 +225,9 @@ function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
       end
     end
     # if (part==2)
-    #    print(n,"\n")
-    #    print(lid_to_gid,"\n")
-    #    print(lid_to_part,"\n")
+    #     print(n,"\n")
+    #     print(lid_to_gid,"\n")
+    #     print(lid_to_part,"\n")
     # end
     IndexSet(n,lid_to_gid,lid_to_part)
   end
@@ -155,11 +295,10 @@ function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
   dnode_coordinates=DistributedData(cell_vertex_lids_nlvertices) do part, (cell_vertex_lids, nl)
      node_coordinates=Vector{Point{D,Float64}}(undef,nl)
      current=1
-     num_trees=p4est.last_local_tree-p4est.first_local_tree+1
      vxy=Vector{Cdouble}(undef,D)
      pvxy=pointer(vxy,1)
      cell_lids=cell_vertex_lids.data
-     for itree=1:num_trees
+     for itree=1:p4est_ghost.num_trees
        tree = p4est_tree_array_index(p4est.trees, itree-1)[]
        for cell=1:tree.quadrants.elem_count
           quadrant=p4est_quadrant_array_index(tree.quadrants, cell-1)[]
@@ -171,9 +310,6 @@ function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
                                                quadrant.level,
                                                Cint(vertex-1),
                                                pvxy)
-            #  if (MPI.Comm_rank(comm.comm)==0)
-            #     println(vxy)
-            #  end
              node_coordinates[cell_lids[current]]=Point{D,Float64}(vxy...)
              current=current+1
           end
@@ -231,18 +367,14 @@ function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
   coarse_cell_faces    = Gridap.Geometry.get_faces(coarse_grid_topology,D,1)
 
 
-  num_trees=p4est.last_local_tree-p4est.first_local_tree+1
-  owned_trees_offset=Vector{Int}(undef,num_trees+1)
-  owned_trees_offset[1]=1
-  for itree=1:num_trees
+  owned_trees_offset=Vector{Int}(undef,p4est_ghost.num_trees+1)
+  owned_trees_offset[1]=0
+  for itree=1:p4est_ghost.num_trees
     tree = p4est_tree_array_index(p4est.trees, itree-1)[]
     owned_trees_offset[itree+1]=owned_trees_offset[itree]+tree.quadrants.elem_count
   end
-  # if (MPI.Comm_rank(comm.comm)==0)
-  #   println("ZZZZZZZZ ",owned_trees_offset)
-  # end
 
-  dface_labeling=DistributedData(dgrid_and_topology) do part, (grid,topology)
+  dfaces_to_entity=DistributedData(dgrid_and_topology) do part, (grid,topology)
      # Iterate over corners
      num_vertices=Gridap.Geometry.num_faces(topology,0)
      vertex_to_entity=zeros(Int,num_vertices)
@@ -254,21 +386,21 @@ function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
         info=pinfo[]
         sides=Ptr{p4est_iter_corner_side_t}(info.sides.array)
         nsides=info.sides.elem_count
+        tree=sides[1].treeid+1
         # We are on the interior of a tree
         data=sides[1]
         if data.is_ghost==1
            ref_cell=p4est.local_num_quadrants+data.quadid+1
         else
-           ref_cell=data.quadid+1
+           ref_cell=owned_trees_offset[tree]+data.quadid+1
         end
-        tree=sides[1].treeid+1
         corner=sides[1].corner+1
         ref_cornergid=cell_vertices[ref_cell][corner]
         # if (MPI.Comm_rank(comm.comm)==0)
-        #   println("XXX ", ref_cell, " ", ref_cornergid, " ", info.tree_boundary)
+        #   println("XXX ", ref_cell, " ", ref_cornergid, " ", info.tree_boundary, " ", nsides, " ", corner)
         # end
         if (info.tree_boundary!=0)
-          if (info.tree_boundary == p4est_wrapper.P4EST_CONNECT_CORNER)
+          if (info.tree_boundary == p4est_wrapper.P4EST_CONNECT_CORNER && nsides==1)
               # The current corner is also a corner of the coarse mesh
               coarse_cornergid=coarse_cell_vertices[tree][corner]
               vertex_to_entity[ref_cornergid]=
@@ -300,14 +432,14 @@ function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
         info=pinfo[]
         sides=Ptr{p4est_iter_face_side_t}(info.sides.array)
         nsides=info.sides.elem_count
+        tree=sides[1].treeid+1
         # We are on the interior of a tree
         data=sides[1].is.full
         if data.is_ghost==1
            ref_cell=p4est.local_num_quadrants+data.quadid+1
         else
-           ref_cell=data.quadid+1
+           ref_cell=owned_trees_offset[tree]+data.quadid+1
         end
-        tree=sides[1].treeid+1
         face=sides[1].face+1
         gridap_face=P4EST_2_GRIDAP_FACE_2D[face]
 
@@ -317,9 +449,9 @@ function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
         poly_face=poly_first_face+gridap_face-1
 
         # if (MPI.Comm_rank(comm.comm)==0)
-        #   println("XXX ", ref_cell, " ", ref_facegid, " ", info.tree_boundary)
+        #   println("PPP ", ref_cell, " ", gridap_face, " ", info.tree_boundary, " ", nsides)
         # end
-        if (info.tree_boundary!=0)
+        if (info.tree_boundary!=0 && nsides==1)
           coarse_facegid=coarse_cell_faces[tree][gridap_face]
           # We are on the boundary of coarse mesh or inter-octree boundary
           for poly_incident_face in poly_faces[poly_face]
@@ -329,12 +461,15 @@ function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
                 coarse_grid_labeling.d_to_dface_to_entity[2][coarse_facegid]
             else
               ref_cornergid=cell_vertices[ref_cell][poly_incident_face]
+              # if (MPI.Comm_rank(comm.comm)==0)
+              #    println("CCC ", ref_cell, " ", ref_cornergid, " ", info.tree_boundary, " ", nsides)
+              # end
               vertex_to_entity[ref_cornergid]=
                  coarse_grid_labeling.d_to_dface_to_entity[2][coarse_facegid]
             end
           end
         else
-          # We are on the interior of a tree
+          # We are on the interior of the domain
           ref_facegid=cell_faces[ref_cell][gridap_face]
           face_to_entity[ref_facegid]=coarse_grid_labeling.d_to_dface_to_entity[3][tree]
         end
@@ -356,7 +491,7 @@ function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
                             user_data :: Ptr{Cvoid})
       info=pinfo[]
       tree=info.treeid+1
-      cell=info.quadid+1
+      cell=owned_trees_offset[tree]+info.quadid+1
       cell_to_entity[cell]=coarse_grid_labeling.d_to_dface_to_entity[3][tree]
       nothing
     end
@@ -365,26 +500,69 @@ function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
                                  (Ptr{p4est_iter_volume_info_t},Ptr{Cvoid}))
 
     p4est_iterate(unitsquare_forest,unitsquare_ghost,C_NULL,C_NULL,cface_callback,C_NULL)
+    # if (MPI.Comm_rank(comm.comm)==0)
+    #   println("VTE ", vertex_to_entity)
+    # end
     p4est_iterate(unitsquare_forest,unitsquare_ghost,C_NULL,ccell_callback,C_NULL,ccorner_callback)
+    # if (MPI.Comm_rank(comm.comm)==0)
+    #   println("VTE ", vertex_to_entity)
+    # end
 
-     #  struct FaceLabeling <: GridapType
-     #   d_to_dface_to_entity::Vector{Vector{Int32}}
-     #   tag_to_entities::Vector{Vector{Int32}}
-     #   tag_to_name::Vector{String}
-     # end
-    #  if (MPI.Comm_rank(comm.comm)==0)
-    #    println("XXX ", vertex_to_entity)
-    #    println("XXX ", face_to_entity)
-    #    println("XXX ", cell_to_entity)
+    vertex_to_entity, face_to_entity, cell_to_entity
+ end
+
+ dvertex_to_entity = DistributedData(comm,dfaces_to_entity) do part, (v,_,_)
+   v
+ end
+ dfacet_to_entity  = DistributedData(comm,dfaces_to_entity) do part, (_,f,_)
+   f
+ end
+ dcell_to_entity   = DistributedData(comm,dfaces_to_entity) do part, (_,_,c)
+   c
+ end
+
+ function dcell_to_faces(dgrid_and_topology,cell_dim,face_dim)
+   DistributedData(get_comm(dgrid_and_topology),dgrid_and_topology) do part, (grid,topology)
+    Gridap.Geometry.get_faces(topology,cell_dim,face_dim)
+  end
+ end
+
+ update_face_to_entity_with_ghost_data!(dvertex_to_entity,
+                                        cellindices,
+                                        num_faces(QUAD,0),
+                                        dcell_to_faces(dgrid_and_topology,D,0))
+
+ update_face_to_entity_with_ghost_data!(dfacet_to_entity,
+                                        cellindices,
+                                        num_faces(QUAD,1),
+                                        dcell_to_faces(dgrid_and_topology,D,1))
+
+ update_face_to_entity_with_ghost_data!(dcell_to_entity,
+                                        cellindices,
+                                        num_faces(QUAD,2),
+                                        dcell_to_faces(dgrid_and_topology,D,2))
+
+ dface_labeling =
+  DistributedData(comm,
+                  dvertex_to_entity,
+                  dfacet_to_entity,
+                  dcell_to_entity) do part, vertex_to_entity, face_to_entity, cell_to_entity
+
+    # if (part == 1)
+    #    println("XXX", vertex_to_entity)
+    #    println("XXX", face_to_entity)
+    #    println("XXX", cell_to_entity)
+    # end
+
     d_to_dface_to_entity    = Vector{Vector{Int}}(undef,3)
     d_to_dface_to_entity[1] = vertex_to_entity
     d_to_dface_to_entity[2] = face_to_entity
     d_to_dface_to_entity[3] = cell_to_entity
-
     Gridap.Geometry.FaceLabeling(d_to_dface_to_entity,
-               coarse_grid_labeling.tag_to_entities,
-               coarse_grid_labeling.tag_to_name)
+                                 coarse_grid_labeling.tag_to_entities,
+                                 coarse_grid_labeling.tag_to_name)
  end
+
 
   ddiscretemodel=
     DistributedData(comm,dgrid_and_topology,dface_labeling) do part, (grid,topology), face_labeling
