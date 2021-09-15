@@ -17,6 +17,10 @@ jobs:
    env:
      JULIA_MPI_BINARY: "system"
      P4EST_ROOT_DIR: "/opt/p4est/2.2/" 
+     JULIA_PETSC_RealDouble_BINARY: "system"
+     JULIA_PETSC_RealDouble_DIR: "/tmp/petsc-3.15.4"
+     JULIA_PETSC_RealDouble_ARCH: "arch-linux-c-debug" 
+     JULIA_PETSC_RealDouble_LIBNAME: "libpetsc"
    steps:
      - uses: actions/checkout@v2
      - uses: julia-actions/setup-julia@v1
