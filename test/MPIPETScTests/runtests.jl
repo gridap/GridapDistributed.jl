@@ -45,9 +45,9 @@ testfiles = sort(filter(istest, readdir(testdir)))
        np = 4
      end
      if ! image_file_exists
-       cmd = `$cmd -n $(np) $(Base.julia_cmd()) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
+       cmd = `$cmd -n $(np) --allow-run-as-root --tag-output $(Base.julia_cmd()) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
      else
-      cmd = `$cmd -n $(np) $(Base.julia_cmd()) -J$(image_file_path) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
+      cmd = `$cmd -n $(np) --allow-run-as-root --tag-output $(Base.julia_cmd()) -J$(image_file_path) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
      end
      @show cmd
      run(cmd)
