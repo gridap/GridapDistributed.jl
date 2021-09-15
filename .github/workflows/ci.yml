@@ -44,7 +44,7 @@ jobs:
           mkdir -p $SOURCES_DIR
           tar xzf $ROOT_DIR/$TAR_FILE -C $SOURCES_DIR --strip-components=1
           cd $SOURCES_DIR
-          PETSC_DIR=$(PETSC_INSTALL) PETSC_ARCH=x86_64 ./configure --with-cc=mpicc --with-cxx=mpicxx --with-fc=mpif90 \
+          ./configure --with-cc=mpicc --with-cxx=mpicxx --with-fc=mpif90 \
              --download-mumps --download-scalapack --download-parmetis --download-metis \
              --download-ptscotch --with-debugging --with-x=0 --with-shared=1 \
              --with-mpi=1 --with-64-bit-indices
