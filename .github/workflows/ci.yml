@@ -52,7 +52,10 @@ jobs:
              --download-mumps --download-scalapack --download-parmetis --download-metis \
              --download-ptscotch --with-debugging --with-x=0 --with-shared=1 \
              --with-mpi=1 --with-64-bit-indices
-          make 
+          make
+          ls -l /tmp/petsc-3.15.4
+          which mpicc
+          which mpif90 
           #make install 
      - name: Install p4est
        run: |

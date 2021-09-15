@@ -38,6 +38,9 @@ testfiles = sort(filter(istest, readdir(testdir)))
      elseif f in ["MPIPETScDistributedPoissonTests.jl"]
        np = 4
        extra_args = "-s 2 2 -p 4 4"
+     elseif f in ["MPIPETScUniformlyRefinedForestOfOctreesDiscreteModelsTests.jl"]
+       np = 4
+       extra_args = "-s 2 2 2 -r 2" 
      else
        np = 4
      end
