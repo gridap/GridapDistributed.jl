@@ -15,7 +15,7 @@ jobs:
   MPIPETScCommTests:
    runs-on: ubuntu-latest
    env:
-     JULIA_MPI_BINARY: "system"
+     JULIA_MPI_BINARY: "OpenMPI_jll"
      P4EST_ROOT_DIR: "/opt/p4est/2.2/" 
    steps:
      - uses: actions/checkout@v2
