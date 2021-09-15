@@ -3,7 +3,7 @@ on:
   - push 
 jobs:
   SequentialCommTests:
-    runs-on: ubuntu-latest 
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@v1
@@ -13,13 +13,42 @@ jobs:
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
   MPIPETScCommTests:
-   runs-on: ubuntu-latest 
+   runs-on: ubuntu-latest
+   env:
+     JULIA_MPI_BINARY: "system"
+     P4EST_ROOT_DIR: "/opt/p4est/2.2/" 
    steps:
      - uses: actions/checkout@v2
      - uses: julia-actions/setup-julia@v1
        with:
          version: 1.6
          arch: x64 
+     - name: Install p4est dependencies
+       run: |
+           sudo apt-get update 
+           sudo apt-get install -y wget gfortran g++ openmpi-bin libopenmpi2 libopenmpi-dev
+     - name: Install p4est
+       run: |
+          # Install p4est 2.2 from sources
+          CURR_DIR=$(pwd)
+          PACKAGE=p4est
+          VERSION=2.2
+          INSTALL_ROOT=/opt
+          P4EST_INSTALL=$INSTALL_ROOT/$PACKAGE/$VERSION
+          TAR_FILE=$PACKAGE-$VERSION.tar.gz
+          URL="https://github.com/p4est/p4est.github.io/raw/master/release"
+          ROOT_DIR=/tmp
+          SOURCES_DIR=$ROOT_DIR/$PACKAGE-$VERSION
+          BUILD_DIR=$SOURCES_DIR/build
+          wget -q $URL/$TAR_FILE -O $ROOT_DIR/$TAR_FILE
+          mkdir -p $SOURCES_DIR
+          tar xzf $ROOT_DIR/$TAR_FILE -C $SOURCES_DIR --strip-components=1
+          cd $SOURCES_DIR
+          ./configure --prefix=$P4EST_INSTALL --without-blas --without-lapack --enable-mpi -disable-dependency-tracking
+          make --quiet
+          make --quiet install
+          rm -rf $ROOT_DIR/$TAR_FILE $SOURCES_DIR
+          cd $CURR_DIR 
      - uses: julia-actions/julia-buildpkg@latest
      - run: echo $PWD  
      - run: julia --project=. --color=yes -e 'using Pkg; Pkg.instantiate()'
