@@ -49,7 +49,7 @@ jobs:
              --download-ptscotch --with-debugging --with-x=0 --with-shared=1 \
              --with-mpi=1 --with-64-bit-indices
           make 
-          make install 
+          #make install 
      - name: Install p4est
        run: |
           # Install p4est 2.2 from sources
