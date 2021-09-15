@@ -26,7 +26,7 @@ jobs:
      - name: Install p4est dependencies
        run: |
            sudo apt-get update 
-           sudo apt-get install -y wget gfortran g++ openmpi-bin libopenmpi2 libopenmpi-dev
+           sudo apt-get install -y wget gfortran g++ openmpi-bin libopenmpi-dev
      - name: Install p4est
        run: |
           # Install p4est 2.2 from sources
