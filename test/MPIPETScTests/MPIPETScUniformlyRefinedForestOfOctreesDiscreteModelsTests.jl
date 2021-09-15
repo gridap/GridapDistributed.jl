@@ -2,14 +2,43 @@ module MPIPETScUniformlyRefinedForestOfOctreesDiscreteModelsTests
   using Gridap
   using GridapDistributed
   using Test
+  using ArgParse
 
-  function run(comm)
+
+
+  function parse_commandline()
+    s = ArgParseSettings()
+    @add_arg_table! s begin
+        "--subdomains", "-s"
+        help = "Tuple with the # of coarse subdomains per Cartesian direction"
+        arg_type = Int64
+        default=[1,1]
+        nargs='+'
+        "--num-uniform-refinements", "-r"
+        help = "# of uniform refinements"
+        arg_type = Int64
+        default=1
+    end
+    return parse_args(s)
+  end
+
+
+  function run(comm,subdomains,num_uniform_refinements)
     # Manufactured solution
     u(x) = x[1] + x[2]
     f(x) = -Δ(u)(x)
 
-    coarse_discrete_model = CartesianDiscreteModel((0,1,0,1),(2,2))
-    model=UniformlyRefinedForestOfOctreesDiscreteModel(comm,coarse_discrete_model,2)
+    if length(subdomains)==2
+      domain=(0,1,0,1)
+    else
+      @assert length(subdomains)==3
+      domain=(0,1,0,1,0,1)
+    end
+
+    coarse_discrete_model=CartesianDiscreteModel(domain,subdomains)
+    model=UniformlyRefinedForestOfOctreesDiscreteModel(comm,
+                                                       coarse_discrete_model,
+                                                       num_uniform_refinements)
 
     # FE Spaces
     order=1
@@ -53,8 +82,12 @@ module MPIPETScUniformlyRefinedForestOfOctreesDiscreteModelsTests
     if (i_am_master(comm)) println("$(e_l2) < $(tol)\n") end
   end
 
+  parsed_args = parse_commandline()
+  subdomains = Tuple(parsed_args["subdomains"])
+  num_uniform_refinements = Tuple(parsed_args["num-uniform-refinements"])
+
   MPIPETScCommunicator() do comm
-    run(comm)
+    run(comm,subdomains,num_uniform_refinements[1])
   end
 
 end # module

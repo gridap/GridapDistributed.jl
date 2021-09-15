@@ -185,9 +185,9 @@ version = "0.1.0"
 
 [[JLD2]]
 deps = ["DataStructures", "FileIO", "MacroTools", "Mmap", "Pkg", "Printf", "Reexport", "TranscodingStreams", "UUIDs"]
-git-tree-sha1 = "59ee430ac5dc87bc3eec833cc2a37853425750b4"
+git-tree-sha1 = "192934b3e2a94e897ce177423fd6cf7bdf464bce"
 uuid = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
-version = "0.4.13"
+version = "0.4.14"
 
 [[JLLWrappers]]
 deps = ["Preferences"]
@@ -232,9 +232,9 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [[LogExpFunctions]]
 deps = ["ChainRulesCore", "DocStringExtensions", "IrrationalConstants", "LinearAlgebra"]
-git-tree-sha1 = "86197a8ecb06e222d66797b0c2d2f0cc7b69e42b"
+git-tree-sha1 = "34dc30f868e368f8a17b728a1238f3fcda43931a"
 uuid = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
-version = "0.3.2"
+version = "0.3.3"
 
 [[Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
@@ -482,7 +482,7 @@ version = "1.2.11+18"
 
 [[p4est_wrapper]]
 deps = ["CEnum", "Libdl", "MPI", "P4est_jll"]
-git-tree-sha1 = "96b1a6062f31392f1eec194db973a19b389e0be2"
+git-tree-sha1 = "49222afc8a0639447b3753b9cfb5ddb33f3ebdf0"
 repo-rev = "master"
 repo-url = "https://github.com/gridap/p4est_wrapper.jl"
 uuid = "3743d7c0-8adf-11ea-380b-7d33b0ecc1da"
