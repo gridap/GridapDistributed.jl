@@ -43,7 +43,7 @@ for f in testfiles
        np = 4
        extra_args = "-s 2 2 2 -r 2"
      else
-       np = 4
+       np = 1
      end
      if ! image_file_exists
        cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
