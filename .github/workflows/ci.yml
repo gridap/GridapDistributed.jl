@@ -83,4 +83,7 @@ jobs:
      - run: echo $PWD  
      - run: julia --project=. --color=yes -e 'using Pkg; Pkg.instantiate()'
      #- run: cd test/MPIPETScTests/compile; ./compile.sh
+     - run: julia --project=. -e 'using Pkg; pkg"instantiate"'
+     - run: julia --project=. -e 'using Pkg; pkg"precompile"'
+     - run: mpiexec julia --project=. -e 'println("Testing")'
      - run: julia --project=. --color=yes --check-bounds=yes test/MPIPETScTests/runtests.jl -i test/MPIPETScTests/compile/GridapDistributed.so  

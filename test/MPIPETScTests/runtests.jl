@@ -55,7 +55,7 @@ for f in testfiles
      run(`ls -l`)
      run(`pwd`)
      run(`which mpiexec`)
-     run(`ls -l $(image_file_path)`)
+     #run(`ls -l $(image_file_path)`)
      run(`ls -l $(joinpath(testdir, f))`)
      run(`mpiexec -n 4 --allow-run-as-root --tag-output --oversubscribe ls`)
      @test true
