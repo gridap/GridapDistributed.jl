@@ -57,7 +57,7 @@ for f in testfiles
      run(`which mpiexec`)
      #run(`ls -l $(image_file_path)`)
      run(`ls -l $(joinpath(testdir, f))`)
-     run(`mpiexec --version`)
+     run(`mpiexec -n 2 ls`)
      @test true
   end
 end
