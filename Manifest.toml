@@ -161,6 +161,14 @@ git-tree-sha1 = "a83e597e9da70d1a6d3d038ada6d4205f9aba43d"
 uuid = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
 version = "0.16.5"
 
+[[GridapDistributedPETScWrappers]]
+deps = ["Compat", "Libdl", "LinearAlgebra", "MPI", "PETSc_jll", "SparseArrays", "Test"]
+git-tree-sha1 = "de43213dc098c70b156f2e9dd6375ee9fe085c04"
+repo-rev = "master"
+repo-url = "https://github.com/gridap/GridapDistributedPETScWrappers.jl"
+uuid = "743b6f9b-fae8-55fc-a981-4e9a2885e829"
+version = "0.1.0"
+
 [[IfElse]]
 git-tree-sha1 = "28e837ff3e7a6c3cdb252ce49fb412c8eb3caeef"
 uuid = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
@@ -313,6 +321,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "OpenBLAS32_jll", "Pkg", "Zlib_jll"
 git-tree-sha1 = "15e3bfe4ed6284d18a6c6c5e57dbf6d2f0a6cce6"
 uuid = "6b5a15aa-cf52-5330-8376-5e5d90283449"
 version = "2.2.0+2"
+
+[[PETSc_jll]]
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "MPICH_jll", "MicrosoftMPI_jll", "OpenBLAS32_jll", "Pkg"]
+git-tree-sha1 = "8384198eba24438cee406ec7ca8854acdcbbd2c8"
+uuid = "8fa3689e-f0b9-5420-9873-adf6ccf46f2d"
+version = "3.15.2+0"
 
 [[Parameters]]
 deps = ["OrderedCollections", "UnPack"]
