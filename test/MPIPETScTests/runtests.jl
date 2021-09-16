@@ -2,63 +2,68 @@ module MPIPETScTests
 
 using Test
 using MPI
-using GridapDistributed
-using GridapDistributedPETScWrappers
+# using GridapDistributed
+# using GridapDistributedPETScWrappers
 
-using ArgParse
+# using ArgParse
 
-function parse_commandline()
-    s = ArgParseSettings()
-    @add_arg_table! s begin
-        "--image-file", "-i"
-        help = "Path to the image file that one can use in order to accelerate MPIPETSc tests"
-        arg_type = String
-        default="GridapDistributed.so"
-    end
-    return parse_args(s)
-end
+# function parse_commandline()
+#     s = ArgParseSettings()
+#     @add_arg_table! s begin
+#         "--image-file", "-i"
+#         help = "Path to the image file that one can use in order to accelerate MPIPETSc tests"
+#         arg_type = String
+#         default="GridapDistributed.so"
+#     end
+#     return parse_args(s)
+# end
 
-parsed_args = parse_commandline()
-image_file_path=parsed_args["image-file"]
-image_file_exists=isfile(image_file_path)
+# parsed_args = parse_commandline()
+# image_file_path=parsed_args["image-file"]
+# image_file_exists=isfile(image_file_path)
 
-nprocs_str = get(ENV, "JULIA_GRIDAPDISTRIBUTED_TEST_NPROCS","")
-nprocs = nprocs_str == "" ? clamp(Sys.CPU_THREADS, 2, 4) : parse(Int, nprocs_str)
-#mpiexec_args = Base.shell_split("--allow-run-as-root --tag-output") #Base.shell_split(get(ENV, "JULIA_MPIEXEC_TEST_ARGS", ""))
-testdir = @__DIR__
-istest(f) = endswith(f, ".jl") && startswith(f, "MPI")
-testfiles = sort(filter(istest, readdir(testdir)))
-#@time @testset "$f"
-for f in testfiles
-  MPI.mpiexec() do cmd
-     #cmd = `$cmd $mpiexec_args`
-     np = nprocs
-     extra_args = ""
-     if f in ["MPIPETScDistributedVectorsTests.jl","MPIPETScDistributedIndexSetsTests.jl"]
-       np = 2
-     elseif f in ["MPIPETScDistributedPoissonTests.jl"]
-       np = 4
-       extra_args = "-s 2 2 -p 4 4"
-     elseif f in ["MPIPETScUniformlyRefinedForestOfOctreesDiscreteModelsTests.jl"]
-       np = 4
-       extra_args = "-s 2 2 2 -r 2"
-     else
-       np = 1
-     end
-    #  if ! image_file_exists
-    #    cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
-    #  else
-    #   cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) -J$(image_file_path) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
-    #  end
-     @show cmd
-     run(`ls -l`)
-     run(`pwd`)
-     run(`which mpiexec`)
-     #run(`ls -l $(image_file_path)`)
-     run(`ls -l $(joinpath(testdir, f))`)
-     run(`$cmd -n 2 ls`)
-     @test true
-  end
+# nprocs_str = get(ENV, "JULIA_GRIDAPDISTRIBUTED_TEST_NPROCS","")
+# nprocs = nprocs_str == "" ? clamp(Sys.CPU_THREADS, 2, 4) : parse(Int, nprocs_str)
+# #mpiexec_args = Base.shell_split("--allow-run-as-root --tag-output") #Base.shell_split(get(ENV, "JULIA_MPIEXEC_TEST_ARGS", ""))
+# testdir = @__DIR__
+# istest(f) = endswith(f, ".jl") && startswith(f, "MPI")
+# testfiles = sort(filter(istest, readdir(testdir)))
+# #@time @testset "$f"
+# for f in testfiles
+#   MPI.mpiexec() do cmd
+#      #cmd = `$cmd $mpiexec_args`
+#      np = nprocs
+#      extra_args = ""
+#      if f in ["MPIPETScDistributedVectorsTests.jl","MPIPETScDistributedIndexSetsTests.jl"]
+#        np = 2
+#      elseif f in ["MPIPETScDistributedPoissonTests.jl"]
+#        np = 4
+#        extra_args = "-s 2 2 -p 4 4"
+#      elseif f in ["MPIPETScUniformlyRefinedForestOfOctreesDiscreteModelsTests.jl"]
+#        np = 4
+#        extra_args = "-s 2 2 2 -r 2"
+#      else
+#        np = 1
+#      end
+#     #  if ! image_file_exists
+#     #    cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
+#     #  else
+#     #   cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) -J$(image_file_path) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
+#     #  end
+#      @show cmd
+#      run(`ls -l`)
+#      run(`pwd`)
+#      run(`which mpiexec`)
+#      #run(`ls -l $(image_file_path)`)
+#      run(`ls -l $(joinpath(testdir, f))`)
+#      run(`$cmd -n 2 ls`)
+#      @test true
+#   end
+# end
+using MPI
+println(MPI.mpiexec_path)
+mpiexec() do cmd
+  run(`$cmd -n 2 ls`)
 end
 
 end # module
