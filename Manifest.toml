@@ -163,7 +163,7 @@ version = "0.16.5"
 
 [[GridapDistributedPETScWrappers]]
 deps = ["Compat", "Libdl", "LinearAlgebra", "MPI", "PETSc_jll", "SparseArrays", "Test"]
-git-tree-sha1 = "4f04ebb5a92c54b57350858bc24b9b5da206915b"
+git-tree-sha1 = "de43213dc098c70b156f2e9dd6375ee9fe085c04"
 repo-rev = "master"
 repo-url = "https://github.com/gridap/GridapDistributedPETScWrappers.jl"
 uuid = "743b6f9b-fae8-55fc-a981-4e9a2885e829"
@@ -241,9 +241,9 @@ uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
 [[MPI]]
 deps = ["Distributed", "DocStringExtensions", "Libdl", "MPICH_jll", "MicrosoftMPI_jll", "OpenMPI_jll", "Pkg", "Random", "Requires", "Serialization", "Sockets"]
-git-tree-sha1 = "00488c6fcaf828685c2bc5139bf0afff8c15c982"
+git-tree-sha1 = "e4549a5ced642a73bd8ba2dd1d3b1d30b3530d94"
 uuid = "da04e1cc-30fd-572f-bb4f-1f8673147195"
-version = "0.18.2"
+version = "0.19.0"
 
 [[MPICH_jll]]
 deps = ["CompilerSupportLibraries_jll", "Libdl", "Pkg"]
