@@ -28,7 +28,8 @@ nprocs = nprocs_str == "" ? clamp(Sys.CPU_THREADS, 2, 4) : parse(Int, nprocs_str
 testdir = @__DIR__
 istest(f) = endswith(f, ".jl") && startswith(f, "MPI")
 testfiles = sort(filter(istest, readdir(testdir)))
-@time @testset "$f" for f in testfiles
+#@time @testset "$f"
+for f in testfiles
   MPI.mpiexec() do cmd
      #cmd = `$cmd $mpiexec_args`
      np = nprocs
