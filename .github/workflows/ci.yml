@@ -26,61 +26,71 @@ jobs:
      - uses: julia-actions/setup-julia@v1
        with:
          version: 1.6
-         arch: x64 
+         arch: x64
+     - uses: actions/cache@v1
+        env:
+          cache-name: cache-artifacts
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-test-${{ env.cache-name }}-
+            ${{ runner.os }}-test-
+            ${{ runner.os }}-     
      - name: Install p4est/petsc dependencies
        run: |
            sudo apt-get update 
            sudo apt-get install -y wget gfortran g++ openmpi-bin libopenmpi-dev
-     - name: Install petsc
-       run: |
-          # Install p4est 2.2 from sources
-          CURR_DIR=$(pwd)
-          PACKAGE=petsc
-          VERSION=3.15.4
-          INSTALL_ROOT=/opt
-          PETSC_INSTALL=$INSTALL_ROOT/$PACKAGE/$VERSION
-          TAR_FILE=$PACKAGE-$VERSION.tar.gz
-          URL="https://ftp.mcs.anl.gov/pub/petsc/release-snapshots/"
-          ROOT_DIR=/tmp
-          SOURCES_DIR=$ROOT_DIR/$PACKAGE-$VERSION
-          BUILD_DIR=$SOURCES_DIR/build
-          wget -q $URL/$TAR_FILE -O $ROOT_DIR/$TAR_FILE
-          mkdir -p $SOURCES_DIR
-          tar xzf $ROOT_DIR/$TAR_FILE -C $SOURCES_DIR --strip-components=1
-          cd $SOURCES_DIR
-          ./configure --with-cc=mpicc --with-cxx=mpicxx --with-fc=mpif90 \
-             --download-mumps --download-scalapack --download-parmetis --download-metis \
-             --download-ptscotch --with-debugging --with-x=0 --with-shared=1 \
-             --with-mpi=1 --with-64-bit-indices
-          make
-          ls -l /tmp/petsc-3.15.4
-          which mpicc
-          which mpif90 
-          #make install 
-     - name: Install p4est
-       run: |
-          # Install p4est 2.2 from sources
-          CURR_DIR=$(pwd)
-          PACKAGE=p4est
-          VERSION=2.2
-          INSTALL_ROOT=/opt
-          P4EST_INSTALL=$INSTALL_ROOT/$PACKAGE/$VERSION
-          TAR_FILE=$PACKAGE-$VERSION.tar.gz
-          URL="https://github.com/p4est/p4est.github.io/raw/master/release"
-          ROOT_DIR=/tmp
-          SOURCES_DIR=$ROOT_DIR/$PACKAGE-$VERSION
-          BUILD_DIR=$SOURCES_DIR/build
-          wget -q $URL/$TAR_FILE -O $ROOT_DIR/$TAR_FILE
-          mkdir -p $SOURCES_DIR
-          tar xzf $ROOT_DIR/$TAR_FILE -C $SOURCES_DIR --strip-components=1
-          cd $SOURCES_DIR
-          ./configure --prefix=$P4EST_INSTALL --without-blas --without-lapack --enable-mpi -disable-dependency-tracking
-          make --quiet
-          make --quiet install
-          rm -rf $ROOT_DIR/$TAR_FILE $SOURCES_DIR
-          cd $CURR_DIR 
+    #  - name: Install petsc
+    #    run: |
+    #       # Install p4est 2.2 from sources
+    #       CURR_DIR=$(pwd)
+    #       PACKAGE=petsc
+    #       VERSION=3.15.4
+    #       INSTALL_ROOT=/opt
+    #       PETSC_INSTALL=$INSTALL_ROOT/$PACKAGE/$VERSION
+    #       TAR_FILE=$PACKAGE-$VERSION.tar.gz
+    #       URL="https://ftp.mcs.anl.gov/pub/petsc/release-snapshots/"
+    #       ROOT_DIR=/tmp
+    #       SOURCES_DIR=$ROOT_DIR/$PACKAGE-$VERSION
+    #       BUILD_DIR=$SOURCES_DIR/build
+    #       wget -q $URL/$TAR_FILE -O $ROOT_DIR/$TAR_FILE
+    #       mkdir -p $SOURCES_DIR
+    #       tar xzf $ROOT_DIR/$TAR_FILE -C $SOURCES_DIR --strip-components=1
+    #       cd $SOURCES_DIR
+    #       ./configure --with-cc=mpicc --with-cxx=mpicxx --with-fc=mpif90 \
+    #          --download-mumps --download-scalapack --download-parmetis --download-metis \
+    #          --download-ptscotch --with-debugging --with-x=0 --with-shared=1 \
+    #          --with-mpi=1 --with-64-bit-indices
+    #       make
+    #       ls -l /tmp/petsc-3.15.4
+    #       which mpicc
+    #       which mpif90 
+    #       #make install 
+    #  - name: Install p4est
+    #    run: |
+    #       # Install p4est 2.2 from sources
+    #       CURR_DIR=$(pwd)
+    #       PACKAGE=p4est
+    #       VERSION=2.2
+    #       INSTALL_ROOT=/opt
+    #       P4EST_INSTALL=$INSTALL_ROOT/$PACKAGE/$VERSION
+    #       TAR_FILE=$PACKAGE-$VERSION.tar.gz
+    #       URL="https://github.com/p4est/p4est.github.io/raw/master/release"
+    #       ROOT_DIR=/tmp
+    #       SOURCES_DIR=$ROOT_DIR/$PACKAGE-$VERSION
+    #       BUILD_DIR=$SOURCES_DIR/build
+    #       wget -q $URL/$TAR_FILE -O $ROOT_DIR/$TAR_FILE
+    #       mkdir -p $SOURCES_DIR
+    #       tar xzf $ROOT_DIR/$TAR_FILE -C $SOURCES_DIR --strip-components=1
+    #       cd $SOURCES_DIR
+    #       ./configure --prefix=$P4EST_INSTALL --without-blas --without-lapack --enable-mpi -disable-dependency-tracking
+    #       make --quiet
+    #       make --quiet install
+    #       rm -rf $ROOT_DIR/$TAR_FILE $SOURCES_DIR
+    #       cd $CURR_DIR 
      - uses: julia-actions/julia-buildpkg@latest
      - run: echo $PWD  
      - run: julia --project=. --color=yes -e 'using Pkg; Pkg.instantiate()'
-     - run: cd test/MPIPETScTests/compile; ./compile.sh
+     #- run: cd test/MPIPETScTests/compile; ./compile.sh
      - run: julia --project=. --color=yes --check-bounds=yes test/MPIPETScTests/runtests.jl -i test/MPIPETScTests/compile/GridapDistributed.so  
