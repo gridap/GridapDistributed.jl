@@ -50,7 +50,7 @@ export remove_ghost_cells
 export include_ghost_cells
 
 export PETScLinearSolver
-export UniformlyRefinedForestOfOctreesDiscreteModel
+#export UniformlyRefinedForestOfOctreesDiscreteModel
 
 
 include("Communicators.jl")
@@ -83,7 +83,7 @@ include("DistributedDiscreteModels.jl")
 
 include("CartesianDiscreteModels.jl")
 
-include("UniformlyRefinedForestOfOctreesDiscreteModels.jl")
+#include("UniformlyRefinedForestOfOctreesDiscreteModels.jl")
 
 include("DistributedFESpaces.jl")
 
