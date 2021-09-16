@@ -40,14 +40,14 @@ testfiles = sort(filter(istest, readdir(testdir)))
        extra_args = "-s 2 2 -p 4 4"
      elseif f in ["MPIPETScUniformlyRefinedForestOfOctreesDiscreteModelsTests.jl"]
        np = 4
-       extra_args = "-s 2 2 2 -r 2" 
+       extra_args = "-s 2 2 2 -r 2"
      else
        np = 4
      end
      if ! image_file_exists
-       cmd = `$cmd -n $(np) --allow-run-as-root --tag-output $(Base.julia_cmd()) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
+       cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
      else
-      cmd = `$cmd -n $(np) --allow-run-as-root --tag-output $(Base.julia_cmd()) -J$(image_file_path) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
+      cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) -J$(image_file_path) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
      end
      @show cmd
      run(cmd)
