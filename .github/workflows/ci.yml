@@ -83,4 +83,5 @@ jobs:
      - run: echo $PWD  
      - run: julia --project=. --color=yes -e 'using Pkg; Pkg.instantiate()'
      - run: cd test/MPIPETScTests/compile; ./compile.sh
+     - run: mpiexec -n 4 --allow-run-as-root --tag-output --oversubscribe /opt/hostedtoolcache/julia/1.6.2/x64/bin/julia -Cnative -J/opt/hostedtoolcache/julia/1.6.2/x64/lib/julia/sys.so --check-bounds=yes -g1 --color=yes -Jtest/MPIPETScTests/compile/GridapDistributed.so --project=. /home/runner/work/GridapDistributed.jl/GridapDistributed.jl/test/MPIPETScTests/MPIPETScCommunicatorsTests.jl
      - run: julia --project=. --color=yes --check-bounds=yes test/MPIPETScTests/runtests.jl -i test/MPIPETScTests/compile/GridapDistributed.so  
