@@ -2,7 +2,7 @@ module MPIPETScTests
 
 using Test
 using MPI
-using GridapDistributed
+#using GridapDistributed
 # using GridapDistributedPETScWrappers
 
 # using ArgParse
