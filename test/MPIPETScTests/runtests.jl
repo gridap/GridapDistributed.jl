@@ -48,12 +48,15 @@ for f in testfiles
      if ! image_file_exists
        cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
      else
-      cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) -J$(image_file_path) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
+      #cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) -J$(image_file_path) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
+      cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
      end
      @show cmd
      run(`ls -l`)
      run(`pwd`)
      run(`which mpiexec`)
+     run(`ls -l $(image_file_path)`)
+     run(`ls -l $(joinpath(testdir, f))`)
      run(cmd)
      @test true
   end
