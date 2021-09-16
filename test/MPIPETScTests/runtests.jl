@@ -51,6 +51,9 @@ for f in testfiles
       cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) -J$(image_file_path) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
      end
      @show cmd
+     run(`ls -l`)
+     run(`pwd`)
+     run(`which mpiexec`)
      run(cmd)
      @test true
   end
