@@ -23,7 +23,10 @@ jobs:
     JULIA_PETSC_RealDouble_LIBNAME: "libpetsc"
    steps:
      - uses: actions/checkout@v2
-     - uses: actions/cache@v2
+
+     - name: Cache p4est
+       id: cache-p4est
+       uses: actions/cache@v2
        with:
          path: ${{env.P4EST_ROOT_DIR}}
          key: ${{ runner.os }}-build-${{ env.P4EST_ROOT_DIR }}-
@@ -31,6 +34,7 @@ jobs:
            ${{ runner.os }}-build-${{ env.P4EST_ROOT_DIR }}-
            ${{ runner.os }}-build-
            ${{ runner.os }}-
+
      - uses: julia-actions/setup-julia@v1
        with:
          version: 1.6
@@ -63,6 +67,7 @@ jobs:
           make
           make install
      - name: Install p4est
+       if: steps.cache-p4est.outputs.cache-hit != 'true'
        run: |
           # Install p4est 2.2 from sources
           CURR_DIR=$(pwd)
