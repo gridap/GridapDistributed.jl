@@ -50,6 +50,7 @@ testfiles = sort(filter(istest, readdir(testdir)))
        cmd = `$cmd -n $(np) --allow-run-as-root --tag-output --oversubscribe $(Base.julia_cmd()) -J$(image_file_path) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
      end
      @show cmd
+     run(`which mpiexec`)
      run(cmd)
      @test true
   end
