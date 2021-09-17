@@ -55,7 +55,7 @@ jobs:
            sudo apt-get update 
            sudo apt-get install -y wget gfortran g++ openmpi-bin libopenmpi-dev
      - name: Install petsc
-       if: steps.cache-p4est.outputs.cache-hit != 'true'
+       if: steps.cache-petsc.outputs.cache-hit != 'true'
        run: |
           # Install p4est 2.2 from sources
           CURR_DIR=$(pwd)
