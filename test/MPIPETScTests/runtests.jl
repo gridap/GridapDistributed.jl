@@ -32,14 +32,14 @@ testfiles = sort(filter(istest, readdir(testdir)))
      extra_args = ""
      if f in ["MPIPETScDistributedVectorsTests.jl","MPIPETScDistributedIndexSetsTests.jl"]
        np = 2
-     elseif f in ["MPIPETScDistributedAssemblersTests.jl"]
-       np = 4
      elseif f in ["MPIPETScDistributedPoissonTests.jl"]
        np = 4
        extra_args = "-s 2 2 -p 4 4"
      elseif f in ["MPIPETScUniformlyRefinedForestOfOctreesDiscreteModelsTests.jl"]
        np = 4
        extra_args = "-s 2 2 2 -r 2"
+     else
+       np = 4
      end
      if ! image_file_exists
        cmd = `$cmd -n $(np) --allow-run-as-root --oversubscribe $(Base.julia_cmd()) --project=. $(joinpath(testdir, f)) $(split(extra_args))`
