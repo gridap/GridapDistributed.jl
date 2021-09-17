@@ -48,18 +48,18 @@ jobs:
           mkdir -p $SOURCES_DIR
           tar xzf $ROOT_DIR/$TAR_FILE -C $SOURCES_DIR --strip-components=1
           cd $SOURCES_DIR
-          ./configure --with-cc=mpicc --with-cxx=mpicxx --with-fc=mpif90 \
+          ./configure --prefix=$PETSC_INSTALL --with-cc=mpicc --with-cxx=mpicxx --with-fc=mpif90 \
              --download-mumps --download-scalapack --download-parmetis --download-metis \
              --download-ptscotch --with-debugging --with-x=0 --with-shared=1 \
              --with-mpi=1 --with-64-bit-indices
           make
+          make install
           ls -l /tmp/petsc-3.15.4
           which mpicc
           which mpif90 
           ls -l /workspace/destdir/bin
           ls -l /workspace/destdir/lib/
           ls -l /usr/lib/x86_64-linux-gnu/openmpi/lib
-          #make install 
      - name: Install p4est
        run: |
           # Install p4est 2.2 from sources
