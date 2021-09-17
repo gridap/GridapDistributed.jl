@@ -23,6 +23,18 @@ jobs:
     JULIA_PETSC_RealDouble_LIBNAME: "libpetsc"
    steps:
      - uses: actions/checkout@v2
+     - name: Cache p4est
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-p4est
+        with:
+          path: ${{env.P4EST_ROOT_DIR}}
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{env.P4EST_ROOT_DIR}}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
      - uses: julia-actions/setup-julia@v1
        with:
          version: 1.6
