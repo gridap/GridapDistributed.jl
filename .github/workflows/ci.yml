@@ -54,10 +54,6 @@ jobs:
              --with-mpi=1 --with-64-bit-indices
           make
           make install
-          ls -l /opt/petsc/3.15.4
-          which mpicc
-          which mpif90 
-          ls -l /usr/lib/x86_64-linux-gnu/openmpi/lib
      - name: Install p4est
        run: |
           # Install p4est 2.2 from sources
@@ -84,7 +80,4 @@ jobs:
      - run: echo $PWD  
      - run: julia --project=. --color=yes -e 'using Pkg; Pkg.instantiate()'
      - run: cd test/MPIPETScTests/compile; ./compile.sh
-     - run: julia --project=. -e 'using Pkg; pkg"instantiate"'
-     - run: julia --project=. -e 'using Pkg; pkg"precompile"'
-     - run: mpiexec julia --project=. -e 'println("Testing")'
      - run: julia --project=. --color=yes --check-bounds=yes test/MPIPETScTests/runtests.jl -i test/MPIPETScTests/compile/GridapDistributed.so  
