@@ -43,6 +43,11 @@ git-tree-sha1 = "a37151e369c618aebaff8b95b9db2f603246e160"
 uuid = "8e7c35d0-a365-5155-bbbb-fb81a777f24e"
 version = "0.15.3"
 
+[[CEnum]]
+git-tree-sha1 = "215a9aa4a1f23fbd05b92769fdd62559488d70e9"
+uuid = "fa961155-64e5-5f13-b03f-caf6b980ea82"
+version = "0.4.1"
+
 [[ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra", "SparseArrays"]
 git-tree-sha1 = "4ce9393e871aca86cc457d9f66976c3da6902ea7"
@@ -311,6 +316,12 @@ git-tree-sha1 = "85f8e6578bf1f9ee0d11e7bb1b1456435479d47c"
 uuid = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 version = "1.4.1"
 
+[[P4est_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "OpenBLAS32_jll", "Pkg", "Zlib_jll"]
+git-tree-sha1 = "15e3bfe4ed6284d18a6c6c5e57dbf6d2f0a6cce6"
+uuid = "6b5a15aa-cf52-5330-8376-5e5d90283449"
+version = "2.2.0+2"
+
 [[PETSc_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "MPICH_jll", "MicrosoftMPI_jll", "OpenBLAS32_jll", "Pkg"]
 git-tree-sha1 = "8384198eba24438cee406ec7ca8854acdcbbd2c8"
@@ -468,3 +479,11 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "320228915c8debb12cb434c59057290f0834dbf6"
 uuid = "83775a58-1f1d-513f-b197-d71354ab007a"
 version = "1.2.11+18"
+
+[[p4est_wrapper]]
+deps = ["CEnum", "Libdl", "MPI", "P4est_jll"]
+git-tree-sha1 = "49222afc8a0639447b3753b9cfb5ddb33f3ebdf0"
+repo-rev = "master"
+repo-url = "https://github.com/gridap/p4est_wrapper.jl"
+uuid = "3743d7c0-8adf-11ea-380b-7d33b0ecc1da"
+version = "0.1.0"
