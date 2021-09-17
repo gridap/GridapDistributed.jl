@@ -83,7 +83,7 @@ jobs:
      - uses: julia-actions/julia-buildpkg@latest
      - run: echo $PWD  
      - run: julia --project=. --color=yes -e 'using Pkg; Pkg.instantiate()'
-     #- run: cd test/MPIPETScTests/compile; ./compile.sh
+     - run: cd test/MPIPETScTests/compile; ./compile.sh
      - run: julia --project=. -e 'using Pkg; pkg"instantiate"'
      - run: julia --project=. -e 'using Pkg; pkg"precompile"'
      - run: mpiexec julia --project=. -e 'println("Testing")'
