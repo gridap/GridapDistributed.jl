@@ -822,9 +822,6 @@ function UniformlyRefinedForestOfOctreesDiscreteModel(comm::Communicator,
                                                       coarse_discrete_model::DiscreteModel{Dc,Dp},
                                                       num_uniform_refinements::Int) where {Dc,Dp}
 
-
-  mpicomm = comm.comm
-
   ptr_pXest_connectivity=setup_pXest_connectivity(coarse_discrete_model)
 
   # Create a new forest
