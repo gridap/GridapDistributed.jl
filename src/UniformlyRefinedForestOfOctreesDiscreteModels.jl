@@ -5,7 +5,7 @@ const GRIDAP_2_P4EST_FACET_2D  = [ 3, 4, 1, 2 ]
 const P4EST_2_GRIDAP_FACET_3D  = [ 5, 6, 3, 4, 1, 2 ]
 const GRIDAP_2_P4EST_FACET_3D  = [ 5, 6, 3, 4, 1, 2 ]
 
-p4est_wrapper.quadrant_data(x::Clong) = reinterpret(p4est_wrapper.quadrant_data, x)
+P4est_wrapper.quadrant_data(x::Clong) = reinterpret(P4est_wrapper.quadrant_data, x)
 
 function p4est_get_quadrant_vertex_coordinates(connectivity::Ptr{p4est_connectivity_t},
                                                treeid::p4est_topidx_t,
@@ -17,7 +17,7 @@ function p4est_get_quadrant_vertex_coordinates(connectivity::Ptr{p4est_connectiv
 
     myself=Ref{p4est_quadrant_t}(
       p4est_quadrant_t(x,y,level,Int8(0),Int16(0),
-                       p4est_wrapper.quadrant_data(Clong(0))))
+                       P4est_wrapper.quadrant_data(Clong(0))))
     neighbour=Ref{p4est_quadrant_t}(myself[])
     if corner == 1
        p4est_quadrant_face_neighbor(myself,corner,neighbour)
@@ -47,7 +47,7 @@ function  p8est_get_quadrant_vertex_coordinates(connectivity::Ptr{p8est_connecti
 
   myself=Ref{p8est_quadrant_t}(
        p8est_quadrant_t(x,y,z,level,Int8(0),Int16(0),
-                        p4est_wrapper.quadrant_data(Clong(0))))
+                        P4est_wrapper.quadrant_data(Clong(0))))
   neighbour=Ref{p8est_quadrant_t}(myself[])
 
   if ( corner == 1 )
@@ -168,9 +168,9 @@ end
 
 function setup_pXest_ghost(::Type{Val{Dc}}, ptr_pXest) where Dc
   if (Dc==2)
-    p4est_ghost_new(ptr_pXest,p4est_wrapper.P4EST_CONNECT_FULL)
+    p4est_ghost_new(ptr_pXest,P4est_wrapper.P4EST_CONNECT_FULL)
   else
-    p8est_ghost_new(ptr_pXest,p4est_wrapper.P8EST_CONNECT_FULL)
+    p8est_ghost_new(ptr_pXest,P4est_wrapper.P8EST_CONNECT_FULL)
   end
 end
 
