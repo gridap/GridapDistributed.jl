@@ -322,6 +322,14 @@ git-tree-sha1 = "15e3bfe4ed6284d18a6c6c5e57dbf6d2f0a6cce6"
 uuid = "6b5a15aa-cf52-5330-8376-5e5d90283449"
 version = "2.2.0+2"
 
+[[P4est_wrapper]]
+deps = ["CEnum", "Libdl", "MPI", "P4est_jll"]
+git-tree-sha1 = "b17df71365cfaa70d1a95d564b495be3d429849d"
+repo-rev = "master"
+repo-url = "https://github.com/gridap/P4est_wrapper.jl"
+uuid = "3743d7c0-8adf-11ea-380b-7d33b0ecc1da"
+version = "0.1.0"
+
 [[PETSc_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "MPICH_jll", "MicrosoftMPI_jll", "OpenBLAS32_jll", "Pkg"]
 git-tree-sha1 = "8384198eba24438cee406ec7ca8854acdcbbd2c8"
@@ -479,11 +487,3 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "320228915c8debb12cb434c59057290f0834dbf6"
 uuid = "83775a58-1f1d-513f-b197-d71354ab007a"
 version = "1.2.11+18"
-
-[[p4est_wrapper]]
-deps = ["CEnum", "Libdl", "MPI", "P4est_jll"]
-git-tree-sha1 = "49222afc8a0639447b3753b9cfb5ddb33f3ebdf0"
-repo-rev = "master"
-repo-url = "https://github.com/gridap/p4est_wrapper.jl"
-uuid = "3743d7c0-8adf-11ea-380b-7d33b0ecc1da"
-version = "0.1.0"
