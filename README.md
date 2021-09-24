@@ -6,6 +6,9 @@
 
 Parallel distributed-memory version of `Gridap.jl`.  🚧 work in progress 🚧
 
+| ![](https://user-images.githubusercontent.com/38347633/134634010-2be9b499-201b-4166-80ac-e161f6adceb0.png)   |  ![](https://user-images.githubusercontent.com/38347633/134634023-83f37646-f6b9-435c-9f9f-291dea9f86c2.png) 
+|:-------------:|:-------------:|
+
 
 ## Purpose
 
