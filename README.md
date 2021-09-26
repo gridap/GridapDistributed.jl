@@ -12,11 +12,12 @@ Parallel distributed-memory version of `Gridap.jl`.  🚧 work in progress 🚧
 
 ## Purpose
 
-This package is currently **experimental, under development**. In any case, the final purpose is to provide programming paradigm-neutral, parallel finite element data structures for distributed computing environments. This feature implies that communication among tasks are not tailored for a particular programming model, and thus can be leveraged with, e.g., MPI or the master-worker programming model built-in in Julia. Whenever one sticks to MPI as the underlying communication layer,  `GridapDistributed.jl` leverages the suite of tools available in the PETSc software package for the assembly and solution of distributed discrete systems of equations.
+This package is currently **experimental, under development**. The final purpose is to provide programming paradigm-neutral, parallel finite element data structures for distributed computing environments. This feature implies that communication among tasks are not tailored for a particular programming model, and thus can be leveraged with, e.g., MPI or the master-worker programming model built-in in Julia. Whenever one sticks to MPI as the underlying communication layer,  `GridapDistributed.jl` leverages the suite of tools available in the [PETSc software](https://petsc.org/release/) package for the assembly and solution of distributed discrete systems of equations. Also for MPI, the user may also leverage the [`p4est` software library](https://p4est.github.io/) for generating a uniformly refined forest of quadtrees/octrees of the computational domain (click [here](https://github.com/gridap/GridapDistributed.jl/blob/master/test/MPIPETScTests/MPIPETScUniformlyRefinedForestOfOctreesDiscreteModelsTests.jl) for an example).  
 
 ## Build 
 
-Before using `GridapDistributed.jl` package, we have to build `MPI.jl` and `GridapDistributedPETScWrappers.jl`. We refer to the main [`README.md`](https://github.com/gridap/GridapDistributedPETScWrappers.jl) of the latter for configuration instructions.
+Before using `GridapDistributed.jl` package, we have to build `MPI.jl`, `GridapDistributedPETScWrappers.jl`, and 
+`P4est_wrapper.jl`. We refer to the main `README.md` of the latter two packages (available [here](https://github.com/gridap/GridapDistributedPETScWrappers.jl) and [here](https://github.com/gridap/p4est_wrapper.jl), resp.) for configuration instructions.
 
 ## MPI-parallel Julia script execution instructions
 
