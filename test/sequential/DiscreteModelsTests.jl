@@ -2,12 +2,12 @@ module DistributedDiscreteModelsTestsSeq
 
 using PartitionedArrays
 
-include("../DistributedDiscreteModelsTests.jl")
+include("../DiscreteModelsTests.jl")
 
 parts = get_part_ids(sequential,(2,2))
-DistributedDiscreteModelsTests.main(parts)
+DiscreteModelsTests.main(parts)
 
 parts = get_part_ids(sequential,(2,2,2))
-DistributedDiscreteModelsTests.main(parts)
+DiscreteModelsTests.main(parts)
 
 end

@@ -2,6 +2,6 @@ module SequentialTests
 
 using Test
 
-@time @testset "DistributedDiscreteModel" begin include("DistributedDiscreteModelsTests.jl") end
+@time @testset "DiscreteModels" begin include("DiscreteModelsTests.jl") end
 
 end # module

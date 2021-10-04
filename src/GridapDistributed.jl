@@ -7,7 +7,7 @@ using Gridap.Visualization
 using PartitionedArrays
 const PArrays = PartitionedArrays
 
-include("DistributedDiscreteModels.jl")
+include("DiscreteModels.jl")
 
 include("Visualization.jl")
 

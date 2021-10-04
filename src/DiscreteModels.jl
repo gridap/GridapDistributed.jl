@@ -27,7 +27,11 @@ function Geometry.CartesianDiscreteModel(
 
   desc = CartesianDescriptor(args...; kwargs...)
   nc = desc.partition
-  @assert length(size(parts)) == length(nc) "A CartesianDiscreteModel needs a Cartesian subdomain partition"
+  msg = """
+  A CartesianDiscreteModel needs a Cartesian subdomain partition
+  of the rigth dimensions.
+  """
+  @assert length(size(parts)) == length(nc) msg
   gcids = PCartesianIndices(parts,nc,PArrays.with_ghost)
   gids = PRange(parts,nc,PArrays.with_ghost)
   models = map_parts(parts,gcids) do part, gcids
