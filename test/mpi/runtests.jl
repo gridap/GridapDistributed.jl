@@ -1,0 +1,3 @@
+module MPITests
+
+end # module
