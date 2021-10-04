@@ -46,6 +46,36 @@ function Visualization.visualization_data(
   r
 end
 
+function visualization_data(
+  trian::DistributedTriangulation,
+  filebase::AbstractString;
+  order=-1,
+  nsubcells=-1,
+  celldata=_empty_data(trian.trians),
+  cellfields=_empty_data(trian.trians))
+
+  trians = trian.trians
+  parts = get_part_ids(trians)
+  nparts = length(trians)
+
+  vd = map_parts(
+    parts,trians,celldata,cellfields) do part,trian,celldata,cellfields
+    n = lpad(part,ceil(Int,log10(nparts)),'0')
+    vd = visualization_data(
+      trian,"$(filebase)_$(n)";
+      order=order,nsubcells=nsubcells,
+      celldata=celldata,cellfields=cellfields)
+    @assert length(vd) == 1
+    vd[1]
+  end
+  [DistributedVisualizationData(vd)]
+end
+
+function _empty_data(a)
+  parts = get_part_ids(a)
+  map_parts(i->Dict(),parts)
+end
+
 # Vtk related
 
 # TODO use pvd format

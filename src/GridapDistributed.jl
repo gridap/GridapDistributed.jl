@@ -9,6 +9,8 @@ const PArrays = PartitionedArrays
 
 include("DiscreteModels.jl")
 
+include("Triangulations.jl")
+
 include("Visualization.jl")
 
 end # module
