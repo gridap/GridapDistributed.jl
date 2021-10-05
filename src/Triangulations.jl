@@ -2,12 +2,16 @@ struct DistributedTriangulation{Dc,Dp,A,B}
   trians::A
   model::B
   function DistributedTriangulation(
-    trian::AbstractPData{<:Triangulation{Dc,Dp}},
+    trians::AbstractPData{<:Triangulation{Dc,Dp}},
     model::DistributedDiscreteModel) where {Dc,Dp}
-    A = typeof(trian)
+    A = typeof(trians)
     B = typeof(model)
-    new{Dc,Dp,A,B}
+    new{Dc,Dp,A,B}(trians,model)
   end
+end
+
+function Geometry.get_background_model(a::DistributedTriangulation)
+  a.model
 end
 
 function Geometry.Triangulation(
@@ -74,6 +78,13 @@ function filter_cells_when_needed(
   remove_ghost_cells(trian,cell_gids)
 end
 
+# For the moment remove_ghost_cells
+# refers to the triangulation faces
+# pointing into the ghost cells
+# in the underlying background discrete 
+# model. This might change when solving
+# multi-field PDEs with one of the fields
+# defined on the boundary (e.g. a Lagrange multiplier)
 function remove_ghost_cells(trian,gids)
   model = get_background_model(trian)
   D = num_cell_dims(model)

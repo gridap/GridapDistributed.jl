@@ -1,4 +1,4 @@
-module DistributedDiscreteModelsTests
+module DiscreteModelsTests
 
 using Gridap
 using GridapDistributed

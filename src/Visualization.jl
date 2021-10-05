@@ -46,7 +46,7 @@ function Visualization.visualization_data(
   r
 end
 
-function visualization_data(
+function Visualization.visualization_data(
   trian::DistributedTriangulation,
   filebase::AbstractString;
   order=-1,
