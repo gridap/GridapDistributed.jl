@@ -2,7 +2,8 @@ module SequentialTests
 
 using Test
 
-@time @testset "DiscreteModels" begin include("DiscreteModelsTests.jl") end
-@time @testset "Triangulations" begin include("TriangulationsTests.jl") end
+@time @testset "Geometry" begin include("GeometryTests.jl") end
+
+@time @testset "CellData" begin include("CellDataTests.jl") end
 
 end # module

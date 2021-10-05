@@ -51,15 +51,18 @@ function Visualization.visualization_data(
   filebase::AbstractString;
   order=-1,
   nsubcells=-1,
-  celldata=_empty_data(trian.trians),
-  cellfields=_empty_data(trian.trians))
+  celldata=nothing,
+  cellfields=nothing)
 
   trians = trian.trians
   parts = get_part_ids(trians)
   nparts = length(trians)
 
+  cdat = _prepare_cdata(trians,celldata)
+  fdat = _prepare_fdata(trians,cellfields)
+
   vd = map_parts(
-    parts,trians,celldata,cellfields) do part,trian,celldata,cellfields
+    parts,trians,cdat,fdat) do part,trian,celldata,cellfields
     n = lpad(part,ceil(Int,log10(nparts)),'0')
     vd = visualization_data(
       trian,"$(filebase)_$(n)";
@@ -71,10 +74,60 @@ function Visualization.visualization_data(
   [DistributedVisualizationData(vd)]
 end
 
-function _empty_data(a)
-  parts = get_part_ids(a)
-  map_parts(i->Dict(),parts)
+function _prepare_cdata(trians,a::Nothing)
+  map_parts(trians) do t
+    Dict()
+  end
 end
+
+function _prepare_cdata(trians,a)
+  if length(a) == 0
+    return map_parts(trians) do t
+      Dict()
+    end
+  end
+  ks = []
+  vs = []
+  for (k,v) in a
+    push!(ks,k)
+    push!(vs,v)
+  end
+  map_parts(vs...) do vs...
+    b = []
+    for i in length(vs)
+      push!(b,ks[i]=>vs[i])
+    end
+    b
+  end
+end
+
+function _prepare_fdata(trians,a::Nothing)
+  map_parts(trians) do t
+    Dict()
+  end
+end
+
+function _prepare_fdata(trians,a)
+  if length(a) == 0
+    return map_parts(trians) do t
+      Dict()
+    end
+  end
+  ks = []
+  vs = []
+  for (k,v) in a
+    push!(ks,k)
+    push!(vs,v.fields)
+  end
+  map_parts(vs...) do vs...
+    b = []
+    for i in length(vs)
+      push!(b,ks[i]=>vs[i])
+    end
+    b
+  end
+end
+
 
 # Vtk related
 
