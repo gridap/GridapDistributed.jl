@@ -30,7 +30,7 @@ function Visualization.visualization_data(
   parts = get_part_ids(model.models)
   nparts = length(parts)
   vd = map_parts(
-    parts,model.models,model.gids.partition,labels) do part,model,gids,labels
+    parts,model.models,model.gids.partition,labels.labels) do part,model,gids,labels
 
     n = lpad(part,ceil(Int,log10(nparts)),'0')
     vd = visualization_data(model,"$(filebase)_$(n)";labels=labels)

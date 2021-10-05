@@ -1,13 +1,13 @@
-module DiscreteModelsTests
+module GeometryTests
 
 using Gridap
 using GridapDistributed
 using PartitionedArrays
 using Test
 
-output = mkpath(joinpath(@__DIR__,"output"))
-
 function main(parts)
+
+  output = mkpath(joinpath(@__DIR__,"output"))
 
   if length(size(parts)) == 2
     domain = (0,4,0,4)
@@ -25,6 +25,21 @@ function main(parts)
   map_parts(model.models,model.gids.partition) do lmodel,gids
     @test test_local_part_face_labelings_consistency(lmodel,gids,gmodel)
   end
+
+  grid = get_grid(model)
+  labels = get_grid(model)
+
+  Ω = Triangulation(with_ghost,model)
+  writevtk(Ω,joinpath(output,"Ω"))
+
+  Ω = Triangulation(no_ghost,model)
+  writevtk(Ω,joinpath(output,"Ω"))
+
+  Γ = Boundary(with_ghost,model,tags="boundary")
+  writevtk(Γ,joinpath(output,"Γ"))
+
+  Γ = Boundary(no_ghost,model,tags="boundary")
+  writevtk(Γ,joinpath(output,"Γ"))
 
 end
 
