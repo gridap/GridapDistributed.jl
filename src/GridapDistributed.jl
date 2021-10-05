@@ -13,4 +13,6 @@ include("Triangulations.jl")
 
 include("Visualization.jl")
 
+include("FESpaces.jl")
+
 end # module
