@@ -1,7 +1,7 @@
 
 # We do not inherit from Grid on purpose.
 # This object cannot implement the Grid interface in a strict sense
-struct DistributedGrid{Dc,Dp,A}
+struct DistributedGrid{Dc,Dp,A} <: GridapType
   grids::A
   function DistributedGrid(grids::AbstractPData{<:Grid{Dc,Dp}}) where {Dc,Dp}
     A = typeof(grids)
@@ -26,7 +26,7 @@ Geometry.num_point_dims(::Type{<:DistributedGrid{Dc,Dp}}) where {Dc,Dp} = Dp
 
 # We do not inherit from GridTopology on purpose.
 # This object cannot implement the GridTopology interface in a strict sense
-struct DistributedGridTopology{Dc,Dp,A}
+struct DistributedGridTopology{Dc,Dp,A} <: GridapType
   topos::A
   function DistributedGridTopology(topos::AbstractPData{<:GridTopology{Dc,Dp}}) where {Dc,Dp}
     A = typeof(topos)
@@ -61,7 +61,7 @@ end
 
 # We do not inherit from DiscreteModel on purpose.
 # This object cannot implement the DiscreteModel interface in a strict sense
-struct DistributedDiscreteModel{Dc,Dp,A,B}
+struct DistributedDiscreteModel{Dc,Dp,A,B} <: GridapType
   models::A
   gids::B
   function DistributedDiscreteModel(
@@ -110,7 +110,7 @@ end
 
 # We do not inherit from Triangulation on purpose.
 # This object cannot implement the Triangulation interface in a strict sense
-struct DistributedTriangulation{Dc,Dp,A,B}
+struct DistributedTriangulation{Dc,Dp,A,B} <: GridapType
   trians::A
   model::B
   function DistributedTriangulation(
@@ -131,11 +131,22 @@ function Geometry.get_background_model(a::DistributedTriangulation)
   a.model
 end
 
-function Geometry.get_facet_normal(a::DistributedTriangulation)
-  map_parts(get_facet_normal,a.trians)
+# Triangulation constructors
+
+function Geometry.Triangulation(
+  model::DistributedDiscreteModel;kwargs...)
+  Triangulation(no_ghost,model;kwargs...)
 end
 
-# Triangulation constructors
+function Geometry.BoundaryTriangulation(
+  model::DistributedDiscreteModel;kwargs...)
+  BoundaryTriangulation(no_ghost,model;kwargs...)
+end
+
+function Geometry.SkeletonTriangulation(
+  model::DistributedDiscreteModel;kwargs...)
+  SkeletonTriangulation(no_ghost,model;kwargs...)
+end
 
 function Geometry.Triangulation(
   portion,model::DistributedDiscreteModel;kwargs...)
