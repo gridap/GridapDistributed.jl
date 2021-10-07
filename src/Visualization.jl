@@ -94,7 +94,7 @@ function _prepare_cdata(trians,a)
   end
   map_parts(vs...) do vs...
     b = []
-    for i in length(vs)
+    for i in 1:length(vs)
       push!(b,ks[i]=>vs[i])
     end
     b
@@ -121,7 +121,7 @@ function _prepare_fdata(trians,a)
   end
   map_parts(vs...) do vs...
     b = []
-    for i in length(vs)
+    for i in 1:length(vs)
       push!(b,ks[i]=>vs[i])
     end
     b

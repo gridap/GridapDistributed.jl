@@ -198,6 +198,10 @@ struct DistributedDomainContribution{A<:AbstractPData{<:DomainContribution}} <: 
   contribs::A
 end
 
+function Base.getindex(c::DistributedDomainContribution,t::DistributedTriangulation)
+  map_parts(getindex,c.contribs,t.trians)
+end
+
 function Fields.integrate(f::DistributedCellField,b::DistributedMeasure)
   contribs = map_parts(f.fields,b.measures) do f,m
     integrate(f,m)

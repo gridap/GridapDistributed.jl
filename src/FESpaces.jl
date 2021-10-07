@@ -29,7 +29,7 @@ end
 
 function FESpaces.zero_free_values(f::DistributedFESpace)
   V = get_vector_type(f)
-  allocate_vector(V,num_free_dofs(f))
+  allocate_vector(V,get_free_dof_ids(f))
 end
 
 FESpaces.num_free_dofs(f::DistributedFESpace) = length(get_free_dof_ids(f))
@@ -73,6 +73,7 @@ function generate_gids(
   ngdofs = ngdofsplus1 - 1
 
   # Distribute gdofs to owned ones
+  parts = get_part_ids(nodofs)
   ldof_to_gdof = map_parts(
     parts,first_gdof,ldof_to_part) do part,first_gdof,ldof_to_part
 
@@ -189,17 +190,17 @@ struct DistributedSinglefieldFESpace{A,B,C} <: DistributedFESpace
   end
 end
 
-function get_vector_type(fs::DistributedSinglefieldFESpace)
+function FESpaces.get_vector_type(fs::DistributedSinglefieldFESpace)
   fs.vector_type
 end
 
-function FESpaces.get_free_dof_ids(fs::DistributedFESpace)
+function FESpaces.get_free_dof_ids(fs::DistributedSinglefieldFESpace)
   fs.gids
 end
 
 function FESpaces.FEFunction(
   f::DistributedSinglefieldFESpace,free_values::AbstractVector)
-  local_vals = consistent_local_views(free_values)
+  local_vals = consistent_local_views(free_values,f.gids)
   fields = map_parts(FEFunction,f.spaces,local_vals)
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
@@ -207,7 +208,7 @@ end
 
 function FESpaces.EvaluationFunction(
   f::DistributedSinglefieldFESpace,free_values::AbstractVector)
-  local_vals = consistent_local_views(free_values)
+  local_vals = consistent_local_views(free_values,f.gids)
   fields = map_parts(EvaluationFunction,f.spaces,local_vals)
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
@@ -228,22 +229,51 @@ function FESpaces.TrialFESpace(f::DistributedSinglefieldFESpace)
   DistributedSinglefieldFESpace(spaces,f.gids,f.vector_type)
 end
 
+function FESpaces.TrialFESpace(f::DistributedSinglefieldFESpace,fun)
+  spaces = map_parts(f.spaces) do s
+    TrialFESpace(s,fun)
+  end
+  DistributedSinglefieldFESpace(spaces,f.gids,f.vector_type)
+end
+
+function FESpaces.TrialFESpace(fun,f::DistributedSinglefieldFESpace)
+  spaces = map_parts(f.spaces) do s
+    TrialFESpace(fun,s)
+  end
+  DistributedSinglefieldFESpace(spaces,f.gids,f.vector_type)
+end
+
 function generate_gids(
   model::DistributedDiscreteModel,
   spaces::AbstractPData{<:SingleFieldFESpace})
   cell_to_ldofs = map_parts(get_cell_dof_ids,spaces)
   nldofs = map_parts(num_free_dofs,spaces)
-  generate_gids(model.gids,cell_to_lids,nldofs)
+  generate_gids(model.gids,cell_to_ldofs,nldofs)
+end
+
+function FESpaces.interpolate(u,f::DistributedSinglefieldFESpace)
+  free_values = zero_free_values(f)
+  map_parts(f.spaces,local_views(free_values)) do V,vec
+    interpolate!(u,vec,V)
+  end
+  FEFunction(f,free_values)
 end
 
 # Factories
 
-function FESpace(model::DistributedDiscreteModel,reffe; kwargs...)
-  spaces = map_parts(mode.models) do m
+function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
+  spaces = map_parts(model.models) do m
     FESpace(m,reffe;kwargs...)
   end
   gids =  generate_gids(model,spaces)
-  vector_type = get_vector_type(get_part(spaces))
+  #TODO Now the user can select the local vector type but not the global one
+  # new kw-arg global_vector_type ?
+  # we use PVector for the moment
+  local_vector_type = get_vector_type(get_part(spaces))
+  T = eltype(local_vector_type)
+  A = typeof(map_parts(i->local_vector_type(undef,0),gids.partition))
+  B = typeof(gids)
+  vector_type = PVector{T,A,B}
   DistributedSinglefieldFESpace(spaces,gids,vector_type)
 end
 
@@ -308,13 +338,12 @@ function FESpaces.collect_cell_matrix_and_vector(
   end
 end
 
-struct DistributedSparseMatrixAssembler{A,B,C,D,E,F} <: SparseMatrixAssembler
+struct DistributedSparseMatrixAssembler{A,B,C,D,E} <: SparseMatrixAssembler
   assems::A
   matrix_builder::B
   vector_builder::C
   rows::D
   cols::E
-  strategy::F
 end
 
 FESpaces.get_rows(a::DistributedSparseMatrixAssembler) = a.rows
@@ -345,5 +374,21 @@ end
 
 function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
   map_parts(numeric_loop_matrix_and_vector!,local_views(A),local_views(b),a.assems,data)
+end
+
+# Assembler high level constructors
+
+function FESpaces.SparseMatrixAssembler(trial::DistributedFESpace,test::DistributedFESpace)
+  Tv = get_vector_type(get_part(trial.spaces))
+  T = eltype(Tv)
+  Tm = SparseMatrixCSC{T,Int}
+  assems = map_parts(trial.spaces,test.spaces) do u,v
+    SparseMatrixAssembler(Tm,Tv,u,v)
+  end
+  matrix_builder = PSparseMatrixBuilderCOO(Tm)
+  vector_builder = PVectorBuilder(Tv)
+  rows = get_free_dof_ids(test)
+  cols = get_free_dof_ids(trial)
+  DistributedSparseMatrixAssembler(assems,matrix_builder,vector_builder,rows,cols)
 end
 

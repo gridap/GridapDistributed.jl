@@ -148,7 +148,9 @@ version = "0.10.20"
 
 [[Gridap]]
 deps = ["AbstractTrees", "BSON", "BlockArrays", "Combinatorics", "DocStringExtensions", "FastGaussQuadrature", "FileIO", "FillArrays", "ForwardDiff", "JLD2", "JSON", "LineSearches", "LinearAlgebra", "NLsolve", "NearestNeighbors", "QuadGK", "Random", "SparseArrays", "SparseMatricesCSR", "StaticArrays", "Test", "WriteVTK"]
-path = "/home/fverdugo/Code/jl/Gridap.jl/"
+git-tree-sha1 = "43d1f2459fcaa8bcdc8f3863591fb8cd96e1c9ac"
+repo-rev = "gridap_distributed"
+repo-url = "https://github.com/gridap/Gridap.jl.git"
 uuid = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
 version = "0.17.0"
 
@@ -339,7 +341,9 @@ version = "2.0.5"
 
 [[PartitionedArrays]]
 deps = ["IterativeSolvers", "LinearAlgebra", "MPI", "Printf", "SparseArrays", "SparseMatricesCSR"]
-git-tree-sha1 = "726770afbd95eef41451b41a70d273dd6c45a6ee"
+git-tree-sha1 = "790264c2a81791cd97ddfa37273d2c70541690c5"
+repo-rev = "master"
+repo-url = "https://github.com/fverdugo/PartitionedArrays.jl.git"
 uuid = "5a9dfac6-5c52-46f7-8278-5e2210713be9"
 version = "0.2.2"
 
