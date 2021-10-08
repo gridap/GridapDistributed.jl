@@ -66,25 +66,24 @@ function MultiField.restrict_to_field(
 end
 
 function FESpaces.FEFunction(
-  f::DistributedMultiFieldFESpace,free_values::AbstractVector)
+  f::DistributedMultiFieldFESpace,free_values::AbstractVector,isconsistent=false)
   # This will cause also the single-field components to be consistent
-  local_vals = consistent_local_views(free_values,f.gids)
+  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
   part_fe_fun = map_parts(FEFunction,f.part_fe_space,local_vals)
   field_fe_fun = DistributedSingleFieldFEFunction[]
   for i in 1:num_fields(f)
     free_values_i = restrict_to_field(f,free_values,i)
     fe_space_i = f.field_fe_space[i]
-    isconsistent = true
-    fe_fun_i = FEFunction(fe_space_i,free_values_i,isconsistent)
+    fe_fun_i = FEFunction(fe_space_i,free_values_i,true)
     push!(field_fe_fun,fe_fun_i)
   end
   DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
 end
 
 function FESpaces.EvaluationFunction(
-  f::DistributedMultiFieldFESpace,free_values::AbstractVector)
+  f::DistributedMultiFieldFESpace,free_values::AbstractVector,isconsistent=false)
   # This will cause also the single-field components to be consistent
-  local_vals = consistent_local_views(free_values,f.gids)
+  local_vals = consistent_local_views(free_values,f.gids,false)
   part_fe_fun = map_parts(EvaluationFunction,f.part_fe_space,local_vals)
   field_fe_fun = DistributedSingleFieldFEFunction[]
   for i in 1:num_fields(f)
@@ -101,7 +100,7 @@ struct DistributedMultiFieldFEBasis{A,B} <: GridapType
   part_fe_basis::B
   function DistributedMultiFieldFEBasis(
     field_fe_basis::AbstractVector{<:DistributedCellField},
-    part_fe_basis::AbstractPData{<:FEBasis})
+    part_fe_basis::AbstractPData)
     A = typeof(field_fe_basis)
     B = typeof(part_fe_basis)
     new{A,B}(field_fe_basis,part_fe_basis)
@@ -138,21 +137,39 @@ function FESpaces.interpolate(u,f::DistributedMultiFieldFESpace)
   @notimplemented
 end
 
-# Factory
-
-function MultiField.MultiFieldFESpace(
-  f_dspace::Vector{<:DistributedSingleFieldFESpace})
-
+function FESpaces.TrialFESpace(a::DistributedMultiFieldFESpace,objects)
+  f_dspace_test = a.field_fe_space
+  f_dspace = map( arg -> TrialFESpace(arg[1],arg[2]), zip(f_dspace_test,objects) )
   f_p_space = map(local_views,f_dspace)
   v(x...) = collect(x)
   p_f_space = map_parts(v,f_p_space...)
   p_mspace = map_parts(MultiFieldFESpace,p_f_space)
-  p_lids = map_parts(mspace->collect(get_free_dof_ids(mspace)),p_mspace)
+  gids = a.gids
+  vector_type = a.vector_type
+  DistributedMultiFieldFESpace(f_dspace,p_mspace,gids,vector_type)
+end
 
+# Factory
+
+function MultiField.MultiFieldFESpace(
+  f_dspace::Vector{<:DistributedSingleFieldFESpace})
+  f_p_space = map(local_views,f_dspace)
+  v(x...) = collect(x)
+  p_f_space = map_parts(v,f_p_space...)
+  p_mspace = map_parts(MultiFieldFESpace,p_f_space)
+  gids = generate_multi_field_gids(f_dspace,p_mspace)
+  vector_type = _find_vector_type(p_mspace,gids)
+  DistributedMultiFieldFESpace(f_dspace,p_mspace,gids,vector_type)
+end
+
+function generate_multi_field_gids(
+  f_dspace::Vector{<:DistributedSingleFieldFESpace},
+  p_mspace::AbstractPData{<:MultiFieldFESpace})
+
+  p_lids = map_parts(mspace->collect(get_free_dof_ids(mspace)),p_mspace)
   p_1lid_lid = map_parts(p_mspace,p_lids) do mspace, lids
     restrict_to_field(mspace,lids,1)
   end
-
   f_p_flid_lid = [p_1lid_lid]
   for f in 2:length(f_dspace)
     p_flid_lid = map_parts(p_mspace,p_lids) do mspace, lids
@@ -160,11 +177,8 @@ function MultiField.MultiFieldFESpace(
     end
     push!(f_p_flid_lid,p_flid_lid)
   end
-
   f_frange = map(get_free_dof_ids,f_dspace)
   gids = generate_multi_field_gids(f_p_flid_lid,f_frange)
-  vector_type = _find_vector_type(p_mspace,gids)
-  DistributedMultiFieldFESpace(f_dspace,p_mspace,gids,vector_type)
 end
 
 function generate_multi_field_gids(

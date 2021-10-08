@@ -29,14 +29,16 @@ end
 
 function FESpaces.zero_free_values(f::DistributedFESpace)
   V = get_vector_type(f)
-  allocate_vector(V,get_free_dof_ids(f))
+  vec = allocate_vector(V,get_free_dof_ids(f))
+  fill!(vec,zero(eltype(vec)))
 end
 
 FESpaces.num_free_dofs(f::DistributedFESpace) = length(get_free_dof_ids(f))
 
 function Base.zero(f::DistributedFESpace)
   free_values = zero_free_values(f)
-  FEFunction(f,free_values)
+  isconsistent = true
+  FEFunction(f,free_values,isconsistent)
 end
 
 function generate_gids(

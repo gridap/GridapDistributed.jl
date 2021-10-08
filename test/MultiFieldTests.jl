@@ -15,13 +15,40 @@ function main(parts)
   model = CartesianDiscreteModel(parts,domain,cells)
   Ω = Triangulation(model)
 
-  reffe_u = ReferenceFE(lagrangian,Float64,2)
-  reffe_p = ReferenceFE(lagrangian,Float64,1,space=:P)
+  k = 2
+  reffe_u = ReferenceFE(lagrangian,VectorValue{2,Float64},k)
+  reffe_p = ReferenceFE(lagrangian,Float64,k-1,space=:P)
 
-  V = TestFESpace(model,reffe_u)
-  Q = TestFESpace(model,reffe_p)
+  u((x,y)) = VectorValue((x+y)^2,(x-y)^2)
+  p((x,y)) = x+y
+  f(x) = - Δ(u,x) + ∇(p,x)
+  g(x) = tr(∇(u,x))
+
+  V = TestFESpace(model,reffe_u,dirichlet_tags="boundary")
+  Q = TestFESpace(model,reffe_p,constraint=:zeromean)
+  U = TrialFESpace(V,u)
+  P = TrialFESpace(Q,p)
 
   VxQ = MultiFieldFESpace([V,Q])
+  UxP = MultiFieldFESpace([U,P]) # This generates again the global numbering
+  UxP = TrialFESpace(VxQ,[u,p]) # This reuses the one computed
+
+  zh = zero(UxP)
+  du,dp = get_trial_fe_basis(UxP)
+  dv,dq = get_fe_basis(VxQ)
+
+  dΩ = Measure(Ω,2*k)
+
+  a((u,p),(v,q)) = ∫( ∇(v)⊙∇(u) - q*(∇⋅u) - (∇⋅v)*p )*dΩ
+  l((v,q)) = ∫( v⋅f - q*g )*dΩ
+
+  #data = collect_cell_matrix_and_vector(UxP,VxQ,a((du,dp),(dv,dq)),l((dv,dq)),zh)
+  #A,b = assemble_matrix_and_vector(assem,data)
+  #x = A\b
+  #r = A*x -b
+  #uh,ph = FEFunction(UxP,x)
+
+  #writevtk(Ω,"Ω",nsubcells=10,cellfields=["uh"=>uh,"ph"=>ph])
 
 end
 
