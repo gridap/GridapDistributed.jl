@@ -59,6 +59,20 @@ function main(parts)
   data = collect_cell_matrix(U,V,a)
   A2 = assemble_matrix(assem,data)
 
+  Ωl = Triangulation(with_ghost,model)
+  dΩl = Measure(Ωl,3)
+  a = ∫( ∇(dv)⋅∇(du) )dΩl
+  l = ∫( 0*dv )dΩl
+
+  assem = SparseMatrixAssembler(U,V,FullyAssembledRows())
+  data = collect_cell_matrix_and_vector(U,V,a,l,zh)
+  A,b = assemble_matrix_and_vector(assem,data)
+  x = A\b
+  r = A*x -b
+  uh = FEFunction(U,x)
+  eh = u - uh
+  @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
+
 end
 
 end # module

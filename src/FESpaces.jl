@@ -386,12 +386,11 @@ end
 # This is at your own risk.
 function local_assembly_strategy(::FullyAssembledRows,rows,cols)
   rows_lid_to_ohid = rows.lid_to_ohid
-  cols_lid_to_ohid = cols.lid_to_ohid
   GenericAssemblyStrategy(
     identity,
     identity,
     row->rows_lid_to_ohid[row]>0,
-    col->cols_lid_to_ohid[col]>0)
+    col->true)
 end
 
 # Assembler high level constructors

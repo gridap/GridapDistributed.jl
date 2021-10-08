@@ -110,18 +110,24 @@ function local_views(a::DistributedAllocationCOO)
   a.allocs
 end
 
-function Algebra.create_from_nz(a::DistributedAllocationCOO{<:FullyAssembledRows})
-  @notimplemented
+function first_gdof_from_ids(ids)
+  num_oids(ids)>0 ? Int(ids.lid_to_gid[ids.oid_to_lid[1]]) : 1
 end
 
-function Algebra.create_from_nz(a::DistributedAllocationCOO{<:SubAssembledRows})
+function find_gid_and_part(hid_to_hdof,dofs)
+  hid_to_ldof = view(dofs.hid_to_lid,hid_to_hdof)
+  hid_to_gid = dofs.lid_to_gid[hid_to_ldof]
+  hid_to_part = dofs.lid_to_part[hid_to_ldof]
+  hid_to_gid, hid_to_part
+end
+
+function Algebra.create_from_nz(a::DistributedAllocationCOO{<:FullyAssembledRows})
   f(x) = nothing
-  A, = _create_from_nz_with_callback(f,f,a)
+  A, = _fa_create_from_nz_with_callback(f,a)
   A
 end
 
-function _create_from_nz_with_callback(
-  callback,async_callback,a::DistributedAllocationCOO)
+function _fa_create_from_nz_with_callback(callback,a)
 
   # Recover some data
   I,J,C = map_parts(a.allocs) do alloc
@@ -134,9 +140,77 @@ function _create_from_nz_with_callback(
   ngcdofs = length(cdofs)
   nordofs = map_parts(num_oids,rdofs.partition)
   nocdofs = map_parts(num_oids,cdofs.partition)
-  first_gdof(ids) = num_oids(ids)>0 ? Int(ids.lid_to_gid[ids.oid_to_lid[1]]) : 1
-  first_grdof = map_parts(first_gdof,rdofs.partition)
-  first_gcdof = map_parts(first_gdof,cdofs.partition)
+  first_grdof = map_parts(first_gdof_from_ids,rdofs.partition)
+  first_gcdof = map_parts(first_gdof_from_ids,cdofs.partition)
+  cneigs_snd = cdofs.exchanger.parts_snd
+  cneigs_rcv = cdofs.exchanger.parts_rcv
+
+  # This one has not ghost rows
+  rows = PRange(
+    parts,
+    ngrdofs,
+    nordofs,
+    first_grdof)
+
+  callback_output = callback(rows)
+
+  # convert I and J to global dof ids
+  to_gids!(I,rdofs)
+  to_gids!(J,cdofs)
+
+  # Find the ghost cols
+  hcol_to_hcdof = touched_hids(cdofs,J)
+  hcol_to_gid, hcol_to_part = map_parts(
+    find_gid_and_part,hcol_to_hcdof,cdofs.partition)
+
+  # Create the range for cols
+  cols = PRange(
+    parts,
+    ngcdofs,
+    nocdofs,
+    first_gcdof,
+    hcol_to_gid,
+    hcol_to_part,
+    cneigs_snd,
+    cneigs_rcv)
+
+  # Convert again I,J to local numeration
+  to_lids!(I,rows)
+  to_lids!(J,cols)
+
+  # Compress local portions
+  values = map_parts(create_from_nz,a.allocs)
+
+  # Build the matrix exchanger. This can be empty since no ghost rows
+  exchanger = empty_exchanger(parts)
+
+  # Finally build the matrix
+  A = PSparseMatrix(values,rows,cols,exchanger)
+
+  A, callback_output
+end
+
+function Algebra.create_from_nz(a::DistributedAllocationCOO{<:SubAssembledRows})
+  f(x) = nothing
+  A, = _sa_create_from_nz_with_callback(f,f,a)
+  A
+end
+
+function _sa_create_from_nz_with_callback(callback,async_callback,a)
+
+  # Recover some data
+  I,J,C = map_parts(a.allocs) do alloc
+    alloc.I, alloc.J, alloc.V
+  end
+  parts = get_part_ids(a.allocs)
+  rdofs = a.rows # dof ids of the test space
+  cdofs = a.cols # dof ids of the trial space
+  ngrdofs = length(rdofs)
+  ngcdofs = length(cdofs)
+  nordofs = map_parts(num_oids,rdofs.partition)
+  nocdofs = map_parts(num_oids,cdofs.partition)
+  first_grdof = map_parts(first_gdof_from_ids,rdofs.partition)
+  first_gcdof = map_parts(first_gdof_from_ids,cdofs.partition)
   rneigs_snd = rdofs.exchanger.parts_snd
   rneigs_rcv = rdofs.exchanger.parts_rcv
   cneigs_snd = cdofs.exchanger.parts_snd
@@ -148,12 +222,6 @@ function _create_from_nz_with_callback(
 
   # Find the ghost rows
   hrow_to_hrdof = touched_hids(rdofs,I)
-  function find_gid_and_part(hid_to_hdof,dofs)
-    hid_to_ldof = view(dofs.hid_to_lid,hid_to_hdof)
-    hid_to_gid = dofs.lid_to_gid[hid_to_ldof]
-    hid_to_part = dofs.lid_to_part[hid_to_ldof]
-    hid_to_gid, hid_to_part
-  end
   hrow_to_gid, hrow_to_part = map_parts(
     find_gid_and_part,hrow_to_hrdof,rdofs.partition)
 
@@ -279,10 +347,47 @@ function Algebra.create_from_nz(a::PVector{<:SubAssembledRows})
   @notimplemented
 end
 
+function _rhs_callback(c_fespace,rows)
+
+  # The ghost values in b_fespace are aligned with the FESpace
+  # but not with the ghost values in the rows of A
+  b_fespace = PVector(c_fespace.values,c_fespace.rows)
+
+  # This one is aligned with the rows of A
+  b = similar(b_fespace,eltype(b_fespace),(rows,))
+
+  # First transfer owned values
+  b .= b_fespace
+
+  # Now transfer ghost
+  function transfer_ghost(b,b_fespace,ids,ids_fespace)
+    for hid in 1:num_hids(ids)
+      lid = ids.hid_to_lid[hid]
+      gid = ids.lid_to_gid[lid]
+      lid_fespace = ids_fespace.gid_to_lid[gid]
+      b[lid] = b_fespace[lid_fespace]
+    end
+  end
+  map_parts(
+    transfer_ghost,
+    b.values,
+    b_fespace.values,
+    b.rows.partition,
+    b_fespace.rows.partition)
+
+  return b
+end
+
 function Algebra.create_from_nz(
   a::DistributedAllocationCOO{<:FullyAssembledRows},
-  b_fespace::PVectorAllocation{<:FullyAssembledRows})
-  @notimplemented
+  c_fespace::PVectorAllocation{<:FullyAssembledRows})
+
+  function callback(rows)
+    _rhs_callback(c_fespace,rows)
+  end
+
+  A,b = _fa_create_from_nz_with_callback(callback,a)
+  A,b
 end
 
 function Algebra.create_from_nz(
@@ -290,34 +395,7 @@ function Algebra.create_from_nz(
   c_fespace::PVectorAllocation{<:SubAssembledRows})
 
   function callback(rows)
-
-    # The ghost values in b_fespace are aligned with the FESpace
-    # but not with the ghost values in the rows of A
-    b_fespace = PVector(c_fespace.values,c_fespace.rows)
-
-    # This one is aligned with the rows of A
-    b = similar(b_fespace,eltype(b_fespace),(rows,))
-
-    # First transfer owned values
-    b .= b_fespace
-
-    # Now transfer ghost
-    function transfer_ghost(b,b_fespace,ids,ids_fespace)
-      for hid in 1:num_hids(ids)
-        lid = ids.hid_to_lid[hid]
-        gid = ids.lid_to_gid[lid]
-        lid_fespace = ids_fespace.gid_to_lid[gid]
-        b[lid] = b_fespace[lid_fespace]
-      end
-    end
-    map_parts(
-      transfer_ghost,
-      b.values,
-      b_fespace.values,
-      b.rows.partition,
-      b_fespace.rows.partition)
-
-    return b
+    _rhs_callback(c_fespace,rows)
   end
 
   function async_callback(b)
@@ -325,8 +403,7 @@ function Algebra.create_from_nz(
     async_assemble!(b)
   end
 
-  A,b = _create_from_nz_with_callback(callback,async_callback,a)
-
+  A,b = _sa_create_from_nz_with_callback(callback,async_callback,a)
   A,b
 end
 
