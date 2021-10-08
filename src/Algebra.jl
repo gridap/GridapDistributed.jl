@@ -15,6 +15,10 @@ function local_views(a::PVector)
   a.values
 end
 
+function local_views(a::PRange)
+  a.partition
+end
+
 function consistent_local_views(a::PVector,ids_fespace::PRange)
   if a.rows === ids_fespace
     a_fespace = a

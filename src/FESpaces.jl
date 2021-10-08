@@ -176,11 +176,11 @@ end
 
 # Single field related
 
-struct DistributedSinglefieldFESpace{A,B,C} <: DistributedFESpace
+struct DistributedSingleFieldFESpace{A,B,C} <: DistributedFESpace
   spaces::A
   gids::B
   vector_type::Type{C}
-  function DistributedSinglefieldFESpace(
+  function DistributedSingleFieldFESpace(
     spaces::AbstractPData{<:SingleFieldFESpace},
     gids::PRange,
     vector_type::Type{C}) where C
@@ -190,18 +190,18 @@ struct DistributedSinglefieldFESpace{A,B,C} <: DistributedFESpace
   end
 end
 
-local_views(a::DistributedSinglefieldFESpace) = a.spaces
+local_views(a::DistributedSingleFieldFESpace) = a.spaces
 
-function FESpaces.get_vector_type(fs::DistributedSinglefieldFESpace)
+function FESpaces.get_vector_type(fs::DistributedSingleFieldFESpace)
   fs.vector_type
 end
 
-function FESpaces.get_free_dof_ids(fs::DistributedSinglefieldFESpace)
+function FESpaces.get_free_dof_ids(fs::DistributedSingleFieldFESpace)
   fs.gids
 end
 
 function FESpaces.FEFunction(
-  f::DistributedSinglefieldFESpace,free_values::AbstractVector)
+  f::DistributedSingleFieldFESpace,free_values::AbstractVector)
   local_vals = consistent_local_views(free_values,f.gids)
   fields = map_parts(FEFunction,f.spaces,local_vals)
   metadata = DistributedFEFunctionData(free_values)
@@ -209,40 +209,40 @@ function FESpaces.FEFunction(
 end
 
 function FESpaces.EvaluationFunction(
-  f::DistributedSinglefieldFESpace,free_values::AbstractVector)
+  f::DistributedSingleFieldFESpace,free_values::AbstractVector)
   local_vals = consistent_local_views(free_values,f.gids)
   fields = map_parts(EvaluationFunction,f.spaces,local_vals)
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
 end
 
-function FESpaces.get_fe_basis(f::DistributedSinglefieldFESpace)
+function FESpaces.get_fe_basis(f::DistributedSingleFieldFESpace)
   fields = map_parts(get_fe_basis,f.spaces)
   DistributedCellField(fields)
 end
 
-function FESpaces.get_trial_fe_basis(f::DistributedSinglefieldFESpace)
+function FESpaces.get_trial_fe_basis(f::DistributedSingleFieldFESpace)
   fields = map_parts(get_trial_fe_basis,f.spaces)
   DistributedCellField(fields)
 end
 
-function FESpaces.TrialFESpace(f::DistributedSinglefieldFESpace)
+function FESpaces.TrialFESpace(f::DistributedSingleFieldFESpace)
   spaces = map_parts(TrialFESpace,f.spaces)
-  DistributedSinglefieldFESpace(spaces,f.gids,f.vector_type)
+  DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
 end
 
-function FESpaces.TrialFESpace(f::DistributedSinglefieldFESpace,fun)
+function FESpaces.TrialFESpace(f::DistributedSingleFieldFESpace,fun)
   spaces = map_parts(f.spaces) do s
     TrialFESpace(s,fun)
   end
-  DistributedSinglefieldFESpace(spaces,f.gids,f.vector_type)
+  DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
 end
 
-function FESpaces.TrialFESpace(fun,f::DistributedSinglefieldFESpace)
+function FESpaces.TrialFESpace(fun,f::DistributedSingleFieldFESpace)
   spaces = map_parts(f.spaces) do s
     TrialFESpace(fun,s)
   end
-  DistributedSinglefieldFESpace(spaces,f.gids,f.vector_type)
+  DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
 end
 
 function generate_gids(
@@ -253,7 +253,7 @@ function generate_gids(
   generate_gids(model.gids,cell_to_ldofs,nldofs)
 end
 
-function FESpaces.interpolate(u,f::DistributedSinglefieldFESpace)
+function FESpaces.interpolate(u,f::DistributedSingleFieldFESpace)
   free_values = zero_free_values(f)
   map_parts(f.spaces,local_views(free_values)) do V,vec
     interpolate!(u,vec,V)
@@ -276,7 +276,7 @@ function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
   A = typeof(map_parts(i->local_vector_type(undef,0),gids.partition))
   B = typeof(gids)
   vector_type = PVector{T,A,B}
-  DistributedSinglefieldFESpace(spaces,gids,vector_type)
+  DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
 
 # Assembly

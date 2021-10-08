@@ -33,6 +33,6 @@ include("Visualization.jl")
 
 include("FESpaces.jl")
 
-#include("MultiField.jl")
+include("MultiField.jl")
 
 end # module
