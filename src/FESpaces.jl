@@ -376,17 +376,42 @@ function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrix
   map_parts(numeric_loop_matrix_and_vector!,local_views(A),local_views(b),a.assems,data)
 end
 
+# Parallel Assembly strategies
+
+function local_assembly_strategy(::SubAssembledRows,rows,cols)
+  DefaultAssemblyStrategy()
+end
+
+# When using this one, make sure that you also loop over ghost cells.
+# This is at your own risk.
+function local_assembly_strategy(::FullyAssembledRows,rows,cols)
+  rows_lid_to_ohid = rows.lid_to_ohid
+  cols_lid_to_ohid = cols.lid_to_ohid
+  GenericAssemblyStrategy(
+    identity,
+    identity,
+    row->rows_lid_to_ohid[row]>0,
+    col->cols_lid_to_ohid[col]>0)
+end
+
 # Assembler high level constructors
 
-function FESpaces.SparseMatrixAssembler(trial::DistributedFESpace,test::DistributedFESpace)
+function FESpaces.SparseMatrixAssembler(
+  trial::DistributedFESpace,
+  test::DistributedFESpace,
+  par_strategy=SubAssembledRows())
+
   Tv = get_vector_type(get_part(trial.spaces))
   T = eltype(Tv)
   Tm = SparseMatrixCSC{T,Int}
-  assems = map_parts(trial.spaces,test.spaces) do u,v
-    SparseMatrixAssembler(Tm,Tv,u,v)
+  cols = trial.gids.partition
+  rows = test.gids.partition
+  assems = map_parts(test.spaces,trial.spaces,rows,cols) do v,u,rows,cols
+    local_strategy = local_assembly_strategy(par_strategy,rows,cols)
+    SparseMatrixAssembler(Tm,Tv,u,v,local_strategy)
   end
-  matrix_builder = PSparseMatrixBuilderCOO(Tm)
-  vector_builder = PVectorBuilder(Tv)
+  matrix_builder = PSparseMatrixBuilderCOO(Tm,par_strategy)
+  vector_builder = PVectorBuilder(Tv,par_strategy)
   rows = get_free_dof_ids(test)
   cols = get_free_dof_ids(trial)
   DistributedSparseMatrixAssembler(assems,matrix_builder,vector_builder,rows,cols)

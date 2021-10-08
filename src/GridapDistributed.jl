@@ -20,6 +20,9 @@ import LinearAlgebra: det, tr, cross, dot, ⋅
 import Base: inv, abs, abs2, *, +, -, /, adjoint, transpose, real, imag, conj
 import Gridap.Fields: grad2curl
 
+export FullyAssembledRows
+export SubAssembledRows
+
 include("Algebra.jl")
 
 include("Geometry.jl")

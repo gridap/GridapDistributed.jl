@@ -38,13 +38,17 @@ function local_views(a::PSparseMatrix)
   a.values
 end
 
+struct FullyAssembledRows end
+struct SubAssembledRows end
+
 # For the moment we use COO format even though
 # it is quite memory consuming.
 # We need to implement communication in other formats in
 # PartitionedArrays.jl
 
-struct PSparseMatrixBuilderCOO{T}
+struct PSparseMatrixBuilderCOO{T,B}
   local_matrix_type::Type{T}
+  par_strategy::B
 end
 
 function Algebra.nz_counter(
@@ -54,21 +58,24 @@ function Algebra.nz_counter(
     axs = (Base.OneTo(num_lids(r)),Base.OneTo(num_lids(c)))
     Algebra.CounterCOO{A}(axs)
   end
-  DistributedCounterCOO(counters,rows,cols)
+  DistributedCounterCOO(builder.par_strategy,counters,rows,cols)
 end
 
-struct DistributedCounterCOO{A,B,C} <: GridapType
-  counters::A
-  rows::B
-  cols::C
+struct DistributedCounterCOO{A,B,C,D} <: GridapType
+  par_strategy::A
+  counters::B
+  rows::C
+  cols::D
   function DistributedCounterCOO(
+    par_strategy,
     counters::AbstractPData{<:Algebra.CounterCOO},
     rows::PRange,
     cols::PRange)
-    A = typeof(counters)
-    B = typeof(rows)
-    C = typeof(cols)
-    new{A,B,C}(counters,rows,cols)
+    A = typeof(par_strategy)
+    B = typeof(counters)
+    C = typeof(rows)
+    D = typeof(cols)
+    new{A,B,C,D}(par_strategy,counters,rows,cols)
   end
 end
 
@@ -78,21 +85,24 @@ end
 
 function Algebra.nz_allocation(a::DistributedCounterCOO)
   allocs = map_parts(nz_allocation,a.counters)
-  DistributedAllocationCOO(allocs,a.rows,a.cols)
+  DistributedAllocationCOO(a.par_strategy,allocs,a.rows,a.cols)
 end
 
-struct DistributedAllocationCOO{A,B,C} <:GridapType
-  allocs::A
-  rows::B
-  cols::C
+struct DistributedAllocationCOO{A,B,C,D} <:GridapType
+  par_strategy::A
+  allocs::B
+  rows::C
+  cols::D
   function DistributedAllocationCOO(
+    par_strategy,
     allocs::AbstractPData{<:Algebra.AllocationCOO},
     rows::PRange,
     cols::PRange)
-    A = typeof(allocs)
-    B = typeof(rows)
-    C = typeof(cols)
-    new{A,B,C}(allocs,rows,cols)
+    A = typeof(par_strategy)
+    B = typeof(allocs)
+    C = typeof(rows)
+    D = typeof(cols)
+    new{A,B,C,D}(par_strategy,allocs,rows,cols)
   end
 end
 
@@ -100,17 +110,18 @@ function local_views(a::DistributedAllocationCOO)
   a.allocs
 end
 
-function Algebra.create_from_nz(a::DistributedAllocationCOO)
-  A, = _create_from_nz_with_callback(i->nothing,a)
+function Algebra.create_from_nz(a::DistributedAllocationCOO{<:FullyAssembledRows})
+  @notimplemented
+end
+
+function Algebra.create_from_nz(a::DistributedAllocationCOO{<:SubAssembledRows})
+  f(x) = nothing
+  A, = _create_from_nz_with_callback(f,f,a)
   A
 end
 
-function _create_from_nz_with_callback(callback,a::DistributedAllocationCOO)
-
-  # TODO for the moment we assume that we integrate
-  # on owned cells only and thus we need to send some rows
-  # to neighbor procs.
-  # If we integrate also on ghost cells then this simplifies a lot!
+function _create_from_nz_with_callback(
+  callback,async_callback,a::DistributedAllocationCOO)
 
   # Recover some data
   I,J,C = map_parts(a.allocs) do alloc
@@ -186,12 +197,21 @@ function _create_from_nz_with_callback(callback,a::DistributedAllocationCOO)
     cneigs_snd,
     cneigs_rcv)
 
+  # Overlap rhs communications with CSC compression
+  t2 = async_callback(callback_output)
+
   # Convert again I,J to local numeration
   to_lids!(I,rows)
   to_lids!(J,cols)
 
   # Compress the local matrices
   values = map_parts(create_from_nz,a.allocs)
+
+  # Wait the transfer to finish
+  if t2 !== nothing
+    map_parts(schedule,t2)
+    map_parts(wait,t2)
+  end
 
   # Build the matrix exchanger
   # TODO for the moment, we build an empty exchanger
@@ -208,8 +228,9 @@ function _create_from_nz_with_callback(callback,a::DistributedAllocationCOO)
   A, callback_output
 end
 
-struct PVectorBuilder{T}
+struct PVectorBuilder{T,B}
   local_vector_type::Type{T}
+  par_strategy::B
 end
 
 function Algebra.nz_counter(builder::PVectorBuilder,axs::Tuple{<:PRange})
@@ -219,12 +240,13 @@ function Algebra.nz_counter(builder::PVectorBuilder,axs::Tuple{<:PRange})
     axs = (Base.OneTo(num_lids(rows)),)
     nz_counter(ArrayBuilder(T),axs)
   end
-  PVectorCounter(counters,rows)
+  PVectorCounter(builder.par_strategy,counters,rows)
 end
 
-struct PVectorCounter{A,B}
-  counters::A
-  rows::B
+struct PVectorCounter{A,B,C}
+  par_strategy::A
+  counters::B
+  rows::C
 end
 
 Algebra.LoopStyle(::Type{<:PVectorCounter}) = DoNotLoop()
@@ -236,24 +258,42 @@ end
 function Arrays.nz_allocation(a::PVectorCounter)
   dofs = a.rows
   values = map_parts(nz_allocation,a.counters)
-  PVector(values,dofs)
+  PVectorAllocation(a.par_strategy,values,dofs)
 end
 
-function Algebra.create_from_nz(a::PVector)
+struct PVectorAllocation{A,B,C}
+  par_strategy::A
+  values::B
+  rows::C
+end
+
+function local_views(a::PVectorAllocation)
+  a.values
+end
+
+function Algebra.create_from_nz(a::PVector{<:FullyAssembledRows})
   @notimplemented
 end
 
-function Algebra.create_from_nz(a::DistributedAllocationCOO,b_fespace::PVector)
+function Algebra.create_from_nz(a::PVector{<:SubAssembledRows})
+  @notimplemented
+end
 
-  # TODO for the moment we assume that we integrate
-  # on owned cells only and thus we need to send some rows
-  # to neighbor procs.
-  # If we integrate also on ghost cells then this simplifies a lot!
-  
-  # The ghost values in b_fespace are aligned with the FESpace
-  # but not with the ghost values in the rows of A
+function Algebra.create_from_nz(
+  a::DistributedAllocationCOO{<:FullyAssembledRows},
+  b_fespace::PVectorAllocation{<:FullyAssembledRows})
+  @notimplemented
+end
 
-  A,b = _create_from_nz_with_callback(a) do rows
+function Algebra.create_from_nz(
+  a::DistributedAllocationCOO{<:SubAssembledRows},
+  c_fespace::PVectorAllocation{<:SubAssembledRows})
+
+  function callback(rows)
+
+    # The ghost values in b_fespace are aligned with the FESpace
+    # but not with the ghost values in the rows of A
+    b_fespace = PVector(c_fespace.values,c_fespace.rows)
 
     # This one is aligned with the rows of A
     b = similar(b_fespace,eltype(b_fespace),(rows,))
@@ -280,8 +320,12 @@ function Algebra.create_from_nz(a::DistributedAllocationCOO,b_fespace::PVector)
     return b
   end
 
-  # now we can assemble contributions
-  assemble!(b)
+  function async_callback(b)
+    # now we can assemble contributions
+    async_assemble!(b)
+  end
+
+  A,b = _create_from_nz_with_callback(callback,async_callback,a)
 
   A,b
 end

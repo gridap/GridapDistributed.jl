@@ -56,6 +56,9 @@ function main(parts)
 
   @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
 
+  data = collect_cell_matrix(U,V,a)
+  A2 = assemble_matrix(assem,data)
+
 end
 
 end # module
