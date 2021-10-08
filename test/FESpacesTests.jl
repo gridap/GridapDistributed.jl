@@ -48,11 +48,11 @@ function main(parts)
   uh = FEFunction(U,x)
   eh = u - uh
 
-  writevtk(Ω,"Ω", nsubcells=10,
+  writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
     celldata=["err"=>cont[Ω]],
     cellfields=["uh"=>uh,"zh"=>zh,"eh"=>eh])
 
-  writevtk(Γ,"Γ",cellfields=["uh"=>uh])
+  writevtk(Γ,joinpath(output,"Γ"),cellfields=["uh"=>uh])
 
   @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
 

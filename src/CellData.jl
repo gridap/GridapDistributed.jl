@@ -7,6 +7,8 @@ struct DistributedCellPoint{A<:AbstractPData{<:CellPoint}} <: DistributedCellDat
   points::A
 end
 
+local_views(a::DistributedCellPoint) = a.points
+
 # DistributedCellField
 
 struct DistributedCellField{A,B} <: DistributedCellDatum
@@ -21,6 +23,8 @@ struct DistributedCellField{A,B} <: DistributedCellDatum
     new{A,B}(fields,metadata)
   end
 end
+
+local_views(a::DistributedCellField) = a.fields
 
 # Constructors
 
@@ -183,6 +187,8 @@ struct DistributedMeasure{A<:AbstractPData{<:Measure}} <: GridapType
   measures::A
 end
 
+local_views(a::DistributedMeasure) = a.measures
+
 function CellData.Measure(t::DistributedTriangulation,args...)
   measures = map_parts(t.trians) do trian
     Measure(trian,args...)
@@ -197,6 +203,8 @@ end
 struct DistributedDomainContribution{A<:AbstractPData{<:DomainContribution}} <: GridapType
   contribs::A
 end
+
+local_views(a::DistributedDomainContribution) = a.contribs
 
 function Base.getindex(c::DistributedDomainContribution,t::DistributedTriangulation)
   map_parts(getindex,c.contribs,t.trians)

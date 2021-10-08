@@ -9,6 +9,8 @@ struct DistributedGrid{Dc,Dp,A} <: GridapType
   end
 end
 
+local_views(g::DistributedGrid) = g.grids
+
 function Geometry.OrientationStyle(
   ::Type{<:DistributedGrid{Dc,Dp,A}}) where {Dc,Dp,A}
   OrientationStyle(eltype(A))
@@ -34,6 +36,8 @@ struct DistributedGridTopology{Dc,Dp,A} <: GridapType
   end
 end
 
+local_views(a::DistributedGridTopology) = a.topo
+
 function Geometry.OrientationStyle(
   ::Type{<:DistributedGridTopology{Dc,Dp,A}}) where {Dc,Dp,A}
   OrientationStyle(eltype(A))
@@ -53,6 +57,8 @@ struct DistributedFaceLabeling{A<:AbstractPData{<:FaceLabeling}}
   labels::A
 end
 
+local_views(a::DistributedFaceLabeling) = a.labels
+
 function Geometry.add_tag_from_tags!(labels::DistributedFaceLabeling, name, tags)
   map_parts(labels.labels) do labels
     add_tag_from_tags!(labels, name, tags)
@@ -71,6 +77,8 @@ struct DistributedDiscreteModel{Dc,Dp,A,B} <: GridapType
     new{Dc,Dp,A,B}(models,gids)
   end
 end
+
+local_views(a::DistributedDiscreteModel) = a.models
 
 function Geometry.get_grid(model::DistributedDiscreteModel)
   DistributedGrid(map_parts(get_grid,model.models))
@@ -121,6 +129,8 @@ struct DistributedTriangulation{Dc,Dp,A,B} <: GridapType
     new{Dc,Dp,A,B}(trians,model)
   end
 end
+
+local_views(a::DistributedTriangulation) = a.trians
 
 Geometry.num_cell_dims(::DistributedTriangulation{Dc,Dp}) where {Dc,Dp} = Dc
 Geometry.num_cell_dims(::Type{<:DistributedTriangulation{Dc,Dp}}) where {Dc,Dp} = Dc

@@ -168,9 +168,9 @@ struct DistributedFEFunctionData{T<:AbstractVector} <:GridapType
   free_values::T
 end
 
-const DistributedFEFunction = DistributedCellField{A,<:DistributedFEFunctionData{T}} where {A,T}
+const DistributedSingleFieldFEFunction = DistributedCellField{A,<:DistributedFEFunctionData{T}} where {A,T}
 
-function FESpaces.get_free_dof_values(uh::DistributedFEFunction)
+function FESpaces.get_free_dof_values(uh::DistributedSingleFieldFEFunction)
   uh.metadata.free_values
 end
 
@@ -189,6 +189,8 @@ struct DistributedSinglefieldFESpace{A,B,C} <: DistributedFESpace
     new{A,B,C}(spaces,gids,vector_type)
   end
 end
+
+local_views(a::DistributedSinglefieldFESpace) = a.spaces
 
 function FESpaces.get_vector_type(fs::DistributedSinglefieldFESpace)
   fs.vector_type
@@ -283,12 +285,17 @@ function FESpaces.collect_cell_matrix(
   trial::DistributedFESpace,
   test::DistributedFESpace,
   a::DistributedDomainContribution)
-  map_parts(collect_cell_matrix,trial.spaces,test.spaces,a.contribs)
+  map_parts(
+    collect_cell_matrix,
+    local_views(trial),
+    local_views(test),
+    local_views(a))
 end
 
 function FESpaces.collect_cell_vector(
   test::DistributedFESpace, a::DistributedDomainContribution)
-  map_parts(collect_cell_vector,test.spaces,a.contribs)
+  map_parts(
+    collect_cell_vector,local_views(test),local_views(a))
 end
 
 function FESpaces.collect_cell_matrix_and_vector(
@@ -297,7 +304,10 @@ function FESpaces.collect_cell_matrix_and_vector(
   biform::DistributedDomainContribution,
   liform::DistributedDomainContribution)
   map_parts(collect_cell_matrix_and_vector,
-    trial.spaces,test.spaces,biform.contribs,liform.contribs)
+    local_views(trial),
+    local_views(test),
+    local_views(biform),
+    local_views(liform))
 end
 
 function FESpaces.collect_cell_matrix_and_vector(
@@ -305,14 +315,18 @@ function FESpaces.collect_cell_matrix_and_vector(
   test::DistributedFESpace,
   biform::DistributedDomainContribution,
   liform::DistributedDomainContribution,
-  uhd::DistributedFEFunction)
+  uhd)
   map_parts(collect_cell_matrix_and_vector,
-    trial.spaces,test.spaces,biform.contribs,liform.contribs,uhd.fields)
+    local_views(trial),
+    local_views(test),
+    local_views(biform),
+    local_views(liform),
+    local_views(uhd))
 end
 
 function FESpaces.collect_cell_vector(
   test::DistributedFESpace,l::Number)
-  map_parts(test.spaces) do s
+  map_parts(local_views(test)) do s
     collect_cell_vector(s,l)
   end
 end
@@ -322,7 +336,8 @@ function FESpaces.collect_cell_matrix_and_vector(
   test::DistributedFESpace,
   mat::DistributedDomainContribution,
   l::Number)
-  map_parts(trial.spaces,test.spaces,mat.contribs) do u,v,m
+  map_parts(
+    local_views(trial),local_views(test),local_views(mat)) do u,v,m
     collect_cell_matrix_and_vector(u,v,m,l)
   end
 end
@@ -332,8 +347,9 @@ function FESpaces.collect_cell_matrix_and_vector(
   test::DistributedFESpace,
   mat::DistributedDomainContribution,
   l::Number,
-  uhd::DistributedFEFunction)
-  map_parts(trial.spaces,test.spaces,mat.contribs,uhd.fields) do u,v,m,f
+  uhd)
+  map_parts(
+    local_views(trial),local_views(test),local_views(mat),local_views(uhd)) do u,v,m,f
     collect_cell_matrix_and_vector(u,v,m,l,f)
   end
 end
@@ -345,6 +361,8 @@ struct DistributedSparseMatrixAssembler{A,B,C,D,E} <: SparseMatrixAssembler
   rows::D
   cols::E
 end
+
+local_views(a::DistributedSparseMatrixAssembler) = a.assems
 
 FESpaces.get_rows(a::DistributedSparseMatrixAssembler) = a.rows
 FESpaces.get_cols(a::DistributedSparseMatrixAssembler) = a.cols
@@ -405,7 +423,7 @@ function FESpaces.SparseMatrixAssembler(
   Tm = SparseMatrixCSC{T,Int}
   cols = trial.gids.partition
   rows = test.gids.partition
-  assems = map_parts(test.spaces,trial.spaces,rows,cols) do v,u,rows,cols
+  assems = map_parts(local_views(test),local_views(trial),rows,cols) do v,u,rows,cols
     local_strategy = local_assembly_strategy(par_strategy,rows,cols)
     SparseMatrixAssembler(Tm,Tv,u,v,local_strategy)
   end
