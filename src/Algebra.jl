@@ -3,7 +3,7 @@ function local_views(a::AbstractVector)
   @abstractmethod
 end
 
-function consistent_local_views(a,ids)
+function consistent_local_views(a,ids,isconsistent)
   @abstractmethod
 end
 
@@ -19,14 +19,16 @@ function local_views(a::PRange)
   a.partition
 end
 
-function consistent_local_views(a::PVector,ids_fespace::PRange)
+function consistent_local_views(a::PVector,ids_fespace::PRange,isconsistent)
   if a.rows === ids_fespace
     a_fespace = a
   else
     a_fespace = similar(a,eltype(a),ids_fespace)
     a_fespace .= a
   end
-  exchange!(a_fespace)
+  if ! isconsistent
+    exchange!(a_fespace)
+  end
   a_fespace.values
 end
 

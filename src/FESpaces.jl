@@ -201,16 +201,16 @@ function FESpaces.get_free_dof_ids(fs::DistributedSingleFieldFESpace)
 end
 
 function FESpaces.FEFunction(
-  f::DistributedSingleFieldFESpace,free_values::AbstractVector)
-  local_vals = consistent_local_views(free_values,f.gids)
+  f::DistributedSingleFieldFESpace,free_values::AbstractVector,isconsistent=false)
+  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
   fields = map_parts(FEFunction,f.spaces,local_vals)
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
 end
 
 function FESpaces.EvaluationFunction(
-  f::DistributedSingleFieldFESpace,free_values::AbstractVector)
-  local_vals = consistent_local_views(free_values,f.gids)
+  f::DistributedSingleFieldFESpace,free_values::AbstractVector,isconsistent=false)
+  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
   fields = map_parts(EvaluationFunction,f.spaces,local_vals)
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
@@ -268,6 +268,11 @@ function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
     FESpace(m,reffe;kwargs...)
   end
   gids =  generate_gids(model,spaces)
+  vector_type = _find_vector_type(spaces,gids)
+  DistributedSingleFieldFESpace(spaces,gids,vector_type)
+end
+
+function _find_vector_type(spaces,gids)
   #TODO Now the user can select the local vector type but not the global one
   # new kw-arg global_vector_type ?
   # we use PVector for the moment
@@ -276,7 +281,6 @@ function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
   A = typeof(map_parts(i->local_vector_type(undef,0),gids.partition))
   B = typeof(gids)
   vector_type = PVector{T,A,B}
-  DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
 
 # Assembly

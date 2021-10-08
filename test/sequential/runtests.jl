@@ -8,4 +8,6 @@ using Test
 
 @time @testset "FESpaces" begin include("FESpacesTests.jl") end
 
+@time @testset "MultiField" begin include("MultiFieldTests.jl") end
+
 end # module

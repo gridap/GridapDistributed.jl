@@ -9,6 +9,7 @@ using Gridap.Geometry
 using Gridap.CellData
 using Gridap.Visualization
 using Gridap.FESpaces
+using Gridap.MultiField
 
 using PartitionedArrays
 const PArrays = PartitionedArrays
