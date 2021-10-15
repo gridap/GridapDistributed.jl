@@ -360,12 +360,13 @@ function FESpaces.collect_cell_matrix_and_vector(
   end
 end
 
-struct DistributedSparseMatrixAssembler{A,B,C,D,E} <: SparseMatrixAssembler
-  assems::A
-  matrix_builder::B
-  vector_builder::C
-  rows::D
-  cols::E
+struct DistributedSparseMatrixAssembler{A,B,C,D,E,F} <: SparseMatrixAssembler
+  strategy::A
+  assems::B
+  matrix_builder::C
+  vector_builder::D
+  rows::E
+  cols::F
 end
 
 local_views(a::DistributedSparseMatrixAssembler) = a.assems
@@ -389,6 +390,7 @@ function FESpaces.symbolic_loop_vector!(b,a::DistributedSparseMatrixAssembler,ve
 end
 
 function FESpaces.numeric_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
+  parts=get_part_ids(vecdata)
   map_parts(numeric_loop_vector!,local_views(b),a.assems,vecdata)
 end
 
@@ -437,6 +439,40 @@ function FESpaces.SparseMatrixAssembler(
   vector_builder = PVectorBuilder(Tv,par_strategy)
   rows = get_free_dof_ids(test)
   cols = get_free_dof_ids(trial)
-  DistributedSparseMatrixAssembler(assems,matrix_builder,vector_builder,rows,cols)
+  DistributedSparseMatrixAssembler(par_strategy,assems,matrix_builder,vector_builder,rows,cols)
 end
 
+################### Experimental (required for assemble_vector + SubAssembledRows)
+
+function Gridap.FESpaces.assemble_vector(
+  a::DistributedSparseMatrixAssembler{<:SubAssembledRows},vecdata)
+
+  assems = map_parts(local_views(a.assems),local_views(a.rows)) do assem, rows
+    strategy=GenericAssemblyStrategy(
+       identity,
+       identity,
+       row->rows.lid_to_ohid[row]<0,
+       col->true)
+    GenericSparseMatrixAssembler(
+      assem.matrix_builder,
+      assem.vector_builder,
+      assem.rows,
+      assem.cols,
+      strategy)
+  end
+  matrix_builder = a.matrix_builder
+  vector_builder = PVectorBuilderSubAssembledRows(a.vector_builder.local_vector_type)
+  as=DistributedSparseMatrixAssembler(a.strategy,
+                                      assems,
+                                      matrix_builder,
+                                      vector_builder,
+                                      a.rows,
+                                      a.cols)
+
+  v1 = nz_counter(get_vector_builder(as),(get_rows(a),))
+  symbolic_loop_vector!(v1,as,vecdata)
+  v2 = nz_allocation(v1)
+  numeric_loop_vector!(v2,a,vecdata)
+  v3 = create_from_nz(v2)
+  v3
+end

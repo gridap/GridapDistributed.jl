@@ -11,7 +11,7 @@ function main(parts)
 
   output = mkpath(joinpath(@__DIR__,"output"))
 
-  domain = (0,4,0,4)
+  domain = (0,1,0,1)
   cells = (4,4)
   model = CartesianDiscreteModel(parts,domain,cells)
   Ω = Triangulation(model)
@@ -83,6 +83,15 @@ function main(parts)
   uh = solve(solver,op)
   eh = u - uh
   @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
+
+  dv = get_fe_basis(V)
+  Ω = Triangulation(model)
+  dΩ = Measure(Ω,3)
+  l=∫(1*dv)dΩ
+  vecdata=collect_cell_vector(V,l)
+  assem = SparseMatrixAssembler(U,V,SubAssembledRows())
+  b=assemble_vector(assem,vecdata)
+  @test sum(b)-1.0 < 1.0e-12
 
 end
 

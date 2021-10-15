@@ -101,7 +101,7 @@ function Geometry.CartesianDiscreteModel(
   nc = desc.partition
   msg = """
   A CartesianDiscreteModel needs a Cartesian subdomain partition
-  of the rigth dimensions.
+  of the right dimensions.
   """
   @assert length(size(parts)) == length(nc) msg
   gcids = PCartesianIndices(parts,nc,PArrays.with_ghost)
@@ -225,7 +225,7 @@ end
 # For the moment remove_ghost_cells
 # refers to the triangulation faces
 # pointing into the ghost cells
-# in the underlying background discrete 
+# in the underlying background discrete
 # model. This might change when solving
 # multi-field PDEs with one of the fields
 # defined on the boundary (e.g. a Lagrange multiplier)
