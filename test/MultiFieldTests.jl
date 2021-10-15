@@ -42,13 +42,20 @@ function main(parts)
   a((u,p),(v,q)) = ∫( ∇(v)⊙∇(u) - q*(∇⋅u) - (∇⋅v)*p )*dΩ
   l((v,q)) = ∫( v⋅f - q*g )*dΩ
 
-  #data = collect_cell_matrix_and_vector(UxP,VxQ,a((du,dp),(dv,dq)),l((dv,dq)),zh)
-  #A,b = assemble_matrix_and_vector(assem,data)
-  #x = A\b
-  #r = A*x -b
-  #uh,ph = FEFunction(UxP,x)
+  assem = SparseMatrixAssembler(UxP,VxQ)
+  data = collect_cell_matrix_and_vector(UxP,VxQ,a((du,dp),(dv,dq)),l((dv,dq)),zh)
+  A,b = assemble_matrix_and_vector(assem,data)
+  x = A\b
+  r = A*x -b
+  uh, ph = FEFunction(UxP,x)
 
-  #writevtk(Ω,"Ω",nsubcells=10,cellfields=["uh"=>uh,"ph"=>ph])
+  eu = u - uh
+  ep = p - ph
+
+  writevtk(Ω,"Ω",nsubcells=10,cellfields=["uh"=>uh,"ph"=>ph])
+
+  @test sqrt(sum(∫( eu⋅eu )dΩ)) < 1.0e-9
+  @test sqrt(sum(∫( eu⋅eu )dΩ)) < 1.0e-9
 
 end
 

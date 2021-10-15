@@ -19,13 +19,18 @@ function local_views(a::PRange)
   a.partition
 end
 
-function consistent_local_views(a::PVector,ids_fespace::PRange,isconsistent)
+function change_ghost(a::PVector,ids_fespace::PRange)
   if a.rows === ids_fespace
     a_fespace = a
   else
     a_fespace = similar(a,eltype(a),ids_fespace)
     a_fespace .= a
   end
+  a_fespace
+end
+
+function consistent_local_views(a::PVector,ids_fespace::PRange,isconsistent)
+  a_fespace = change_ghost(a,ids_fespace)
   if ! isconsistent
     exchange!(a_fespace)
   end

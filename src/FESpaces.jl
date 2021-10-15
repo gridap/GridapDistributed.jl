@@ -424,7 +424,7 @@ function FESpaces.SparseMatrixAssembler(
   test::DistributedFESpace,
   par_strategy=SubAssembledRows())
 
-  Tv = get_vector_type(get_part(trial.spaces))
+  Tv = get_vector_type(get_part(local_views(trial)))
   T = eltype(Tv)
   Tm = SparseMatrixCSC{T,Int}
   cols = trial.gids.partition

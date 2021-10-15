@@ -66,7 +66,8 @@ function MultiField.restrict_to_field(
 end
 
 function FESpaces.FEFunction(
-  f::DistributedMultiFieldFESpace,free_values::AbstractVector,isconsistent=false)
+  f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
+  free_values = change_ghost(x,f.gids)
   # This will cause also the single-field components to be consistent
   local_vals = consistent_local_views(free_values,f.gids,isconsistent)
   part_fe_fun = map_parts(FEFunction,f.part_fe_space,local_vals)
@@ -81,7 +82,8 @@ function FESpaces.FEFunction(
 end
 
 function FESpaces.EvaluationFunction(
-  f::DistributedMultiFieldFESpace,free_values::AbstractVector,isconsistent=false)
+  f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
+  free_values = change_ghost(x,f.gids)
   # This will cause also the single-field components to be consistent
   local_vals = consistent_local_views(free_values,f.gids,false)
   part_fe_fun = map_parts(EvaluationFunction,f.part_fe_space,local_vals)
@@ -100,7 +102,7 @@ struct DistributedMultiFieldFEBasis{A,B} <: GridapType
   part_fe_basis::B
   function DistributedMultiFieldFEBasis(
     field_fe_basis::AbstractVector{<:DistributedCellField},
-    part_fe_basis::AbstractPData)
+    part_fe_basis::AbstractPData{<:MultiFieldCellField})
     A = typeof(field_fe_basis)
     B = typeof(part_fe_basis)
     new{A,B}(field_fe_basis,part_fe_basis)
@@ -114,23 +116,25 @@ Base.iterate(m::DistributedMultiFieldFEBasis,state) = iterate(m.field_fe_basis,s
 Base.getindex(m::DistributedMultiFieldFEBasis,field_id::Integer) = m.field_fe_basis[field_id]
 
 function FESpaces.get_fe_basis(f::DistributedMultiFieldFESpace)
-  part_fe_basis = map_parts(get_fe_basis,f.part_fe_space)
+  part_mbasis = map_parts(get_fe_basis,f.part_fe_space)
   field_fe_basis = DistributedCellField[]
   for i in 1:num_fields(f)
-    basis_i = get_fe_basis(f.field_fe_space[i])
-    push!(field_fe_basis,basis_i)
+    basis_i = map_parts(b->b[i],part_mbasis)
+    bi = DistributedCellField(basis_i)
+    push!(field_fe_basis,bi)
   end
-  DistributedMultiFieldFEBasis(field_fe_basis,part_fe_basis)
+  DistributedMultiFieldFEBasis(field_fe_basis,part_mbasis)
 end
 
 function FESpaces.get_trial_fe_basis(f::DistributedMultiFieldFESpace)
-  part_fe_basis = map_parts(get_trial_fe_basis,f.part_fe_space)
+  part_mbasis = map_parts(get_trial_fe_basis,f.part_fe_space)
   field_fe_basis = DistributedCellField[]
   for i in 1:num_fields(f)
-    basis_i = get_trial_fe_basis(f.field_fe_space[i])
-    push!(field_fe_basis,basis_i)
+    basis_i = map_parts(b->b[i],part_mbasis)
+    bi = DistributedCellField(basis_i)
+    push!(field_fe_basis,bi)
   end
-  DistributedMultiFieldFEBasis(field_fe_basis,part_fe_basis)
+  DistributedMultiFieldFEBasis(field_fe_basis,part_mbasis)
 end
 
 function FESpaces.interpolate(u,f::DistributedMultiFieldFESpace)
