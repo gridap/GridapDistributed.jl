@@ -33,21 +33,14 @@ function main(parts)
   UxP = MultiFieldFESpace([U,P]) # This generates again the global numbering
   UxP = TrialFESpace(VxQ,[u,p]) # This reuses the one computed
 
-  zh = zero(UxP)
-  du,dp = get_trial_fe_basis(UxP)
-  dv,dq = get_fe_basis(VxQ)
-
   dΩ = Measure(Ω,2*k)
 
   a((u,p),(v,q)) = ∫( ∇(v)⊙∇(u) - q*(∇⋅u) - (∇⋅v)*p )*dΩ
   l((v,q)) = ∫( v⋅f - q*g )*dΩ
 
-  assem = SparseMatrixAssembler(UxP,VxQ)
-  data = collect_cell_matrix_and_vector(UxP,VxQ,a((du,dp),(dv,dq)),l((dv,dq)),zh)
-  A,b = assemble_matrix_and_vector(assem,data)
-  x = A\b
-  r = A*x -b
-  uh, ph = FEFunction(UxP,x)
+  op = AffineFEOperator(a,l,UxP,VxQ)
+  solver = LinearFESolver(BackslashSolver())
+  uh, ph = solve(solver,op)
 
   eu = u - uh
   ep = p - ph

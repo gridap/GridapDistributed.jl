@@ -37,11 +37,11 @@ function main(parts)
   # Assembly
   dv = get_fe_basis(V)
   du = get_trial_fe_basis(U)
-  a = ∫( ∇(dv)⋅∇(du) )dΩ
-  l = ∫( 0*dv )dΩ
+  a(u,v) = ∫( ∇(v)⋅∇(u) )dΩ
+  l(v) = ∫( 0*dv )dΩ
   assem = SparseMatrixAssembler(U,V)
 
-  data = collect_cell_matrix_and_vector(U,V,a,l,zh)
+  data = collect_cell_matrix_and_vector(U,V,a(du,dv),l(dv),zh)
   A,b = assemble_matrix_and_vector(assem,data)
   x = A\b
   r = A*x -b
@@ -56,20 +56,31 @@ function main(parts)
 
   @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
 
-  data = collect_cell_matrix(U,V,a)
+  op = AffineFEOperator(a,l,U,V)
+  solver = LinearFESolver(BackslashSolver())
+  uh = solve(solver,op)
+  eh = u - uh
+  @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
+
+  data = collect_cell_matrix(U,V,a(du,dv))
   A2 = assemble_matrix(assem,data)
 
   Ωl = Triangulation(with_ghost,model)
   dΩl = Measure(Ωl,3)
-  a = ∫( ∇(dv)⋅∇(du) )dΩl
-  l = ∫( 0*dv )dΩl
+  al(u,v) = ∫( ∇(v)⋅∇(u) )dΩl
+  ll(v) = ∫( 0*v )dΩl
 
   assem = SparseMatrixAssembler(U,V,FullyAssembledRows())
-  data = collect_cell_matrix_and_vector(U,V,a,l,zh)
+  data = collect_cell_matrix_and_vector(U,V,al(du,dv),ll(dv),zh)
   A,b = assemble_matrix_and_vector(assem,data)
   x = A\b
   r = A*x -b
   uh = FEFunction(U,x)
+  eh = u - uh
+  @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
+
+  op = AffineFEOperator(al,ll,U,V,FullyAssembledRows())
+  uh = solve(solver,op)
   eh = u - uh
   @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
 

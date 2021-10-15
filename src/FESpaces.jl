@@ -1,7 +1,7 @@
 #
 # Generic FE space related methods
 
-abstract type DistributedFESpace <: GridapType end
+abstract type DistributedFESpace <: FESpace end
 
 function FESpaces.get_vector_type(fs::DistributedFESpace)
   @abstractmethod
