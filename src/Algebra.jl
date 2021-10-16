@@ -547,8 +547,18 @@ function Algebra.create_from_nz(a::PVectorAllocationSubAssembledRows)
 
    # Find the ghost rows
    hrow_to_hrdof=map_parts(a.counters,rdofs.partition) do counter, indices
-    hlids_touched=findall(counter.touched)
-    oh_lid=-indices.lid_to_ohid[hlids_touched]
+    lids_touched=findall(counter.touched)
+    nhlids = count((x)->indices.lid_to_ohid[x]<0,lids_touched)
+    hlids = Vector{Int32}(undef,nhlids)
+    cur=1
+    for lid in lids_touched
+      hlid=indices.lid_to_ohid[lid]
+      if hlid<0
+        hlids[cur]=-hlid
+        cur=cur+1
+      end
+    end
+    hlids
    end
    hrow_to_gid, hrow_to_part = map_parts(
        find_gid_and_part,hrow_to_hrdof,rdofs.partition)

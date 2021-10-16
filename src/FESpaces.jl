@@ -447,32 +447,19 @@ end
 function Gridap.FESpaces.assemble_vector(
   a::DistributedSparseMatrixAssembler{<:SubAssembledRows},vecdata)
 
-  assems = map_parts(local_views(a.assems),local_views(a.rows)) do assem, rows
-    strategy=GenericAssemblyStrategy(
-       identity,
-       identity,
-       row->rows.lid_to_ohid[row]<0,
-       col->true)
-    GenericSparseMatrixAssembler(
-      assem.matrix_builder,
-      assem.vector_builder,
-      assem.rows,
-      assem.cols,
-      strategy)
-  end
   matrix_builder = a.matrix_builder
   vector_builder = PVectorBuilderSubAssembledRows(a.vector_builder.local_vector_type)
   as=DistributedSparseMatrixAssembler(a.strategy,
-                                      assems,
+                                      a.assems,
                                       matrix_builder,
                                       vector_builder,
                                       a.rows,
                                       a.cols)
 
-  v1 = nz_counter(get_vector_builder(as),(get_rows(a),))
+  v1 = nz_counter(get_vector_builder(as),(get_rows(as),))
   symbolic_loop_vector!(v1,as,vecdata)
   v2 = nz_allocation(v1)
-  numeric_loop_vector!(v2,a,vecdata)
+  numeric_loop_vector!(v2,as,vecdata)
   v3 = create_from_nz(v2)
   v3
 end
