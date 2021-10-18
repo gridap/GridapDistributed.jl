@@ -334,23 +334,22 @@ function local_views(a::PVectorCounter)
   a.counters
 end
 
-function Arrays.nz_allocation(a::PVectorCounter)
+function Arrays.nz_allocation(a::PVectorCounter{<:FullyAssembledRows})
   dofs = a.rows
   values = map_parts(nz_allocation,a.counters)
-  PVectorAllocation(a.par_strategy,values,dofs)
+  PVectorAllocationFullyAssembled(values,dofs)
 end
 
-struct PVectorAllocation{A,B,C}
-  par_strategy::A
-  values::B
-  rows::C
+struct PVectorAllocationFullyAssembled{A,B}
+  values::A
+  rows::B
 end
 
-function local_views(a::PVectorAllocation)
+function local_views(a::PVectorAllocationFullyAssembled)
   a.values
 end
 
-function Algebra.create_from_nz(a::PVectorAllocation{<:FullyAssembledRows})
+function Algebra.create_from_nz(a::PVectorAllocationFullyAssembled)
   # 1. Create PRange for the rows of the linear system
   parts = get_part_ids(a.values)
   rdofs = a.rows # dof ids of the test space
@@ -367,7 +366,7 @@ function Algebra.create_from_nz(a::PVectorAllocation{<:FullyAssembledRows})
   _rhs_callback(a,rows)
 end
 
-function Algebra.create_from_nz(a::PVectorAllocation{<:SubAssembledRows})
+function Algebra.create_from_nz(a::PVectorAllocationFullyAssembled{<:SubAssembledRows})
   # PVectorAllocation{<:SubAssembledRows} does not provide the information
   # required to be able to build a PVector out of it. A different
   # ArrayBuilder/ArrayCounter/ArrayAllocation set is needed
@@ -407,7 +406,7 @@ end
 
 function Algebra.create_from_nz(
   a::DistributedAllocationCOO{<:FullyAssembledRows},
-  c_fespace::PVectorAllocation{<:FullyAssembledRows})
+  c_fespace::PVectorAllocationFullyAssembled)
 
   function callback(rows)
     _rhs_callback(c_fespace,rows)
@@ -417,9 +416,15 @@ function Algebra.create_from_nz(
   A,b
 end
 
+struct PVectorAllocationSubAssembledRows{A,B,C}
+  allocations::A
+  values::B
+  rows::C
+end
+
 function Algebra.create_from_nz(
   a::DistributedAllocationCOO{<:SubAssembledRows},
-  c_fespace::PVectorAllocation{<:SubAssembledRows})
+  c_fespace::PVectorAllocationSubAssembledRows)
 
   function callback(rows)
     _rhs_callback(c_fespace,rows)
@@ -434,106 +439,47 @@ function Algebra.create_from_nz(
   A,b
 end
 
-################### Experimental (required for assemble_vector + SubAssembledRows)
-
-struct PVectorBuilderSubAssembledRows{T}
-  local_vector_type::Type{T}
-end
-
-struct ArrayCounterSubAssembledRows{T,A}
-  axes::A
+struct ArrayAllocationSubAssembledRows{A}
   touched::Vector{Bool}
-  function ArrayCounterSubAssembledRows{T}(axes::A) where {T,A<:Tuple{Vararg{AbstractUnitRange}}}
-    size=map(length,axes)
-    new{T,A}(axes,fill!(Array{Bool}(undef,size),false))
-  end
+  values::A
 end
 
-Gridap.Algebra.LoopStyle(::Type{<:ArrayCounterSubAssembledRows}) = Gridap.Algebra.Loop()
-@inline function Arrays.add_entry!(c::Function,a::ArrayCounterSubAssembledRows,v,i,j)
+@inline function Arrays.add_entry!(c::Function,a::ArrayAllocationSubAssembledRows,v,i,j)
   @notimplemented
 end
-@inline function Arrays.add_entry!(c::Function,a::ArrayCounterSubAssembledRows,v,i)
-  if i>0 && ! (a.touched[i])
-    a.touched[i]=true
+@inline function Arrays.add_entry!(c::Function,a::ArrayAllocationSubAssembledRows,v,i)
+  if i>0
+    if !(a.touched[i])
+      a.touched[i]=true
+    end
+    a.values[i]=c(v,a.values[i])
   end
   nothing
 end
-@inline function Arrays.add_entries!(c::Function,a::ArrayCounterSubAssembledRows,v,i,j)
+@inline function Arrays.add_entries!(c::Function,a::ArrayAllocationSubAssembledRows,v,i,j)
   @notimplemented
 end
-@inline function Arrays.add_entries!(c::Function,a::ArrayCounterSubAssembledRows,v,i)
-  for ie in i
-    Arrays.add_entry!(c,a,v,ie)
+@inline function Arrays.add_entries!(c::Function,a::ArrayAllocationSubAssembledRows,v,i)
+  for (ve,ie) in zip(v,i)
+    Arrays.add_entry!(c,a,ve,ie)
   end
   nothing
 end
-Arrays.nz_allocation(a::ArrayCounterSubAssembledRows{T}) where T = fill!(similar(T,map(length,a.axes)),zero(eltype(T)))
 
-
-struct PVectorCounterSubAssembledRows{A,B}
-  counters::A
-  rows::B
-end
-
-function local_views(a::PVectorCounterSubAssembledRows)
-  a.counters
-end
-
-function Algebra.nz_counter(builder::PVectorBuilderSubAssembledRows,axs::Tuple{<:PRange})
-  T = builder.local_vector_type
-  rows, = axs
-  counters = map_parts(rows.partition) do rows
-    axs = (Base.OneTo(num_lids(rows)),)
-    ArrayCounterSubAssembledRows{T}(axs)
-  end
-  PVectorCounterSubAssembledRows(counters,rows)
-end
-
-struct PVectorAllocationSubAssembledRows{A,B,C}
-  counters::A
-  values::B
-  rows::C
-end
-
-function Arrays.nz_allocation(a::PVectorCounterSubAssembledRows)
+function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
   dofs = a.rows
   values = map_parts(nz_allocation,a.counters)
-  PVectorAllocationSubAssembledRows(a.counters,values,dofs)
+  touched = map_parts(values) do values
+     fill!(Vector{Bool}(undef,length(values)),false)
+  end
+  allocations=map_parts(values,touched) do values,touched
+    ArrayAllocationSubAssembledRows(touched,values)
+  end
+  PVectorAllocationSubAssembledRows(allocations,values,dofs)
 end
 
 function local_views(a::PVectorAllocationSubAssembledRows)
-  a.values
-end
-
-function Gridap.FESpaces.symbolic_loop_vector!(b,a::GenericSparseMatrixAssembler,vecdata)
-  get_vec(a::Tuple) = a[1]
-  get_vec(a) = a
-  if Gridap.Algebra.LoopStyle(b) == Gridap.Algebra.DoNotLoop()
-    return b
-  end
-  for (cellvec,_cellids) in zip(vecdata...)
-    cellids = Gridap.FESpaces.map_cell_rows(a.strategy,_cellids)
-    rows_cache = array_cache(cellids)
-    if length(cellids) > 0
-      vec1 = get_vec(first(cellvec))
-      rows1 = getindex!(rows_cache,cellids,1)
-      touch! = TouchEntriesMap()
-      touch_cache = return_cache(touch!,b,vec1,rows1)
-      caches = touch_cache, rows_cache
-      _symbolic_loop_vector!(b,caches,cellids,vec1)
-    end
-  end
-  b
-end
-
-@noinline function _symbolic_loop_vector!(A,caches,cellids,vec1)
-  touch_cache, rows_cache = caches
-  touch! = TouchEntriesMap()
-  for cell in 1:length(cellids)
-    rows = getindex!(rows_cache,cellids,cell)
-    evaluate!(touch_cache,touch!,A,vec1,rows)
-  end
+  a.allocations
 end
 
 function Algebra.create_from_nz(a::PVectorAllocationSubAssembledRows)
@@ -546,8 +492,8 @@ function Algebra.create_from_nz(a::PVectorAllocationSubAssembledRows)
    rneigs_rcv = rdofs.exchanger.parts_rcv
 
    # Find the ghost rows
-   hrow_to_hrdof=map_parts(a.counters,rdofs.partition) do counter, indices
-    lids_touched=findall(counter.touched)
+   hrow_to_hrdof=map_parts(local_views(a.allocations),rdofs.partition) do allocation, indices
+    lids_touched=findall(allocation.touched)
     nhlids = count((x)->indices.lid_to_ohid[x]<0,lids_touched)
     hlids = Vector{Int32}(undef,nhlids)
     cur=1

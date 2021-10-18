@@ -93,6 +93,14 @@ function main(parts)
   b=assemble_vector(assem,vecdata)
   @test sum(b)-1.0 < 1.0e-12
 
+  Ω = Triangulation(no_ghost,model)
+  dΩ = Measure(Ω,3)
+  l=∫(1*dv)dΩ
+  vecdata=collect_cell_vector(V,l)
+  assem = SparseMatrixAssembler(U,V,FullyAssembledRows())
+  b=assemble_vector(assem,vecdata)
+  @test sum(b)-1.0 < 1.0e-12
+
 end
 
 end # module

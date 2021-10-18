@@ -441,25 +441,3 @@ function FESpaces.SparseMatrixAssembler(
   cols = get_free_dof_ids(trial)
   DistributedSparseMatrixAssembler(par_strategy,assems,matrix_builder,vector_builder,rows,cols)
 end
-
-################### Experimental (required for assemble_vector + SubAssembledRows)
-
-function Gridap.FESpaces.assemble_vector(
-  a::DistributedSparseMatrixAssembler{<:SubAssembledRows},vecdata)
-
-  matrix_builder = a.matrix_builder
-  vector_builder = PVectorBuilderSubAssembledRows(a.vector_builder.local_vector_type)
-  as=DistributedSparseMatrixAssembler(a.strategy,
-                                      a.assems,
-                                      matrix_builder,
-                                      vector_builder,
-                                      a.rows,
-                                      a.cols)
-
-  v1 = nz_counter(get_vector_builder(as),(get_rows(as),))
-  symbolic_loop_vector!(v1,as,vecdata)
-  v2 = nz_allocation(v1)
-  numeric_loop_vector!(v2,as,vecdata)
-  v3 = create_from_nz(v2)
-  v3
-end
