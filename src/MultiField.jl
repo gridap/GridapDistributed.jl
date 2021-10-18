@@ -97,6 +97,26 @@ function FESpaces.EvaluationFunction(
   DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
 end
 
+function FESpaces.interpolate(objects,fe::DistributedMultiFieldFESpace)
+  free_values = zero_free_values(fe)
+  interpolate!(objects,free_values,fe)
+end
+
+function FESpaces.interpolate!(objects,free_values::AbstractVector,fe::DistributedMultiFieldFESpace)
+  local_vals = consistent_local_views(free_values,fe.gids,true)
+  part_fe_fun = map_parts(local_vals,local_views(fe)) do x,f
+    interpolate!(objects,x,f)
+  end
+  field_fe_fun = DistributedSingleFieldFEFunction[]
+  for i in 1:num_fields(fe)
+    free_values_i = restrict_to_field(fe,free_values,i)
+    fe_space_i = fe.field_fe_space[i]
+    fe_fun_i = FEFunction(fe_space_i,free_values_i)
+    push!(field_fe_fun,fe_fun_i)
+  end
+  DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
+end
+
 struct DistributedMultiFieldFEBasis{A,B} <: GridapType
   field_fe_basis::A
   part_fe_basis::B
@@ -137,8 +157,8 @@ function FESpaces.get_trial_fe_basis(f::DistributedMultiFieldFESpace)
   DistributedMultiFieldFEBasis(field_fe_basis,part_mbasis)
 end
 
-function FESpaces.interpolate(u,f::DistributedMultiFieldFESpace)
-  @notimplemented
+function FESpaces.TrialFESpace(objects,a::DistributedMultiFieldFESpace)
+  TrialFESpace(a,objects)
 end
 
 function FESpaces.TrialFESpace(a::DistributedMultiFieldFESpace,objects)
@@ -293,4 +313,5 @@ function propagate_to_ghost_multifield!(
     end
   end
 end
+
 

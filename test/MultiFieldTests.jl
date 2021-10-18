@@ -31,9 +31,15 @@ function main(parts)
 
   VxQ = MultiFieldFESpace([V,Q])
   UxP = MultiFieldFESpace([U,P]) # This generates again the global numbering
-  UxP = TrialFESpace(VxQ,[u,p]) # This reuses the one computed
+  UxP = TrialFESpace([u,p],VxQ) # This reuses the one computed
+
+  uh, ph = interpolate([u,p],UxP)
+  eu = u - uh
+  ep = p - ph
 
   dΩ = Measure(Ω,2*k)
+  @test sqrt(sum(∫( eu⋅eu )dΩ)) < 1.0e-9
+  @test sqrt(sum(∫( eu⋅eu )dΩ)) < 1.0e-9
 
   a((u,p),(v,q)) = ∫( ∇(v)⊙∇(u) - q*(∇⋅u) - (∇⋅v)*p )*dΩ
   l((v,q)) = ∫( v⋅f - q*g )*dΩ

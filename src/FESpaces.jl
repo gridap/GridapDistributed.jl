@@ -257,6 +257,11 @@ end
 
 function FESpaces.interpolate(u,f::DistributedSingleFieldFESpace)
   free_values = zero_free_values(f)
+  interpolate!(u,free_values,f)
+end
+
+function FESpaces.interpolate!(
+  u,free_values::AbstractVector,f::DistributedSingleFieldFESpace)
   map_parts(f.spaces,local_views(free_values)) do V,vec
     interpolate!(u,vec,V)
   end
