@@ -10,4 +10,6 @@ using Test
 
 @time @testset "MultiField" begin include("MultiFieldTests.jl") end
 
+@time @testset "Poisson" begin include("PoissonTests.jl") end
+
 end # module

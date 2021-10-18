@@ -244,8 +244,16 @@ function remove_ghost_cells(glue::FaceToFaceGlue,trian,gids)
   view(trian, findall(tcell_to_mask))
 end
 
-function remove_ghost_cells(glue::SkeletonPair,trian,gids)
-  plus = remove_ghost_cells(glue.plus,trian,gids)
-  minus = remove_ghost_cells(glue.minus,trian,gids)
+function remove_ghost_cells(glue::SkeletonPair,trian::SkeletonTriangulation,gids)
+  owner_glue = glue.plus
+  plus = remove_ghost_cells(owner_glue,trian.plus,gids)
+  minus = remove_ghost_cells(owner_glue,trian.minus,gids)
   SkeletonTriangulation(plus,minus)
 end
+
+function remove_ghost_cells(glue::SkeletonPair,trian,gids)
+  owner_glue = glue.plus
+  remove_ghost_cells(owner_glue,trian,gids)
+end
+
+
