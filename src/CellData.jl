@@ -267,6 +267,53 @@ function CellData.get_cell_points(a::DistributedTriangulation)
 end
 
 function CellData.get_normal_vector(a::DistributedTriangulation)
-  DistributedCellField(map_parts(get_normal_vector,a.trians))
+  fields = map_parts(get_normal_vector,a.trians)
+  DistributedCellField(fields)
 end
+
+# Skeleton related
+
+function DistributedCellField(a::AbstractPData{<:SkeletonPair})
+  plus, minus = map_parts(s->(s.plus,s.minus),a)
+  dplus = DistributedCellField(plus)
+  dminus = DistributedCellField(minus)
+  SkeletonPair(dplus,dminus)
+end
+
+function Base.getproperty(x::DistributedCellField, sym::Symbol)
+  if sym in (:⁺,:plus)
+    DistributedCellField(map_parts(i->i.plus,x.fields))
+  elseif sym in (:⁻, :minus)
+    DistributedCellField(map_parts(i->i.minus,x.fields))
+  else
+    getfield(x, sym)
+  end
+end
+
+function Base.propertynames(x::DistributedCellField, private::Bool=false)
+  (fieldnames(typeof(x))...,:⁺,:plus,:⁻,:minus)
+end
+
+for op in (:outer,:*,:dot)
+  @eval begin
+    ($op)(a::DistributedCellField,b::SkeletonPair{<:DistributedCellField}) = Operation($op)(a,b)
+    ($op)(a::SkeletonPair{<:DistributedCellField},b::DistributedCellField) = Operation($op)(a,b)
+  end
+end
+
+function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField,b::SkeletonPair{<:DistributedCellField})
+  plus = k(a.plus,b.plus)
+  minus = k(a.minus,b.minus)
+  SkeletonPair(plus,minus)
+end
+
+function Arrays.evaluate!(cache,k::Operation,a::SkeletonPair{<:DistributedCellField},b::DistributedCellField)
+  plus = k(a.plus,b.plus)
+  minus = k(a.minus,b.minus)
+  SkeletonPair(plus,minus)
+end
+
+CellData.jump(a::DistributedCellField) = DistributedCellField(map_parts(jump,a.fields))
+CellData.jump(a::SkeletonPair{<:DistributedCellField}) = a.⁺ + a.⁻
+CellData.mean(a::DistributedCellField) = DistributedCellField(map_parts(mean,a.fields))
 
