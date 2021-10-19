@@ -245,15 +245,36 @@ function remove_ghost_cells(glue::FaceToFaceGlue,trian,gids)
 end
 
 function remove_ghost_cells(glue::SkeletonPair,trian::SkeletonTriangulation,gids)
-  owner_glue = glue.plus
-  plus = remove_ghost_cells(owner_glue,trian.plus,gids)
-  minus = remove_ghost_cells(owner_glue,trian.minus,gids)
+  ofacets = _find_owned_skeleton_facets(glue,gids)
+  plus = view(trian.plus,ofacets)
+  minus = view(trian.minus,ofacets)
   SkeletonTriangulation(plus,minus)
 end
 
 function remove_ghost_cells(glue::SkeletonPair,trian,gids)
-  owner_glue = glue.plus
-  remove_ghost_cells(owner_glue,trian,gids)
+  ofacets = _find_owned_skeleton_facets(glue,gids)
+  view(trian,ofacets)
+end
+
+function _find_owned_skeleton_facets(glue,gids)
+  glue_p = glue.plus
+  glue_m = glue.minus
+  T = eltype(gids.lid_to_part)
+  ntfaces = length(glue_p.tface_to_mface)
+  tface_to_part = zeros(T,ntfaces)
+  for tface in 1:ntfaces
+    mface_p = glue_p.tface_to_mface[tface]
+    mface_m = glue_m.tface_to_mface[tface]
+    gcell_p = gids.lid_to_gid[mface_p]
+    gcell_m = gids.lid_to_gid[mface_m]
+    if gcell_p > gcell_m
+      part = gids.lid_to_part[mface_p]
+    else
+      part = gids.lid_to_part[mface_m]
+    end
+    tface_to_part[tface] = part
+  end
+  findall(part->part==gids.part,tface_to_part)
 end
 
 
