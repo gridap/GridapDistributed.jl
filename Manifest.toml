@@ -244,9 +244,9 @@ uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
 [[MPI]]
 deps = ["Distributed", "DocStringExtensions", "Libdl", "MPICH_jll", "MicrosoftMPI_jll", "OpenMPI_jll", "Pkg", "Random", "Requires", "Serialization", "Sockets"]
-git-tree-sha1 = "e4549a5ced642a73bd8ba2dd1d3b1d30b3530d94"
+git-tree-sha1 = "340d8dc89e1c85a846d3f38ee294bfdd1684055a"
 uuid = "da04e1cc-30fd-572f-bb4f-1f8673147195"
-version = "0.19.0"
+version = "0.19.1"
 
 [[MPICH_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Pkg"]
