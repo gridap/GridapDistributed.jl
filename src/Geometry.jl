@@ -222,6 +222,22 @@ function filter_cells_when_needed(
   remove_ghost_cells(trian,cell_gids)
 end
 
+function filter_cells_when_needed(
+  portion::FullyAssembledRows,
+  cell_gids::AbstractIndexSet,
+  trian::Triangulation)
+
+  trian
+end
+
+function filter_cells_when_needed(
+  portion::SubAssembledRows,
+  cell_gids::AbstractIndexSet,
+  trian::Triangulation)
+
+  remove_ghost_cells(trian,cell_gids)
+end
+
 # For the moment remove_ghost_cells
 # refers to the triangulation faces
 # pointing into the ghost cells
