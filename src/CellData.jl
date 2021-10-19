@@ -117,12 +117,12 @@ end
 # Composition
 
 Base.:(∘)(f::Function,g::DistributedCellField) = Operation(f)(g)
-Base.:(∘)(f::Function,g::DistributedCellField,b::DistributedCellField) = Operation(f)(g,b)
-Base.:(∘)(f::Function,g::DistributedCellField,b::Number) = Operation(f)(g,b)
-Base.:(∘)(f::Function,g::Number,b::DistributedCellField) = Operation(f)(g,b)
-Base.:(∘)(f::Function,g::DistributedCellField,b::Function) = Operation(f)(g,b)
-Base.:(∘)(f::Function,g::Function,b::DistributedCellField) = Operation(f)(g,b)
-Base.:(∘)(f::Function,g::DistributedCellField...) = Operation(f)(g...)
+Base.:(∘)(f::Function,g::Tuple{DistributedCellField,DistributedCellField}) = Operation(f)(g[1],g[2])
+Base.:(∘)(f::Function,g::Tuple{DistributedCellField,Number}) = Operation(f)(g[1],g[2])
+Base.:(∘)(f::Function,g::Tuple{Number,DistributedCellField}) = Operation(f)(g[1],g[2])
+Base.:(∘)(f::Function,g::Tuple{DistributedCellField,Function}) = Operation(f)(g[1],g[2])
+Base.:(∘)(f::Function,g::Tuple{Function,DistributedCellField}) = Operation(f)(g[1],g[2])
+Base.:(∘)(f::Function,g::Tuple{Vararg{DistributedCellField}}) = Operation(f)(g...)
 
 # Define some of the well known arithmetic ops
 

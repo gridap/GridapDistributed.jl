@@ -1,6 +1,26 @@
 
-function local_views(a::AbstractVector)
+function Algebra.fill_entries!(a::PVector,v::Number)
+  fill!(a,v)
+  a
+end
+
+function Algebra.fill_entries!(a::PSparseMatrix,v::Number)
+  map_parts(a.values) do values
+    fill_entries!(values,v)
+  end
+  a
+end
+
+function local_views(a)
   @abstractmethod
+end
+
+function local_views(a::AbstractVector,rows)
+  @notimplemented
+end
+
+function local_views(a::AbstractMatrix,rows,cols)
+  @notimplemented
 end
 
 function consistent_local_views(a,ids,isconsistent)
@@ -11,12 +31,24 @@ function local_views(a::AbstractPData)
   a
 end
 
+function local_views(a::PRange)
+  a.partition
+end
+
 function local_views(a::PVector)
   a.values
 end
 
-function local_views(a::PRange)
-  a.partition
+function local_views(a::PVector,rows::PRange)
+  PArrays.local_view(a,rows)
+end
+
+function local_views(a::PSparseMatrix)
+  a.values
+end
+
+function local_views(a::PSparseMatrix,rows::PRange,cols::PRange)
+  PArrays.local_view(a,rows,cols)
 end
 
 function change_ghost(a::PVector,ids_fespace::PRange)
@@ -43,10 +75,6 @@ function Algebra.allocate_vector(::Type{<:PVector{T,A}},ids::PRange) where {T,A}
     Tv(undef,num_lids(ids))
   end
   PVector(values,ids)
-end
-
-function local_views(a::PSparseMatrix)
-  a.values
 end
 
 struct FullyAssembledRows end
@@ -94,6 +122,12 @@ function local_views(a::DistributedCounterCOO)
   a.counters
 end
 
+function local_views(a::DistributedCounterCOO,rows,cols)
+  @check rows === a.rows
+  @check cols === a.cols
+  a.counters
+end
+
 function Algebra.nz_allocation(a::DistributedCounterCOO)
   allocs = map_parts(nz_allocation,a.counters)
   DistributedAllocationCOO(a.par_strategy,allocs,a.rows,a.cols)
@@ -121,6 +155,12 @@ function local_views(a::DistributedAllocationCOO)
   a.allocs
 end
 
+function local_views(a::DistributedAllocationCOO,rows,cols)
+  @check rows === a.rows
+  @check cols === a.cols
+  a.allocs
+end
+
 function first_gdof_from_ids(ids)
   num_oids(ids)>0 ? Int(ids.lid_to_gid[ids.oid_to_lid[1]]) : 1
 end
@@ -130,6 +170,13 @@ function find_gid_and_part(hid_to_hdof,dofs)
   hid_to_gid = dofs.lid_to_gid[hid_to_ldof]
   hid_to_part = dofs.lid_to_part[hid_to_ldof]
   hid_to_gid, hid_to_part
+end
+
+function Algebra.create_from_nz(a::PSparseMatrix)
+  # For FullyAssembledRows the underlying Exchanger should
+  # not have ghost layer making assemble! do nothing (TODO check)
+  assemble!(a)
+  a
 end
 
 function Algebra.create_from_nz(a::DistributedAllocationCOO{<:FullyAssembledRows})
@@ -292,17 +339,11 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
     map_parts(wait,t2)
   end
 
-  # Build the matrix exchanger
-  # TODO for the moment, we build an empty exchanger
-  # (fine for problem that do not need to update the matrix)
-  exchanger = empty_exchanger(parts)
-
-  # TODO building a non-empty exchanger
-  # can be costly and not always needed
-  # add a more lazy initzialization of this inside PSparseMatrix
-
   # Finally build the matrix
-  A = PSparseMatrix(values,rows,cols,exchanger)
+  # A matrix exchanger will be created under the hood.
+  # Building a exchanger can be costly and not always needed.
+  # TODO add a more lazy initzialization of this inside PSparseMatrix
+  A = PSparseMatrix(values,rows,cols)
 
   A, callback_output
 end
@@ -334,6 +375,11 @@ function local_views(a::PVectorCounter)
   a.counters
 end
 
+function local_views(a::PVectorCounter,rows)
+  @check rows === a.rows
+  a.counters
+end
+
 function Arrays.nz_allocation(a::PVectorCounter)
   dofs = a.rows
   values = map_parts(nz_allocation,a.counters)
@@ -350,11 +396,16 @@ function local_views(a::PVectorAllocation)
   a.values
 end
 
-function Algebra.create_from_nz(a::PVector{<:FullyAssembledRows})
+function local_views(a::PVectorAllocation,rows)
+  @check rows === a.rows
+  a.values
+end
+
+function Algebra.create_from_nz(a::PVectorAllocation{<:FullyAssembledRows})
   @notimplemented
 end
 
-function Algebra.create_from_nz(a::PVector{<:SubAssembledRows})
+function Algebra.create_from_nz(a::PVectorAllocation{<:SubAssembledRows})
   @notimplemented
 end
 
@@ -387,6 +438,13 @@ function _rhs_callback(c_fespace,rows)
     b_fespace.rows.partition)
 
   return b
+end
+
+function Algebra.create_from_nz(a::PVector)
+  # For FullyAssembledRows the underlying Exchanger should
+  # not have ghost layer making asseble! do nothing (TODO check)
+  assemble!(a)
+  a
 end
 
 function Algebra.create_from_nz(

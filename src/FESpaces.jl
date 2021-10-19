@@ -382,27 +382,27 @@ FESpaces.get_vector_builder(a::DistributedSparseMatrixAssembler) = a.vector_buil
 FESpaces.get_assembly_strategy(a::DistributedSparseMatrixAssembler) = a.strategy
 
 function FESpaces.symbolic_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
-  map_parts(symbolic_loop_matrix!,local_views(A),a.assems,matdata)
+  map_parts(symbolic_loop_matrix!,local_views(A,a.rows,a.cols),a.assems,matdata)
 end
 
 function FESpaces.numeric_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
-  map_parts(numeric_loop_matrix!,local_views(A),a.assems,matdata)
+  map_parts(numeric_loop_matrix!,local_views(A,a.rows,a.cols),a.assems,matdata)
 end
 
 function FESpaces.symbolic_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
-  map_parts(symbolic_loop_vector!,local_views(b),a.assems,vecdata)
+  map_parts(symbolic_loop_vector!,local_views(b,a.rows),a.assems,vecdata)
 end
 
 function FESpaces.numeric_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
-  map_parts(numeric_loop_vector!,local_views(b),a.assems,vecdata)
+  map_parts(numeric_loop_vector!,local_views(b,a.rows),a.assems,vecdata)
 end
 
 function FESpaces.symbolic_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
-  map_parts(symbolic_loop_matrix_and_vector!,local_views(A),local_views(b),a.assems,data)
+  map_parts(symbolic_loop_matrix_and_vector!,local_views(A,a.rows,a.cols),local_views(b,a.rows),a.assems,data)
 end
 
 function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
-  map_parts(numeric_loop_matrix_and_vector!,local_views(A),local_views(b),a.assems,data)
+  map_parts(numeric_loop_matrix_and_vector!,local_views(A,a.rows,a.cols),local_views(b,a.rows),a.assems,data)
 end
 
 # Parallel Assembly strategies
