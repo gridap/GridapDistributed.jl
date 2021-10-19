@@ -319,8 +319,8 @@ version = "2.0.6"
 
 [[PartitionedArrays]]
 deps = ["IterativeSolvers", "LinearAlgebra", "MPI", "Printf", "SparseArrays", "SparseMatricesCSR"]
-git-tree-sha1 = "38a986dc7298d3d2a8e993c7db7944132c757415"
-repo-rev = "gridap_distributed"
+git-tree-sha1 = "4a25fbecc605305309f9c4bbcc4866a1670ccd75"
+repo-rev = "overloading_fill_psparsematrix"
 repo-url = "https://github.com/fverdugo/PartitionedArrays.jl.git"
 uuid = "5a9dfac6-5c52-46f7-8278-5e2210713be9"
 version = "0.2.2"

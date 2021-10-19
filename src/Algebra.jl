@@ -45,6 +45,16 @@ function Algebra.allocate_vector(::Type{<:PVector{T,A}},ids::PRange) where {T,A}
   PVector(values,ids)
 end
 
+function Algebra.fill_entries!(a::PVector,v::Number)
+  fill!(a,v)
+  a
+end
+
+function Algebra.fill_entries!(a::PSparseMatrix,v::Number)
+  fill!(a,v)
+  a
+end
+
 function local_views(a::PSparseMatrix)
   a.values
 end
