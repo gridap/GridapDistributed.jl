@@ -7,14 +7,19 @@ using GridapDistributed
 using PartitionedArrays
 using Test
 
-function main(parts)
+function test_fe_spaces(parts,wghost_or_nghost,das)
+
+  @assert (wghost_or_nghost == with_ghost &&
+          isa(das,FullyAssembledRows)) ||
+          (wghost_or_nghost == no_ghost &&
+          isa(das,SubAssembledRows))
 
   output = mkpath(joinpath(@__DIR__,"output"))
 
   domain = (0,1,0,1)
   cells = (4,4)
   model = CartesianDiscreteModel(parts,domain,cells)
-  Ω = Triangulation(model)
+  Ω = Boundary(model)
   Γ = Boundary(model)
 
   u((x,y)) = x+y
@@ -30,16 +35,19 @@ function main(parts)
   uh = interpolate(u,U)
   eh = u - uh
 
-  dΩ = Measure(Ω,3)
-  cont = ∫( abs2(eh) )dΩ
+  Ωint  = Triangulation(no_ghost,model)
+  dΩint = Measure(Ωint,3)
+  cont  = ∫( abs2(eh) )dΩint
   @test sqrt(sum(cont)) < 1.0e-9
 
   # Assembly
+  Ωass  = Triangulation(wghost_or_nghost,model)
+  dΩass = Measure(Ωass,3)
   dv = get_fe_basis(V)
   du = get_trial_fe_basis(U)
-  a(u,v) = ∫( ∇(v)⋅∇(u) )dΩ
-  l(v) = ∫( 0*dv )dΩ
-  assem = SparseMatrixAssembler(U,V)
+  a(u,v) = ∫( ∇(v)⋅∇(u) )dΩass
+  l(v) = ∫( 0*dv )dΩass
+  assem = SparseMatrixAssembler(U,V,das)
 
   data = collect_cell_matrix_and_vector(U,V,a(du,dv),l(dv),zh)
   A,b = assemble_matrix_and_vector(assem,data)
@@ -49,58 +57,50 @@ function main(parts)
   eh = u - uh
 
   writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
-    celldata=["err"=>cont[Ω]],
+    celldata=["err"=>cont[Ωint]],
     cellfields=["uh"=>uh,"zh"=>zh,"eh"=>eh])
 
   writevtk(Γ,joinpath(output,"Γ"),cellfields=["uh"=>uh])
 
-  @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
+  @test sqrt(sum(∫( abs2(eh) )dΩint)) < 1.0e-9
 
-  op = AffineFEOperator(a,l,U,V)
+  op = AffineFEOperator(a,l,U,V,das)
   solver = LinearFESolver(BackslashSolver())
   uh = solve(solver,op)
   eh = u - uh
-  @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
+  @test sqrt(sum(∫( abs2(eh) )dΩint)) < 1.0e-9
 
   data = collect_cell_matrix(U,V,a(du,dv))
   A2 = assemble_matrix(assem,data)
 
-  Ωl = Triangulation(with_ghost,model)
-  dΩl = Measure(Ωl,3)
-  al(u,v) = ∫( ∇(v)⋅∇(u) )dΩl
-  ll(v) = ∫( 0*v )dΩl
+  al(u,v) = ∫( ∇(v)⋅∇(u) )dΩass
+  ll(v) = ∫( 0*v )dΩass
 
-  assem = SparseMatrixAssembler(U,V,FullyAssembledRows())
   data = collect_cell_matrix_and_vector(U,V,al(du,dv),ll(dv),zh)
   A,b = assemble_matrix_and_vector(assem,data)
   x = A\b
   r = A*x -b
   uh = FEFunction(U,x)
   eh = u - uh
-  @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
+  @test sqrt(sum(∫( abs2(eh) )dΩint)) < 1.0e-9
 
-  op = AffineFEOperator(al,ll,U,V,FullyAssembledRows())
+  op = AffineFEOperator(al,ll,U,V,das)
   uh = solve(solver,op)
   eh = u - uh
-  @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
+  @test sqrt(sum(∫( abs2(eh) )dΩint)) < 1.0e-9
 
   dv = get_fe_basis(V)
-  Ω = Triangulation(model)
-  dΩ = Measure(Ω,3)
-  l=∫(1*dv)dΩ
+  l=∫(1*dv)dΩass
   vecdata=collect_cell_vector(V,l)
-  assem = SparseMatrixAssembler(U,V,SubAssembledRows())
+  assem = SparseMatrixAssembler(U,V,das)
   b=assemble_vector(assem,vecdata)
   @test sum(b)-1.0 < 1.0e-12
 
-  Ω = Triangulation(no_ghost,model)
-  dΩ = Measure(Ω,3)
-  l=∫(1*dv)dΩ
-  vecdata=collect_cell_vector(V,l)
-  assem = SparseMatrixAssembler(U,V,FullyAssembledRows())
-  b=assemble_vector(assem,vecdata)
-  @test sum(b)-1.0 < 1.0e-12
+end
 
+function main(parts)
+  test_fe_spaces(parts,no_ghost,SubAssembledRows())
+  test_fe_spaces(parts,with_ghost,FullyAssembledRows())
 end
 
 end # module

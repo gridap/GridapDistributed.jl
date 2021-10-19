@@ -337,19 +337,19 @@ end
 function Arrays.nz_allocation(a::PVectorCounter{<:FullyAssembledRows})
   dofs = a.rows
   values = map_parts(nz_allocation,a.counters)
-  PVectorAllocationFullyAssembled(values,dofs)
+  PVectorAllocationTrackOnlyValues(values,dofs)
 end
 
-struct PVectorAllocationFullyAssembled{A,B}
+struct PVectorAllocationTrackOnlyValues{A,B}
   values::A
   rows::B
 end
 
-function local_views(a::PVectorAllocationFullyAssembled)
+function local_views(a::PVectorAllocationTrackOnlyValues)
   a.values
 end
 
-function Algebra.create_from_nz(a::PVectorAllocationFullyAssembled)
+function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues)
   # 1. Create PRange for the rows of the linear system
   parts = get_part_ids(a.values)
   rdofs = a.rows # dof ids of the test space
@@ -364,13 +364,6 @@ function Algebra.create_from_nz(a::PVectorAllocationFullyAssembled)
     first_grdof)
   # 2. Transform data to output vector without communication
   _rhs_callback(a,rows)
-end
-
-function Algebra.create_from_nz(a::PVectorAllocationFullyAssembled{<:SubAssembledRows})
-  # PVectorAllocation{<:SubAssembledRows} does not provide the information
-  # required to be able to build a PVector out of it. A different
-  # ArrayBuilder/ArrayCounter/ArrayAllocation set is needed
-  @notimplemented
 end
 
 function _rhs_callback(c_fespace,rows)
@@ -406,7 +399,7 @@ end
 
 function Algebra.create_from_nz(
   a::DistributedAllocationCOO{<:FullyAssembledRows},
-  c_fespace::PVectorAllocationFullyAssembled)
+  c_fespace::PVectorAllocationTrackOnlyValues)
 
   function callback(rows)
     _rhs_callback(c_fespace,rows)
@@ -416,7 +409,7 @@ function Algebra.create_from_nz(
   A,b
 end
 
-struct PVectorAllocationSubAssembledRows{A,B,C}
+struct PVectorAllocationTrackTouchedAndValues{A,B,C}
   allocations::A
   values::B
   rows::C
@@ -424,7 +417,7 @@ end
 
 function Algebra.create_from_nz(
   a::DistributedAllocationCOO{<:SubAssembledRows},
-  c_fespace::PVectorAllocationSubAssembledRows)
+  c_fespace::PVectorAllocationTrackOnlyValues)
 
   function callback(rows)
     _rhs_callback(c_fespace,rows)
@@ -439,15 +432,15 @@ function Algebra.create_from_nz(
   A,b
 end
 
-struct ArrayAllocationSubAssembledRows{A}
+struct ArrayAllocationTrackTouchedAndValues{A}
   touched::Vector{Bool}
   values::A
 end
 
-@inline function Arrays.add_entry!(c::Function,a::ArrayAllocationSubAssembledRows,v,i,j)
+@inline function Arrays.add_entry!(c::Function,a::ArrayAllocationTrackTouchedAndValues,v,i,j)
   @notimplemented
 end
-@inline function Arrays.add_entry!(c::Function,a::ArrayAllocationSubAssembledRows,v,i)
+@inline function Arrays.add_entry!(c::Function,a::ArrayAllocationTrackTouchedAndValues,v,i)
   if i>0
     if !(a.touched[i])
       a.touched[i]=true
@@ -456,15 +449,25 @@ end
   end
   nothing
 end
-@inline function Arrays.add_entries!(c::Function,a::ArrayAllocationSubAssembledRows,v,i,j)
+@inline function Arrays.add_entries!(c::Function,a::ArrayAllocationTrackTouchedAndValues,v,i,j)
   @notimplemented
 end
-@inline function Arrays.add_entries!(c::Function,a::ArrayAllocationSubAssembledRows,v,i)
+@inline function Arrays.add_entries!(c::Function,a::ArrayAllocationTrackTouchedAndValues,v,i)
   for (ve,ie) in zip(v,i)
     Arrays.add_entry!(c,a,ve,ie)
   end
   nothing
 end
+
+function Arrays.nz_allocation(a::DistributedAllocationCOO{<:SubAssembledRows},
+                              b::PVectorCounter{<:SubAssembledRows})
+  A = nz_allocation(a)
+  dofs = b.rows
+  values = map_parts(nz_allocation,b.counters)
+  B=PVectorAllocationTrackOnlyValues(values,dofs)
+  A,B
+end
+
 
 function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
   dofs = a.rows
@@ -473,16 +476,16 @@ function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
      fill!(Vector{Bool}(undef,length(values)),false)
   end
   allocations=map_parts(values,touched) do values,touched
-    ArrayAllocationSubAssembledRows(touched,values)
+    ArrayAllocationTrackTouchedAndValues(touched,values)
   end
-  PVectorAllocationSubAssembledRows(allocations,values,dofs)
+  PVectorAllocationTrackTouchedAndValues(allocations,values,dofs)
 end
 
-function local_views(a::PVectorAllocationSubAssembledRows)
+function local_views(a::PVectorAllocationTrackTouchedAndValues)
   a.allocations
 end
 
-function Algebra.create_from_nz(a::PVectorAllocationSubAssembledRows)
+function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
    parts = get_part_ids(a.values)
    rdofs = a.rows # dof ids of the test space
    ngrdofs = length(rdofs)
