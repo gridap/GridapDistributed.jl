@@ -17,8 +17,8 @@ end
 @time @testset "Geometry" begin run_driver(4,"GeometryTests.jl")  end
 @time @testset "CellData" begin run_driver(4,"CellDataTests.jl")  end
 @time @testset "FESpaces" begin run_driver(4,"FESpacesTests.jl")  end
-@time @testset "MultiField" begin run_driver(4,"MultiField")  end
-@time @testset "Poisson" begin run_driver(4,"Poisson")  end
-@time @testset "PLaplacian" begin run_driver(4,"PLaplacian")  end
+@time @testset "MultiField" begin run_driver(4,"MultiField.jl")  end
+@time @testset "Poisson" begin run_driver(4,"Poisson.jl")  end
+@time @testset "PLaplacian" begin run_driver(4,"PLaplacian.jl")  end
 
 end # module
