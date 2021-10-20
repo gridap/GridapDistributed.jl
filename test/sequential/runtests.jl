@@ -12,4 +12,6 @@ using Test
 
 @time @testset "Poisson" begin include("PoissonTests.jl") end
 
+@time @testset "PLaplacian" begin include("PLaplacianTests.jl") end
+
 end # module

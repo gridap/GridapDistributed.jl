@@ -7,13 +7,7 @@ using GridapDistributed
 using PartitionedArrays
 using Test
 
-function test_fe_spaces(parts,wghost_or_nghost,das)
-
-  @assert (wghost_or_nghost == with_ghost &&
-          isa(das,FullyAssembledRows)) ||
-          (wghost_or_nghost == no_ghost &&
-          isa(das,SubAssembledRows))
-
+function test_fe_spaces(parts,das)
   output = mkpath(joinpath(@__DIR__,"output"))
 
   domain = (0,4,0,4)
@@ -41,7 +35,7 @@ function test_fe_spaces(parts,wghost_or_nghost,das)
   @test sqrt(sum(cont)) < 1.0e-9
 
   # Assembly
-  Ωass  = Triangulation(wghost_or_nghost,model)
+  Ωass  = Triangulation(das,model)
   dΩass = Measure(Ωass,3)
   dv = get_fe_basis(V)
   du = get_trial_fe_basis(U)
@@ -65,13 +59,12 @@ function test_fe_spaces(parts,wghost_or_nghost,das)
 
   data = collect_cell_matrix_and_vector(U,V,a(du,dv),l(dv),zh)
   A,b = allocate_matrix_and_vector(assem,data)
-  # assemble_matrix_and_vector!(A,b,assem,data)
-  # x = A\b
-  fill!(x,0.0) # Replace this line by the previous two once fixed!
+  assemble_matrix_and_vector!(A,b,assem,data)
+  x = A\b
   r = A*x -b
   uh = FEFunction(U,x)
   eh = u - uh
-  @test_broken sqrt(sum(∫( abs2(eh) )dΩint)) < 1.0e-9
+  sqrt(sum(∫( abs2(eh) )dΩint)) < 1.0e-9
 
   op = AffineFEOperator(a,l,U,V,das)
   solver = LinearFESolver(BackslashSolver())
@@ -83,7 +76,7 @@ function test_fe_spaces(parts,wghost_or_nghost,das)
   A2 = assemble_matrix(assem,data)
 
   A2 = allocate_matrix(assem,data)
-  @test_broken 1==0 # assemble_matrix!(A2,assem,data)
+  assemble_matrix!(A2,assem,data)
 
   al(u,v) = ∫( ∇(v)⋅∇(u) )dΩass
   ll(v) = ∫( 0*v )dΩass
@@ -109,14 +102,14 @@ function test_fe_spaces(parts,wghost_or_nghost,das)
   @test abs(sum(b)-length(b)) < 1.0e-12
 
   b=allocate_vector(assem,vecdata)
-  #assemble_vector!(b,assem,vecdata)
-  @test_broken abs(sum(b)-1.0) < 1.0e-12
+  assemble_vector!(b,assem,vecdata)
+  @test abs(sum(b)-1.0) < 1.0e-12
 
 end
 
 function main(parts)
-  # test_fe_spaces(parts,no_ghost,SubAssembledRows())
-  test_fe_spaces(parts,with_ghost,FullyAssembledRows())
+  #test_fe_spaces(parts,SubAssembledRows())
+  test_fe_spaces(parts,FullyAssembledRows())
 end
 
 end # module
