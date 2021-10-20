@@ -383,12 +383,13 @@ end
 function Arrays.nz_allocation(a::PVectorCounter{<:FullyAssembledRows})
   dofs = a.rows
   values = map_parts(nz_allocation,a.counters)
-  PVectorAllocationTrackOnlyValues(values,dofs)
+  PVectorAllocationTrackOnlyValues(a.par_strategy,values,dofs)
 end
 
-struct PVectorAllocationTrackOnlyValues{A,B}
-  values::A
-  rows::B
+struct PVectorAllocationTrackOnlyValues{A,B,C}
+  par_strategy::A
+  values::B
+  rows::C
 end
 
 function local_views(a::PVectorAllocationTrackOnlyValues)
@@ -400,25 +401,26 @@ function local_views(a::PVectorAllocationTrackOnlyValues,rows)
   a.values
 end
 
-function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues)
-  # 1. Create PRange for the rows of the linear system
+function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues{<:FullyAssembledRows})
+  # Create PRange for the rows of the linear system
   parts = get_part_ids(a.values)
-  rdofs = a.rows # dof ids of the test space
-  ngrdofs = length(rdofs)
-  nordofs = map_parts(num_oids,rdofs.partition)
-  first_grdof = map_parts(first_gdof_from_ids,rdofs.partition)
-  # This one has not ghost rows
-  rows = PRange(
-    parts,
-    ngrdofs,
-    nordofs,
-    first_grdof)
-  # 2. Transform data to output vector without communication
+  ngdofs = length(a.rows)
+  nodofs = map_parts(num_oids,a.rows.partition)
+  first_grdof = map_parts(first_gdof_from_ids,a.rows.partition)
+
+  # This one has no ghost rows
+  rows = PRange(parts,ngdofs,nodofs,first_grdof)
+
   _rhs_callback(a,rows)
 end
 
-function _rhs_callback(c_fespace,rows)
+function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues{<:SubAssembledRows})
+  # This point MUST NEVER be reached. If reached there is an inconsistency
+  # in the parallel code in charge of vector assembly
+  @assert false
+end
 
+function _rhs_callback(c_fespace,rows)
   # The ghost values in b_fespace are aligned with the FESpace
   # but not with the ghost values in the rows of A
   b_fespace = PVector(c_fespace.values,c_fespace.rows)
@@ -450,14 +452,14 @@ end
 
 function Algebra.create_from_nz(a::PVector)
   # For FullyAssembledRows the underlying Exchanger should
-  # not have ghost layer making asseble! do nothing (TODO check)
+  # not have ghost layer making assemble! do nothing (TODO check)
   assemble!(a)
   a
 end
 
 function Algebra.create_from_nz(
   a::DistributedAllocationCOO{<:FullyAssembledRows},
-  c_fespace::PVectorAllocationTrackOnlyValues)
+  c_fespace::PVectorAllocationTrackOnlyValues{<:FullyAssembledRows})
 
   function callback(rows)
     _rhs_callback(c_fespace,rows)
@@ -475,7 +477,7 @@ end
 
 function Algebra.create_from_nz(
   a::DistributedAllocationCOO{<:SubAssembledRows},
-  c_fespace::PVectorAllocationTrackOnlyValues)
+  c_fespace::PVectorAllocationTrackOnlyValues{<:SubAssembledRows})
 
   function callback(rows)
     _rhs_callback(c_fespace,rows)
@@ -495,6 +497,9 @@ struct ArrayAllocationTrackTouchedAndValues{A}
   values::A
 end
 
+Gridap.Algebra.LoopStyle(::Type{<:ArrayAllocationTrackTouchedAndValues}) = Gridap.Algebra.Loop()
+
+
 function local_views(a::PVectorAllocationTrackTouchedAndValues,rows)
   @check rows === a.rows
   a.values
@@ -508,7 +513,9 @@ end
     if !(a.touched[i])
       a.touched[i]=true
     end
-    a.values[i]=c(v,a.values[i])
+    if v!=nothing
+      a.values[i]=c(v,a.values[i])
+    end
   end
   nothing
 end
@@ -516,21 +523,26 @@ end
   @notimplemented
 end
 @inline function Arrays.add_entries!(c::Function,a::ArrayAllocationTrackTouchedAndValues,v,i)
-  for (ve,ie) in zip(v,i)
-    Arrays.add_entry!(c,a,ve,ie)
+  if v != nothing
+    for (ve,ie) in zip(v,i)
+      Arrays.add_entry!(c,a,ve,ie)
+    end
+  else
+    for ie in i
+      Arrays.add_entry!(c,a,nothing,ie)
+    end
   end
   nothing
 end
 
-function Arrays.nz_allocation(a::DistributedAllocationCOO{<:SubAssembledRows},
+function Arrays.nz_allocation(a::DistributedCounterCOO{<:SubAssembledRows},
                               b::PVectorCounter{<:SubAssembledRows})
   A = nz_allocation(a)
   dofs = b.rows
   values = map_parts(nz_allocation,b.counters)
-  B=PVectorAllocationTrackOnlyValues(values,dofs)
+  B=PVectorAllocationTrackOnlyValues(b.par_strategy,values,dofs)
   A,B
 end
-
 
 function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
   dofs = a.rows
@@ -545,6 +557,11 @@ function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
 end
 
 function local_views(a::PVectorAllocationTrackTouchedAndValues)
+  a.allocations
+end
+
+function local_views(a::PVectorAllocationTrackTouchedAndValues,rows)
+  @assert a.rows === rows
   a.allocations
 end
 
@@ -595,4 +612,34 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
      map_parts(wait,t2)
    end
    b
+end
+
+function Gridap.FESpaces.symbolic_loop_vector!(b,a::GenericSparseMatrixAssembler,vecdata)
+  get_vec(a::Tuple) = a[1]
+  get_vec(a) = a
+  if Gridap.Algebra.LoopStyle(b) == Gridap.Algebra.DoNotLoop()
+    return b
+  end
+  for (cellvec,_cellids) in zip(vecdata...)
+    cellids = Gridap.FESpaces.map_cell_rows(a.strategy,_cellids)
+    rows_cache = array_cache(cellids)
+    if length(cellids) > 0
+      vec1 = get_vec(first(cellvec))
+      rows1 = getindex!(rows_cache,cellids,1)
+      touch! = TouchEntriesMap()
+      touch_cache = return_cache(touch!,b,vec1,rows1)
+      caches = touch_cache, rows_cache
+      _symbolic_loop_vector!(b,caches,cellids,vec1)
+    end
+  end
+  b
+end
+
+@noinline function _symbolic_loop_vector!(A,caches,cellids,vec1)
+  touch_cache, rows_cache = caches
+  touch! = TouchEntriesMap()
+  for cell in 1:length(cellids)
+    rows = getindex!(rows_cache,cellids,cell)
+    evaluate!(touch_cache,touch!,A,vec1,rows)
+  end
 end

@@ -44,12 +44,12 @@ function test_fe_spaces(parts,das)
   assem = SparseMatrixAssembler(U,V,das)
 
   data = collect_cell_matrix_and_vector(U,V,a(du,dv),l(dv),zh)
-  A,b = assemble_matrix_and_vector(assem,data)
-  x = A\b
-  r = A*x -b
-  uh = FEFunction(U,x)
-  eh = u - uh
-  @test sqrt(sum(∫( abs2(eh) )dΩint)) < 1.0e-9
+  A1,b1 = assemble_matrix_and_vector(assem,data)
+  x1 = A1\b1
+  r1 = A1*x1 -b1
+  uh1 = FEFunction(U,x1)
+  eh1 = u - uh1
+  @test sqrt(sum(∫( abs2(eh1) )dΩint)) < 1.0e-9
 
   writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
     celldata=["err"=>cont[Ωint]],
@@ -57,14 +57,13 @@ function test_fe_spaces(parts,das)
 
   writevtk(Γ,joinpath(output,"Γ"),cellfields=["uh"=>uh])
 
-  data = collect_cell_matrix_and_vector(U,V,a(du,dv),l(dv),zh)
-  A,b = allocate_matrix_and_vector(assem,data)
-  assemble_matrix_and_vector!(A,b,assem,data)
-  x = A\b
-  r = A*x -b
-  uh = FEFunction(U,x)
-  eh = u - uh
-  sqrt(sum(∫( abs2(eh) )dΩint)) < 1.0e-9
+  A2,b2 = allocate_matrix_and_vector(assem,data)
+  assemble_matrix_and_vector!(A2,b2,assem,data)
+  x2 = A2\b2
+  r2 = A2*x2 -b2
+  uh = FEFunction(U,x2)
+  eh2 = u - uh
+  sqrt(sum(∫( abs2(eh2) )dΩint)) < 1.0e-9
 
   op = AffineFEOperator(a,l,U,V,das)
   solver = LinearFESolver(BackslashSolver())
@@ -98,17 +97,17 @@ function test_fe_spaces(parts,das)
   l=∫(1*dv)dΩass
   vecdata=collect_cell_vector(V,l)
   assem = SparseMatrixAssembler(U,V,das)
-  b=assemble_vector(assem,vecdata)
-  @test abs(sum(b)-length(b)) < 1.0e-12
+  b1=assemble_vector(assem,vecdata)
+  @test abs(sum(b1)-length(b1)) < 1.0e-12
 
-  b=allocate_vector(assem,vecdata)
-  assemble_vector!(b,assem,vecdata)
-  @test abs(sum(b)-1.0) < 1.0e-12
+  b2=allocate_vector(assem,vecdata)
+  assemble_vector!(b2,assem,vecdata)
+  @test abs(sum(b2)-length(b2)) < 1.0e-12
 
 end
 
 function main(parts)
-  #test_fe_spaces(parts,SubAssembledRows())
+  test_fe_spaces(parts,SubAssembledRows())
   test_fe_spaces(parts,FullyAssembledRows())
 end
 
