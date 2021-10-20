@@ -560,11 +560,6 @@ function local_views(a::PVectorAllocationTrackTouchedAndValues)
   a.allocations
 end
 
-function local_views(a::PVectorAllocationTrackTouchedAndValues,rows)
-  @assert a.rows === rows
-  a.allocations
-end
-
 function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
    parts = get_part_ids(a.values)
    rdofs = a.rows # dof ids of the test space

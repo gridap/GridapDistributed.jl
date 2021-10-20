@@ -72,10 +72,18 @@ function test_fe_spaces(parts,das)
   @test sqrt(sum(∫( abs2(eh) )dΩint)) < 1.0e-9
 
   data = collect_cell_matrix(U,V,a(du,dv))
-  A2 = assemble_matrix(assem,data)
+  A3 = assemble_matrix(assem,data)
+  x3 = A3\op.op.vector
+  uh = FEFunction(U,x3)
+  eh3 = u - uh
+  sqrt(sum(∫( abs2(eh3) )dΩint)) < 1.0e-9
 
-  A2 = allocate_matrix(assem,data)
-  assemble_matrix!(A2,assem,data)
+  A4 = allocate_matrix(assem,data)
+  assemble_matrix!(A4,assem,data)
+  x4 = A4\op.op.vector
+  uh = FEFunction(U,x4)
+  eh4 = u - uh
+  sqrt(sum(∫( abs2(eh4) )dΩint)) < 1.0e-9
 
   al(u,v) = ∫( ∇(v)⋅∇(u) )dΩass
   ll(v) = ∫( 0*v )dΩass
