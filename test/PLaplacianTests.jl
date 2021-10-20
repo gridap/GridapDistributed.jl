@@ -46,7 +46,10 @@ function main(parts,strategy)
   fill!(x,1)
   @test (norm(A*x-_A*x)+1) ≈ 1
 
-  nls = NLSolver(show_trace=i_am_main(parts), method=:newton)
+  # This leads to a dead lock since the printing of the trace seems to lead to collective operations
+  # show_trace = i_am_main(parts)
+  show_trace = true # The output in MPI will be ugly, but fixing this would require to edit NLSolvers package.
+  nls = NLSolver(show_trace=show_trace, method=:newton)
   solver = FESolver(nls)
   uh = solve(solver,op)
 
