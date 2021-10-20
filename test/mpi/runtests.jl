@@ -14,11 +14,8 @@ function run_driver(procs,file)
   end
 end
 
-@time @testset "Geometry" begin run_driver(4,"GeometryTests.jl")  end
-@time @testset "CellData" begin run_driver(4,"CellDataTests.jl")  end
-@time @testset "FESpaces" begin run_driver(4,"FESpacesTests.jl")  end
-@time @testset "MultiField" begin run_driver(4,"MultiField.jl")  end
-@time @testset "Poisson" begin run_driver(4,"Poisson.jl")  end
-@time @testset "PLaplacian" begin run_driver(4,"PLaplacian.jl")  end
+run_driver(1,"runtests_np4.jl") # Check that the degenerated case works
+run_driver(4,"runtests_np4.jl")
+
 
 end # module
