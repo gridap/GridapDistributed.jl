@@ -14,8 +14,8 @@ function run_driver(procs,file)
   end
 end
 
-run_driver(1,"runtests_np4.jl") # Check that the degenerated case works
 run_driver(4,"runtests_np4.jl")
+run_driver(1,"runtests_np4.jl") # Check that the degenerated case works
 
 
 end # module
