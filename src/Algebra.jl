@@ -502,7 +502,7 @@ Gridap.Algebra.LoopStyle(::Type{<:ArrayAllocationTrackTouchedAndValues}) = Grida
 
 function local_views(a::PVectorAllocationTrackTouchedAndValues,rows)
   @check rows === a.rows
-  a.values
+  a.allocations
 end
 
 @inline function Arrays.add_entry!(c::Function,a::ArrayAllocationTrackTouchedAndValues,v,i,j)
