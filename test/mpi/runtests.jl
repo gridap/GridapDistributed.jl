@@ -8,11 +8,11 @@ sysimage=nothing
 if length(ARGS)==1
    @assert isfile(ARGS[1]) "$(ARGS[1]) must be a valid Julia sysimage file"
    sysimage=ARGS[1]
-end 
+end
 
 mpidir = @__DIR__
 testdir = joinpath(mpidir,"..")
-repodir = joinpath(testdir,"..")
+repodir = joinpath(testdir,"TestApp")
 function run_driver(procs,file,sysimage)
   mpiexec() do cmd
     if sysimage!=nothing
