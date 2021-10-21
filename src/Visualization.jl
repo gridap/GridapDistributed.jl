@@ -6,7 +6,7 @@ function Base.getproperty(x::DistributedVisualizationData, sym::Symbol)
   if sym == :grid
     map_parts(i->i.grid,x.visdata)
   elseif sym == :filebase
-    map_parts(i->i.filebase,x.visdata)
+    get_part(x.visdata).filebase
   elseif sym == :celldata
     map_parts(i->i.celldata,x.visdata)
   elseif sym == :nodaldata
@@ -32,8 +32,7 @@ function Visualization.visualization_data(
   vd = map_parts(
     parts,model.models,model.gids.partition,labels.labels) do part,model,gids,labels
 
-    n = lpad(part,ceil(Int,log10(nparts)),'0')
-    vd = visualization_data(model,"$(filebase)_$(n)";labels=labels)
+    vd = visualization_data(model,filebase;labels=labels)
     vd_cells = vd[end]
     push!(vd_cells.celldata, "gid" => gids.lid_to_gid)
     push!(vd_cells.celldata, "part" => gids.lid_to_part)
@@ -63,11 +62,16 @@ function Visualization.visualization_data(
 
   vd = map_parts(
     parts,trians,cdat,fdat) do part,trian,celldata,cellfields
-    n = lpad(part,ceil(Int,log10(nparts)),'0')
+    _celldata = Dict{Any,Any}(celldata)
+    # we do not use "part" since it is likely to be used by the user
+    if haskey(_celldata,"piece")
+      @unreachable "piece is a reserved cell data name"
+    end
+    _celldata["piece"] = fill(part,num_cells(trian))
     vd = visualization_data(
-      trian,"$(filebase)_$(n)";
+      trian,filebase;
       order=order,nsubcells=nsubcells,
-      celldata=celldata,cellfields=cellfields)
+      celldata=_celldata,cellfields=cellfields)
     @assert length(vd) == 1
     vd[1]
   end
@@ -131,18 +135,20 @@ end
 
 # Vtk related
 
-# TODO use pvd format
-
 function Visualization.write_vtk_file(
   grid::AbstractPData{<:Grid}, filebase; celldata, nodaldata)
-  map_parts(grid,filebase,celldata,nodaldata) do g,f,c,n
-    write_vtk_file(g,f;celldata=c,nodaldata=n)
-  end
+  pvtk = Visualization.create_vtk_file(grid,filebase;celldata=celldata,nodaldata=nodaldata)
+  map_parts(vtk_save,pvtk)
 end
 
 function Visualization.create_vtk_file(
   grid::AbstractPData{<:Grid}, filebase; celldata, nodaldata)
-  map_parts(grid,filebase,celldata,nodaldata) do g,f,c,n
-    create_vtk_file(g,f;celldata=c,nodaldata=n)
+  parts = get_part_ids(grid)
+  nparts = length(parts)
+  map_parts(parts,grid,celldata,nodaldata) do part,g,c,n
+    Visualization.create_pvtk_file(
+      g,filebase;
+      pvtkargs=[:part=>part,:nparts=>nparts],
+      celldata=c,nodaldata=n)
   end
 end

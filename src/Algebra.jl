@@ -380,37 +380,47 @@ function local_views(a::PVectorCounter,rows)
   a.counters
 end
 
-function Arrays.nz_allocation(a::PVectorCounter)
+function Arrays.nz_allocation(a::PVectorCounter{<:FullyAssembledRows})
   dofs = a.rows
   values = map_parts(nz_allocation,a.counters)
-  PVectorAllocation(a.par_strategy,values,dofs)
+  PVectorAllocationTrackOnlyValues(a.par_strategy,values,dofs)
 end
 
-struct PVectorAllocation{A,B,C}
+struct PVectorAllocationTrackOnlyValues{A,B,C}
   par_strategy::A
   values::B
   rows::C
 end
 
-function local_views(a::PVectorAllocation)
+function local_views(a::PVectorAllocationTrackOnlyValues)
   a.values
 end
 
-function local_views(a::PVectorAllocation,rows)
+function local_views(a::PVectorAllocationTrackOnlyValues,rows)
   @check rows === a.rows
   a.values
 end
 
-function Algebra.create_from_nz(a::PVectorAllocation{<:FullyAssembledRows})
-  @notimplemented
+function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues{<:FullyAssembledRows})
+  # Create PRange for the rows of the linear system
+  parts = get_part_ids(a.values)
+  ngdofs = length(a.rows)
+  nodofs = map_parts(num_oids,a.rows.partition)
+  first_grdof = map_parts(first_gdof_from_ids,a.rows.partition)
+
+  # This one has no ghost rows
+  rows = PRange(parts,ngdofs,nodofs,first_grdof)
+
+  _rhs_callback(a,rows)
 end
 
-function Algebra.create_from_nz(a::PVectorAllocation{<:SubAssembledRows})
-  @notimplemented
+function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues{<:SubAssembledRows})
+  # This point MUST NEVER be reached. If reached there is an inconsistency
+  # in the parallel code in charge of vector assembly
+  @assert false
 end
 
 function _rhs_callback(c_fespace,rows)
-
   # The ghost values in b_fespace are aligned with the FESpace
   # but not with the ghost values in the rows of A
   b_fespace = PVector(c_fespace.values,c_fespace.rows)
@@ -442,14 +452,14 @@ end
 
 function Algebra.create_from_nz(a::PVector)
   # For FullyAssembledRows the underlying Exchanger should
-  # not have ghost layer making asseble! do nothing (TODO check)
+  # not have ghost layer making assemble! do nothing (TODO check)
   assemble!(a)
   a
 end
 
 function Algebra.create_from_nz(
   a::DistributedAllocationCOO{<:FullyAssembledRows},
-  c_fespace::PVectorAllocation{<:FullyAssembledRows})
+  c_fespace::PVectorAllocationTrackOnlyValues{<:FullyAssembledRows})
 
   function callback(rows)
     _rhs_callback(c_fespace,rows)
@@ -459,9 +469,15 @@ function Algebra.create_from_nz(
   A,b
 end
 
+struct PVectorAllocationTrackTouchedAndValues{A,B,C}
+  allocations::A
+  values::B
+  rows::C
+end
+
 function Algebra.create_from_nz(
   a::DistributedAllocationCOO{<:SubAssembledRows},
-  c_fespace::PVectorAllocation{<:SubAssembledRows})
+  c_fespace::PVectorAllocationTrackOnlyValues{<:SubAssembledRows})
 
   function callback(rows)
     _rhs_callback(c_fespace,rows)
@@ -476,3 +492,119 @@ function Algebra.create_from_nz(
   A,b
 end
 
+struct ArrayAllocationTrackTouchedAndValues{A}
+  touched::Vector{Bool}
+  values::A
+end
+
+Gridap.Algebra.LoopStyle(::Type{<:ArrayAllocationTrackTouchedAndValues}) = Gridap.Algebra.Loop()
+
+
+function local_views(a::PVectorAllocationTrackTouchedAndValues,rows)
+  @check rows === a.rows
+  a.allocations
+end
+
+@inline function Arrays.add_entry!(c::Function,a::ArrayAllocationTrackTouchedAndValues,v,i,j)
+  @notimplemented
+end
+@inline function Arrays.add_entry!(c::Function,a::ArrayAllocationTrackTouchedAndValues,v,i)
+  if i>0
+    if !(a.touched[i])
+      a.touched[i]=true
+    end
+    if v!=nothing
+      a.values[i]=c(v,a.values[i])
+    end
+  end
+  nothing
+end
+@inline function Arrays.add_entries!(c::Function,a::ArrayAllocationTrackTouchedAndValues,v,i,j)
+  @notimplemented
+end
+@inline function Arrays.add_entries!(c::Function,a::ArrayAllocationTrackTouchedAndValues,v,i)
+  if v != nothing
+    for (ve,ie) in zip(v,i)
+      Arrays.add_entry!(c,a,ve,ie)
+    end
+  else
+    for ie in i
+      Arrays.add_entry!(c,a,nothing,ie)
+    end
+  end
+  nothing
+end
+
+function Arrays.nz_allocation(a::DistributedCounterCOO{<:SubAssembledRows},
+                              b::PVectorCounter{<:SubAssembledRows})
+  A = nz_allocation(a)
+  dofs = b.rows
+  values = map_parts(nz_allocation,b.counters)
+  B=PVectorAllocationTrackOnlyValues(b.par_strategy,values,dofs)
+  A,B
+end
+
+function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
+  dofs = a.rows
+  values = map_parts(nz_allocation,a.counters)
+  touched = map_parts(values) do values
+     fill!(Vector{Bool}(undef,length(values)),false)
+  end
+  allocations=map_parts(values,touched) do values,touched
+    ArrayAllocationTrackTouchedAndValues(touched,values)
+  end
+  PVectorAllocationTrackTouchedAndValues(allocations,values,dofs)
+end
+
+function local_views(a::PVectorAllocationTrackTouchedAndValues)
+  a.allocations
+end
+
+function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
+   parts = get_part_ids(a.values)
+   rdofs = a.rows # dof ids of the test space
+   ngrdofs = length(rdofs)
+   nordofs = map_parts(num_oids,rdofs.partition)
+   first_grdof = map_parts(first_gdof_from_ids,rdofs.partition)
+   rneigs_snd = rdofs.exchanger.parts_snd
+   rneigs_rcv = rdofs.exchanger.parts_rcv
+
+   # Find the ghost rows
+   hrow_to_hrdof=map_parts(local_views(a.allocations),rdofs.partition) do allocation, indices
+    lids_touched=findall(allocation.touched)
+    nhlids = count((x)->indices.lid_to_ohid[x]<0,lids_touched)
+    hlids = Vector{Int32}(undef,nhlids)
+    cur=1
+    for lid in lids_touched
+      hlid=indices.lid_to_ohid[lid]
+      if hlid<0
+        hlids[cur]=-hlid
+        cur=cur+1
+      end
+    end
+    hlids
+   end
+   hrow_to_gid, hrow_to_part = map_parts(
+       find_gid_and_part,hrow_to_hrdof,rdofs.partition)
+
+   # Create the range for rows
+   rows = PRange(
+           parts,
+           ngrdofs,
+           nordofs,
+           first_grdof,
+           hrow_to_gid,
+           hrow_to_part,
+           rneigs_snd,
+           rneigs_rcv)
+
+   b = _rhs_callback(a,rows)
+   t2 = async_assemble!(b)
+
+   # Wait the transfer to finish
+   if t2 !== nothing
+     map_parts(schedule,t2)
+     map_parts(wait,t2)
+   end
+   b
+end

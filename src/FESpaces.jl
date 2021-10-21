@@ -365,12 +365,13 @@ function FESpaces.collect_cell_matrix_and_vector(
   end
 end
 
-struct DistributedSparseMatrixAssembler{A,B,C,D,E} <: SparseMatrixAssembler
-  assems::A
-  matrix_builder::B
-  vector_builder::C
-  rows::D
-  cols::E
+struct DistributedSparseMatrixAssembler{A,B,C,D,E,F} <: SparseMatrixAssembler
+  strategy::A
+  assems::B
+  matrix_builder::C
+  vector_builder::D
+  rows::E
+  cols::F
 end
 
 local_views(a::DistributedSparseMatrixAssembler) = a.assems
@@ -442,6 +443,5 @@ function FESpaces.SparseMatrixAssembler(
   vector_builder = PVectorBuilder(Tv,par_strategy)
   rows = get_free_dof_ids(test)
   cols = get_free_dof_ids(trial)
-  DistributedSparseMatrixAssembler(assems,matrix_builder,vector_builder,rows,cols)
+  DistributedSparseMatrixAssembler(par_strategy,assems,matrix_builder,vector_builder,rows,cols)
 end
-
