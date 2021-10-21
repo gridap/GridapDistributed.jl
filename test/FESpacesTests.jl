@@ -7,13 +7,18 @@ using GridapDistributed
 using PartitionedArrays
 using Test
 
-function test_fe_spaces(parts,das)
+function main(parts)
+  main(parts,SubAssembledRows())
+  main(parts,FullyAssembledRows())
+end
+
+function main(parts,das)
   output = mkpath(joinpath(@__DIR__,"output"))
 
   domain = (0,4,0,4)
   cells = (4,4)
   model = CartesianDiscreteModel(parts,domain,cells)
-  Ω = Boundary(model)
+  Ω = Triangulation(model)
   Γ = Boundary(model)
 
   u((x,y)) = x+y
@@ -29,9 +34,8 @@ function test_fe_spaces(parts,das)
   uh = interpolate(u,U)
   eh = u - uh
 
-  Ωint  = Triangulation(no_ghost,model)
-  dΩint = Measure(Ωint,3)
-  cont  = ∫( abs2(eh) )dΩint
+  dΩ = Measure(Ω,3)
+  cont  = ∫( abs2(eh) )dΩ
   @test sqrt(sum(cont)) < 1.0e-9
 
   # Assembly
@@ -49,10 +53,10 @@ function test_fe_spaces(parts,das)
   r1 = A1*x1 -b1
   uh1 = FEFunction(U,x1)
   eh1 = u - uh1
-  @test sqrt(sum(∫( abs2(eh1) )dΩint)) < 1.0e-9
+  @test sqrt(sum(∫( abs2(eh1) )dΩ)) < 1.0e-9
 
   writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
-    celldata=["err"=>cont[Ωint]],
+    celldata=["err"=>cont[Ω]],
     cellfields=["uh"=>uh,"zh"=>zh,"eh"=>eh])
 
   writevtk(Γ,joinpath(output,"Γ"),cellfields=["uh"=>uh])
@@ -63,43 +67,27 @@ function test_fe_spaces(parts,das)
   r2 = A2*x2 -b2
   uh = FEFunction(U,x2)
   eh2 = u - uh
-  sqrt(sum(∫( abs2(eh2) )dΩint)) < 1.0e-9
+  sqrt(sum(∫( abs2(eh2) )dΩ)) < 1.0e-9
 
   op = AffineFEOperator(a,l,U,V,das)
   solver = LinearFESolver(BackslashSolver())
   uh = solve(solver,op)
   eh = u - uh
-  @test sqrt(sum(∫( abs2(eh) )dΩint)) < 1.0e-9
+  @test sqrt(sum(∫( abs2(eh) )dΩ)) < 1.0e-9
 
   data = collect_cell_matrix(U,V,a(du,dv))
   A3 = assemble_matrix(assem,data)
   x3 = A3\op.op.vector
   uh = FEFunction(U,x3)
   eh3 = u - uh
-  sqrt(sum(∫( abs2(eh3) )dΩint)) < 1.0e-9
+  sqrt(sum(∫( abs2(eh3) )dΩ)) < 1.0e-9
 
   A4 = allocate_matrix(assem,data)
   assemble_matrix!(A4,assem,data)
   x4 = A4\op.op.vector
   uh = FEFunction(U,x4)
   eh4 = u - uh
-  sqrt(sum(∫( abs2(eh4) )dΩint)) < 1.0e-9
-
-  al(u,v) = ∫( ∇(v)⋅∇(u) )dΩass
-  ll(v) = ∫( 0*v )dΩass
-
-  data = collect_cell_matrix_and_vector(U,V,al(du,dv),ll(dv),zh)
-  A,b = assemble_matrix_and_vector(assem,data)
-  x = A\b
-  r = A*x -b
-  uh = FEFunction(U,x)
-  eh = u - uh
-  @test sqrt(sum(∫( abs2(eh) )dΩint)) < 1.0e-9
-
-  op = AffineFEOperator(al,ll,U,V,das)
-  uh = solve(solver,op)
-  eh = u - uh
-  @test sqrt(sum(∫( abs2(eh) )dΩint)) < 1.0e-9
+  sqrt(sum(∫( abs2(eh4) )dΩ)) < 1.0e-9
 
   dv = get_fe_basis(V)
   l=∫(1*dv)dΩass
@@ -112,11 +100,6 @@ function test_fe_spaces(parts,das)
   assemble_vector!(b2,assem,vecdata)
   @test abs(sum(b2)-length(b2)) < 1.0e-12
 
-end
-
-function main(parts)
-  test_fe_spaces(parts,SubAssembledRows())
-  test_fe_spaces(parts,FullyAssembledRows())
 end
 
 end # module
