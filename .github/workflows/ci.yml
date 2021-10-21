@@ -68,6 +68,7 @@ jobs:
           arch: ${{ matrix.arch }}
       #- uses: julia-actions/julia-buildpkg@v1
       - run: cd test/TestApp/compile; ./compile.sh 
+      - run: find . -name "*.so"
       - run: julia --project=test/TestApp/ -e 'using Pkg; Pkg.instantiate()' 
       - run: julia --project=test/TestApp/ --color=yes --check-bounds=yes test/mpi/runtests.jl test/TestApp/TestApp.so
       - uses: julia-actions/julia-processcoverage@v1
