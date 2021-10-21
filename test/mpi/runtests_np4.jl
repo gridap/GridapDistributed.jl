@@ -49,4 +49,6 @@ PArrays.toc!(t,"PLaplacian")
 
 display(t)
 
+MPI.Finalize()
+
 end #module
