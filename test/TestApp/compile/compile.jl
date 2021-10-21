@@ -1,6 +1,6 @@
 function generate_precompile_execution_file()
  source_code="""
- module sysimagegenerator 
+ module sysimagegenerator
     using TestApp
     using PartitionedArrays
     const PArrays = PartitionedArrays
@@ -12,30 +12,7 @@ function generate_precompile_execution_file()
 
     parts = get_part_ids(mpi,(1,1))
 
-    display(parts)
-
-    t = PArrays.PTimer(parts,verbose=true)
-    PArrays.tic!(t)
-
-    TestApp.GeometryTests.main(parts)
-    PArrays.toc!(t,"Geometry")
-
-    TestApp.CellDataTests.main(parts)
-    PArrays.toc!(t,"CellData")
-
-    TestApp.FESpacesTests.main(parts)
-    PArrays.toc!(t,"FESpaces")
-
-    TestApp.MultiFieldTests.main(parts)
-    PArrays.toc!(t,"MultiField")
-
-    TestApp.PoissonTests.main(parts)
-    PArrays.toc!(t,"Poisson")
-
-    TestApp.PLaplacianTests.main(parts)
-    PArrays.toc!(t,"PLaplacian")
-
-    display(t)
+    include("../../mpi/runtests_np4_body.jl")
 
     MPI.Finalize()
 
@@ -44,7 +21,7 @@ function generate_precompile_execution_file()
  open("sysimagegenerator.jl","w") do io
    println(io,source_code)
  end
-end 
+end
 
 using Pkg
 using PackageCompiler
