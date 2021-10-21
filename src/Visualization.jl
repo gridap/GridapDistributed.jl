@@ -146,4 +146,3 @@ function Visualization.create_vtk_file(
     create_vtk_file(g,f;celldata=c,nodaldata=n)
   end
 end
-

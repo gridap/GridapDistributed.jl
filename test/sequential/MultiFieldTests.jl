@@ -1,11 +1,9 @@
 module MultiFieldTestsSeq
 
 using PartitionedArrays
-
-include("../MultiFieldTests.jl")
+using TestApp
 
 parts = get_part_ids(sequential,(2,2))
-MultiFieldTests.main(parts)
+TestApp.MultiFieldTests.main(parts)
 
 end # module
-

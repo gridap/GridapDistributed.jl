@@ -1,12 +1,9 @@
 module PoissonTestsSeq
 
+using TestApp
 using PartitionedArrays
 
-include("../PoissonTests.jl")
-
 parts = get_part_ids(sequential,(2,2))
-PoissonTests.main(parts)
+TestApp.PoissonTests.main(parts)
 
 end # module
-
-
