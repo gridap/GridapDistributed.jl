@@ -13,7 +13,9 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
+FillArrays = "0.8.4, 0.9, 0.10, 0.11, 0.12"
 Gridap = "0.17"
+MPI = "0.16, 0.17, 0.18, 0.19"
 PartitionedArrays = "0.2"
 julia = "1.3"
 
