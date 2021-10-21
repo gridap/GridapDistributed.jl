@@ -62,10 +62,16 @@ function Visualization.visualization_data(
 
   vd = map_parts(
     parts,trians,cdat,fdat) do part,trian,celldata,cellfields
+    _celldata = Dict(celldata)
+    # we do not use "part" since it is likely to be used by the user
+    if haskey(_celldata,"piece")
+      @unreachable "piece is a reserved cell data name"
+    end
+    _celldata["piece"] = fill(part,num_cells(trian))
     vd = visualization_data(
       trian,filebase;
       order=order,nsubcells=nsubcells,
-      celldata=celldata,cellfields=cellfields)
+      celldata=_celldata,cellfields=cellfields)
     @assert length(vd) == 1
     vd[1]
   end
