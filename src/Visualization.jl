@@ -62,7 +62,7 @@ function Visualization.visualization_data(
 
   vd = map_parts(
     parts,trians,cdat,fdat) do part,trian,celldata,cellfields
-    _celldata = Dict(celldata)
+    _celldata = Dict{Any,Any}(celldata)
     # we do not use "part" since it is likely to be used by the user
     if haskey(_celldata,"piece")
       @unreachable "piece is a reserved cell data name"
