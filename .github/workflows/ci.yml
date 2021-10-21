@@ -32,7 +32,7 @@ jobs:
             ${{ runner.os }}-test-
             ${{ runner.os }}-
       - uses: julia-actions/julia-buildpkg@v1
-      - run: julia --project=. --color=yes --check-bounds=yes test/sequential/runtests.jl
+      - run: julia --project=test/TestApp/ --color=yes --check-bounds=yes test/sequential/runtests.jl
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v1
         with:
@@ -66,8 +66,8 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/julia-buildpkg@v1
-      - run: cd test/mpi/compile; ./compile.sh PoissonTests.jl
-      - run: julia --project=. --color=yes --check-bounds=yes test/mpi/runtests.jl test/mpi/compile/GridapDistributedMPIBackend.so
+        #- run: cd test/mpi/compile; ./compile.sh PoissonTests.jl
+      - run: julia --project=test/TestApp/ --color=yes --check-bounds=yes test/mpi/runtests.jl
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v1
         with:
