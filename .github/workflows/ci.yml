@@ -67,7 +67,8 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       #- uses: julia-actions/julia-buildpkg@v1
-      - run: julia --project=test/TestApp/ -e '
+      - run: |
+          julia --project=test/TestApp/ -e '
             using Pkg
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
