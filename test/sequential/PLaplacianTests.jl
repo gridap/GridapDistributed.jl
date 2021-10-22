@@ -1,9 +1,10 @@
 module PLaplacianTestsSeq
 
 using PartitionedArrays
-using TestApp
+
+include("../src/PLaplacianTests.jl")
 
 parts = get_part_ids(sequential,(2,2))
-TestApp.PLaplacianTests.main(parts)
+PLaplacianTests.main(parts)
 
 end # module
