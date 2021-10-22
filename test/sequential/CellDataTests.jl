@@ -1,10 +1,9 @@
 module CellDataTestsSeq
 
 using PartitionedArrays
-
-include("../CellDataTests.jl")
+using TestApp
 
 parts = get_part_ids(sequential,(2,2))
-CellDataTests.main(parts)
+TestApp.CellDataTests.main(parts)
 
 end # module

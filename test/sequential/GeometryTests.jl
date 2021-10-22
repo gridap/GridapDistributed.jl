@@ -1,13 +1,12 @@
 module GeometryTestsSeq
 
 using PartitionedArrays
-
-include("../GeometryTests.jl")
+using TestApp
 
 parts = get_part_ids(sequential,(2,2))
-GeometryTests.main(parts)
+TestApp.GeometryTests.main(parts)
 
 parts = get_part_ids(sequential,(2,2,2))
-GeometryTests.main(parts)
+TestApp.GeometryTests.main(parts)
 
 end
