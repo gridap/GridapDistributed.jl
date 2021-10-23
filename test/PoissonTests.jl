@@ -39,8 +39,7 @@ function main(parts)
   l(v) = ∫( v*f )dΩ + ∫( v*g )dΓn
   op = AffineFEOperator(a,l,U,V)
 
-  solver = LinearFESolver(BackslashSolver())
-  uh = solve(solver,op)
+  uh = solve(op)
   eh = u - uh
   @test sqrt(sum( ∫(abs2(eh))dΩ )) < 1.0e-9
 
@@ -72,7 +71,7 @@ function main(parts)
     ∫( (γ/h)*v*u - (n_Γd⋅∇(v))*u )*dΓd
 
   op = AffineFEOperator(a_dg,l_dg,V_dg,V_dg)
-  uh = solve(solver,op)
+  uh = solve(op)
   eh = u - uh
   @test sqrt(sum( ∫(abs2(eh))dΩ )) < 1.0e-9
 

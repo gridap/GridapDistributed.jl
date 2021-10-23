@@ -1,9 +1,10 @@
 module FESpacesTestsSeq
 
 using PartitionedArrays
-using TestApp
+
+include("../FESpacesTests.jl")
 
 parts = get_part_ids(sequential,(2,2))
-TestApp.FESpacesTests.main(parts)
+FESpacesTests.main(parts)
 
 end # module

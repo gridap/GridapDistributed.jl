@@ -1,16 +1,4 @@
 
-function Algebra.fill_entries!(a::PVector,v::Number)
-  fill!(a,v)
-  a
-end
-
-function Algebra.fill_entries!(a::PSparseMatrix,v::Number)
-  map_parts(a.values) do values
-    fill_entries!(values,v)
-  end
-  a
-end
-
 function local_views(a)
   @abstractmethod
 end
