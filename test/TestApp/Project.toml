@@ -1,0 +1,11 @@
+name = "TestApp"
+uuid = "3ba29202-0f57-4e69-8cbd-5c57d4c4860a"
+version = "0.1.0"
+
+[deps]
+Gridap = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
+GridapDistributed = "f9701e48-63b3-45aa-9a63-9bc6c271f355"
+MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
+PackageCompiler = "9b87118b-4619-50d2-8e1e-99f35a4d4d9d"
+PartitionedArrays = "5a9dfac6-5c52-46f7-8278-5e2210713be9"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

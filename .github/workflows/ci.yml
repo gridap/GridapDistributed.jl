@@ -1,108 +1,80 @@
 name: CI
 on:
-  - push 
+  - push
+  - pull_request
 jobs:
-  SequentialCommTests:
-    runs-on: ubuntu-latest
+  SequentialTests:
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - '1.6'
+        os:
+          - ubuntu-latest
+        arch:
+          - x64
     steps:
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@v1
         with:
-          version: 1.6
-          arch: x64 
-      - uses: julia-actions/julia-buildpkg@latest
-      - uses: julia-actions/julia-runtest@latest
-  MPIPETScCommTests:
-   runs-on: ubuntu-latest
-   env:
-    JULIA_MPI_BINARY: "system"
-    P4EST_ROOT_DIR: "/opt/p4est/2.2/" 
-    JULIA_PETSC_RealDouble_BINARY: "system"
-    JULIA_PETSC_RealDouble_DIR: "/opt/petsc/3.15.4"
-    JULIA_PETSC_RealDouble_ARCH: "" 
-    JULIA_PETSC_RealDouble_LIBNAME: "libpetsc"
-   steps:
-     - uses: actions/checkout@v2
-
-     - name: Cache p4est
-       id: cache-p4est
-       uses: actions/cache@v2
-       with:
-         path: ${{env.P4EST_ROOT_DIR}}
-         key: ${{ runner.os }}-build-${{ env.P4EST_ROOT_DIR }}-
-         restore-keys: |
-           ${{ runner.os }}-build-${{ env.P4EST_ROOT_DIR }}-
-           ${{ runner.os }}-build-
-           ${{ runner.os }}-
-
-     - name: Cache petsc
-       id: cache-petsc
-       uses: actions/cache@v2
-       with:
-         path: ${{env.JULIA_PETSC_RealDouble_DIR}}
-         key: ${{ runner.os }}-build-${{ env.JULIA_PETSC_RealDouble_DIR }}-
-         restore-keys: |
-           ${{ runner.os }}-build-${{ env.JULIA_PETSC_RealDouble_DIR }}-
-           ${{ runner.os }}-build-
-           ${{ runner.os }}-      
-
-     - uses: julia-actions/setup-julia@v1
-       with:
-         version: 1.6
-         arch: x64 
-     - name: Install p4est/petsc dependencies
-       run: |
-           sudo apt-get update 
-           sudo apt-get install -y wget gfortran g++ openmpi-bin libopenmpi-dev
-     - name: Install petsc
-       if: steps.cache-petsc.outputs.cache-hit != 'true'
-       run: |
-          # Install p4est 2.2 from sources
-          CURR_DIR=$(pwd)
-          PACKAGE=petsc
-          VERSION=3.15.4
-          INSTALL_ROOT=/opt
-          PETSC_INSTALL=$INSTALL_ROOT/$PACKAGE/$VERSION
-          TAR_FILE=$PACKAGE-$VERSION.tar.gz
-          URL="https://ftp.mcs.anl.gov/pub/petsc/release-snapshots/"
-          ROOT_DIR=/tmp
-          SOURCES_DIR=$ROOT_DIR/$PACKAGE-$VERSION
-          BUILD_DIR=$SOURCES_DIR/build
-          wget -q $URL/$TAR_FILE -O $ROOT_DIR/$TAR_FILE
-          mkdir -p $SOURCES_DIR
-          tar xzf $ROOT_DIR/$TAR_FILE -C $SOURCES_DIR --strip-components=1
-          cd $SOURCES_DIR
-          ./configure --prefix=$PETSC_INSTALL --with-cc=mpicc --with-cxx=mpicxx --with-fc=mpif90 \
-             --download-mumps --download-scalapack --download-parmetis --download-metis \
-             --download-ptscotch --with-debugging --with-x=0 --with-shared=1 \
-             --with-mpi=1 --with-64-bit-indices
-          make
-          make install
-     - name: Install p4est
-       if: steps.cache-p4est.outputs.cache-hit != 'true'
-       run: |
-          # Install p4est 2.2 from sources
-          CURR_DIR=$(pwd)
-          PACKAGE=p4est
-          VERSION=2.2
-          INSTALL_ROOT=/opt
-          P4EST_INSTALL=$INSTALL_ROOT/$PACKAGE/$VERSION
-          TAR_FILE=$PACKAGE-$VERSION.tar.gz
-          URL="https://github.com/p4est/p4est.github.io/raw/master/release"
-          ROOT_DIR=/tmp
-          SOURCES_DIR=$ROOT_DIR/$PACKAGE-$VERSION
-          BUILD_DIR=$SOURCES_DIR/build
-          wget -q $URL/$TAR_FILE -O $ROOT_DIR/$TAR_FILE
-          mkdir -p $SOURCES_DIR
-          tar xzf $ROOT_DIR/$TAR_FILE -C $SOURCES_DIR --strip-components=1
-          cd $SOURCES_DIR
-          ./configure --prefix=$P4EST_INSTALL --without-blas --without-lapack --enable-mpi -disable-dependency-tracking
-          make --quiet
-          make --quiet install
-          rm -rf $ROOT_DIR/$TAR_FILE $SOURCES_DIR
-          cd $CURR_DIR 
-     - uses: julia-actions/julia-buildpkg@latest
-     - run: echo $PWD  
-     - run: julia --project=. --color=yes -e 'using Pkg; Pkg.instantiate()'
-     - run: cd test/MPIPETScTests/compile; ./compile.sh
-     - run: julia --project=. --color=yes --check-bounds=yes test/MPIPETScTests/runtests.jl -i test/MPIPETScTests/compile/GridapDistributed.so  
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+      - uses: actions/cache@v1
+        env:
+          cache-name: cache-artifacts
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-test-${{ env.cache-name }}-
+            ${{ runner.os }}-test-
+            ${{ runner.os }}-
+      - uses: julia-actions/julia-buildpkg@v1
+      - run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+      - run: julia --project=. --color=yes --check-bounds=yes test/sequential/runtests.jl
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v1
+        with:
+          file: lcov.info
+  MPITests:
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - '1.6'
+        os:
+          - ubuntu-latest
+        arch:
+          - x64
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v1
+        env:
+          cache-name: cache-artifacts
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-test-${{ env.cache-name }}-
+            ${{ runner.os }}-test-
+            ${{ runner.os }}-
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+      #- uses: julia-actions/julia-buildpkg@v1
+      - run: |
+          julia --project=test/TestApp/ -e '
+            using Pkg
+            Pkg.develop(PackageSpec(path=pwd()))
+            Pkg.instantiate()'
+      - run: cd test/TestApp/compile; ./compile.sh 
+      - run: julia --project=test/TestApp/ --color=yes --check-bounds=yes test/mpi/runtests.jl test/TestApp/compile/TestApp.so
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v1
+        with:
+          file: lcov.info
