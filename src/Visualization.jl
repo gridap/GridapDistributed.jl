@@ -148,7 +148,7 @@ function Visualization.create_vtk_file(
   map_parts(parts,grid,celldata,nodaldata) do part,g,c,n
     Visualization.create_pvtk_file(
       g,filebase;
-      pvtkargs=[:part=>part,:nparts=>nparts],
+      part=part,nparts=nparts,
       celldata=c,nodaldata=n)
   end
 end
