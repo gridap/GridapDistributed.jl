@@ -1,24 +1,26 @@
-display(parts)
+function all_tests(parts)
+   display(parts)
 
-t = PArrays.PTimer(parts,verbose=true)
-PArrays.tic!(t)
+   t = PArrays.PTimer(parts,verbose=true)
+   PArrays.tic!(t)
 
-TestApp.GeometryTests.main(parts)
-PArrays.toc!(t,"Geometry")
+   TestApp.GeometryTests.main(parts)
+   PArrays.toc!(t,"Geometry")
 
-TestApp.CellDataTests.main(parts)
-PArrays.toc!(t,"CellData")
+   TestApp.CellDataTests.main(parts)
+   PArrays.toc!(t,"CellData")
 
-TestApp.FESpacesTests.main(parts)
-PArrays.toc!(t,"FESpaces")
+   TestApp.FESpacesTests.main(parts)
+   PArrays.toc!(t,"FESpaces")
 
-TestApp.MultiFieldTests.main(parts)
-PArrays.toc!(t,"MultiField")
+   TestApp.MultiFieldTests.main(parts)
+   PArrays.toc!(t,"MultiField")
 
-TestApp.PoissonTests.main(parts)
-PArrays.toc!(t,"Poisson")
+   TestApp.PoissonTests.main(parts)
+   PArrays.toc!(t,"Poisson")
 
-TestApp.PLaplacianTests.main(parts)
-PArrays.toc!(t,"PLaplacian")
+  TestApp.PLaplacianTests.main(parts)
+  PArrays.toc!(t,"PLaplacian")
 
-display(t)
+  display(t)
+end
