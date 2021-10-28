@@ -22,6 +22,17 @@ function main(parts)
 
   gmodel = CartesianDiscreteModel(domain,cells)
 
+  if length(cells) == 2 && prod(cells) == 16
+    smodel = simplexify(gmodel)
+    cell_to_part = [
+      1,1,1,1,1,1,1,1,
+      1,2,2,2,2,2,2,3,
+      3,3,3,3,3,3,3,3,
+      3,3,4,4,4,4,4,4]
+    dmodel = DiscreteModel(parts,smodel,cell_to_part)
+    writevtk(dmodel,joinpath(output,"dmodel"))
+  end
+
   map_parts(model.models,model.gids.partition) do lmodel,gids
     @test test_local_part_face_labelings_consistency(lmodel,gids,gmodel)
   end

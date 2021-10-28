@@ -5,6 +5,7 @@ using Gridap.Helpers
 using Gridap.Algebra
 using Gridap.Arrays
 using Gridap.Fields
+using Gridap.ReferenceFEs
 using Gridap.Geometry
 using Gridap.CellData
 using Gridap.Visualization

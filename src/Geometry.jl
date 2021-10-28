@@ -114,6 +114,102 @@ function Geometry.CartesianDiscreteModel(
   DistributedDiscreteModel(models,gids)
 end
 
+## Helpers to partition a serial model
+# Not very scalable but useful in moderate
+# cell and proc counts
+
+function compute_cell_graph(model::DiscreteModel,d::Integer=0)
+  D = num_cell_dims(model)
+  topo = get_grid_topology(model)
+  cell_to_dfaces = get_faces(topo,D,d)
+  dface_to_cells = get_faces(topo,d,D)
+  _cell_graph(cell_to_dfaces,dface_to_cells)
+end
+
+function _cell_graph(cell_to_dfaces,dface_to_cells)
+  ncells = length(cell_to_dfaces)
+  icell_to_jcells_ptrs = zeros(Int32,ncells+1)
+  c1 = array_cache(cell_to_dfaces)
+  c2 = array_cache(dface_to_cells)
+  for icell in 1:ncells
+    dfaces = getindex!(c1,cell_to_dfaces,icell)
+    for dface in dfaces
+      jcells = getindex!(c2,dface_to_cells,dface)
+      for jcell in jcells
+        if jcell != icell
+          icell_to_jcells_ptrs[icell+1] += Int32(1)
+        end
+      end
+    end
+  end
+  Algebra.length_to_ptrs!(icell_to_jcells_ptrs)
+  ndata = icell_to_jcells_ptrs[end]-1
+  icell_to_jcells_data = zeros(Int32,ndata)
+  for icell in 1:ncells
+    dfaces = getindex!(c1,cell_to_dfaces,icell)
+    for dface in dfaces
+      jcells = getindex!(c2,dface_to_cells,dface)
+      for jcell in jcells
+        if jcell != icell
+          p = icell_to_jcells_ptrs[icell]
+          icell_to_jcells_data[p] = jcell
+          icell_to_jcells_ptrs[icell] += Int32(1)
+        end
+      end
+    end
+  end
+  Algebra.rewind_ptrs!(icell_to_jcells_ptrs)
+  m = ncells
+  n = ncells
+  colptr = icell_to_jcells_ptrs
+  rowval = icell_to_jcells_data
+  nzval = ones(Int8,ndata)
+  g = SparseMatrixCSC(m,n,colptr,rowval,nzval)
+  g
+end
+
+function Geometry.DiscreteModel(
+  parts::AbstractPData,
+  model::DiscreteModel,
+  cell_to_part::AbstractArray,
+  cell_graph::SparseMatrixCSC = compute_cell_graph(model))
+
+  ncells = num_cells(model)
+  @assert length(cell_to_part) == ncells
+  @assert size(cell_graph,1) == ncells
+  @assert size(cell_graph,2) == ncells
+
+  lcell_to_cell, lcell_to_part, gid_to_part = map_parts(parts) do part
+    cell_to_mask = fill(false,ncells)
+    icell_to_jcells_ptrs = cell_graph.colptr
+    icell_to_jcells_data = cell_graph.rowval
+    for icell in 1:ncells
+      if cell_to_part[icell] == part
+        cell_to_mask[icell] = true
+        pini = icell_to_jcells_ptrs[icell]
+        pend = icell_to_jcells_ptrs[icell+1]-1
+        for p in pini:pend
+          jcell = icell_to_jcells_data[p]
+          cell_to_mask[jcell] = true
+        end
+      end
+    end
+    lcell_to_cell = findall(cell_to_mask)
+    lcell_to_part = zeros(Int32,length(lcell_to_cell))
+    lcell_to_part .= cell_to_part[lcell_to_cell]
+    lcell_to_cell, lcell_to_part, cell_to_part
+  end
+
+  partition = map_parts(IndexSet,parts,lcell_to_cell,lcell_to_part)
+  gids = PRange(ncells,partition,gid_to_part)
+
+  models = map_parts(lcell_to_cell) do lcell_to_cell
+    DiscreteModelPortion(model,lcell_to_cell)
+  end
+
+  DistributedDiscreteModel(models,gids)
+end
+
 # Triangulation
 
 # We do not inherit from Triangulation on purpose.
