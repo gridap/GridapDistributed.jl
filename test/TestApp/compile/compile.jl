@@ -6,13 +6,9 @@ function generate_precompile_execution_file()
     const PArrays = PartitionedArrays
     using MPI
 
-    if ! MPI.Initialized()
-      MPI.Init()
-    end
-
-    parts = get_part_ids(mpi,(1,1))
-
     include("../../mpi/runtests_np4_body.jl")
+
+    prun(all_tests,mpi,(1,1))
 
     MPI.Finalize()
 

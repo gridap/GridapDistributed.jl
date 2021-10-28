@@ -10,16 +10,14 @@ if ! MPI.Initialized()
   MPI.Init()
 end
 
-if MPI.Comm_size(MPI.COMM_WORLD) == 4
-  parts = get_part_ids(mpi,(2,2))
-elseif MPI.Comm_size(MPI.COMM_WORLD) == 1
-  parts = get_part_ids(mpi,(1,1))
-else
-  error()
-end
-
 include("runtests_np4_body.jl")
 
-MPI.Finalize()
+if MPI.Comm_size(MPI.COMM_WORLD) == 4
+  prun(all_tests,mpi,(2,2))
+elseif MPI.Comm_size(MPI.COMM_WORLD) == 1
+  prun(all_tests,mpi,(1,1))
+else
+  MPI.Abort(MPI.COMM_WORLD,0)
+end
 
 end #module
