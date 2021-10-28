@@ -127,44 +127,47 @@ function compute_cell_graph(model::DiscreteModel,d::Integer=0)
 end
 
 function _cell_graph(cell_to_dfaces,dface_to_cells)
+  # This can be improved using CSRR format
   ncells = length(cell_to_dfaces)
-  icell_to_jcells_ptrs = zeros(Int32,ncells+1)
   c1 = array_cache(cell_to_dfaces)
   c2 = array_cache(dface_to_cells)
+  ndata = 0
   for icell in 1:ncells
+    ndata += 1
     dfaces = getindex!(c1,cell_to_dfaces,icell)
     for dface in dfaces
       jcells = getindex!(c2,dface_to_cells,dface)
       for jcell in jcells
         if jcell != icell
-          icell_to_jcells_ptrs[icell+1] += Int32(1)
+          ndata += 1
         end
       end
     end
   end
-  Algebra.length_to_ptrs!(icell_to_jcells_ptrs)
-  ndata = icell_to_jcells_ptrs[end]-1
-  icell_to_jcells_data = zeros(Int32,ndata)
+  I = zeros(Int32,ndata)
+  J = zeros(Int32,ndata)
+  p = 0
   for icell in 1:ncells
+    p += 1
+    I[p] = icell
+    J[p] = icell
     dfaces = getindex!(c1,cell_to_dfaces,icell)
     for dface in dfaces
       jcells = getindex!(c2,dface_to_cells,dface)
       for jcell in jcells
         if jcell != icell
-          p = icell_to_jcells_ptrs[icell]
-          icell_to_jcells_data[p] = jcell
-          icell_to_jcells_ptrs[icell] += Int32(1)
+          p += 1
+          I[p] = icell
+          J[p] = jcell
         end
       end
     end
   end
-  Algebra.rewind_ptrs!(icell_to_jcells_ptrs)
   m = ncells
   n = ncells
-  colptr = icell_to_jcells_ptrs
-  rowval = icell_to_jcells_data
-  nzval = ones(Int8,ndata)
-  g = SparseMatrixCSC(m,n,colptr,rowval,nzval)
+  V = ones(Int8,ndata)
+  g = sparse(I,J,V,m,n)
+  fill!(g.nzval,Int8(1))
   g
 end
 

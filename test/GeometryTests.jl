@@ -3,6 +3,7 @@ module GeometryTests
 using Gridap
 using GridapDistributed
 using PartitionedArrays
+using LinearAlgebra
 using Test
 
 function main(parts)
@@ -33,6 +34,9 @@ function main(parts)
     else
       cell_to_part = fill(1,num_cells(smodel))
     end
+    cell_graph = GridapDistributed.compute_cell_graph(smodel)
+    @test LinearAlgebra.issymmetric(cell_graph)
+    @test LinearAlgebra.ishermitian(cell_graph)
     dmodel = DiscreteModel(parts,smodel,cell_to_part)
     writevtk(dmodel,joinpath(output,"dmodel"))
   end
