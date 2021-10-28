@@ -3,6 +3,7 @@ module GeometryTests
 using Gridap
 using GridapDistributed
 using PartitionedArrays
+using LinearAlgebra
 using Test
 
 function main(parts)
@@ -21,6 +22,24 @@ function main(parts)
   writevtk(model,joinpath(output,"model"))
 
   gmodel = CartesianDiscreteModel(domain,cells)
+
+  if length(cells) == 2 && prod(cells) == 16
+    smodel = simplexify(gmodel)
+    if length(parts) == 4
+      cell_to_part = [
+        1,1,1,1,1,1,1,1,
+        1,2,2,2,2,2,2,3,
+        3,3,3,3,3,3,3,3,
+        3,3,4,4,4,4,4,4]
+    else
+      cell_to_part = fill(1,num_cells(smodel))
+    end
+    cell_graph = GridapDistributed.compute_cell_graph(smodel)
+    @test LinearAlgebra.issymmetric(cell_graph)
+    @test LinearAlgebra.ishermitian(cell_graph)
+    dmodel = DiscreteModel(parts,smodel,cell_to_part)
+    writevtk(dmodel,joinpath(output,"dmodel"))
+  end
 
   map_parts(model.models,model.gids.partition) do lmodel,gids
     @test test_local_part_face_labelings_consistency(lmodel,gids,gmodel)
