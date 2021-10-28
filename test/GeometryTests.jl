@@ -24,11 +24,15 @@ function main(parts)
 
   if length(cells) == 2 && prod(cells) == 16
     smodel = simplexify(gmodel)
-    cell_to_part = [
-      1,1,1,1,1,1,1,1,
-      1,2,2,2,2,2,2,3,
-      3,3,3,3,3,3,3,3,
-      3,3,4,4,4,4,4,4]
+    if length(parts) == 4
+      cell_to_part = [
+        1,1,1,1,1,1,1,1,
+        1,2,2,2,2,2,2,3,
+        3,3,3,3,3,3,3,3,
+        3,3,4,4,4,4,4,4]
+    else
+      cell_to_part = fill(1,num_cells(smodel))
+    end
     dmodel = DiscreteModel(parts,smodel,cell_to_part)
     writevtk(dmodel,joinpath(output,"dmodel"))
   end
