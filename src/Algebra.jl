@@ -1,17 +1,17 @@
 
-# To be added in Gridap?
+# This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.ArrayCounter,axes)
   @notimplemented
 end
 
-# To be added in Gridap?
+# This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.CounterCOO{T,A}, axes::A) where {T,A}
   b=Algebra.CounterCOO{T}(axes)
   b.nnz = a.nnz
   b
 end
 
-# To be added in Gridap?
+# This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.AllocationCOO{T,A}, axes::A) where {T,A}
   counter=change_axes(a.counter,axes)
   Algebra.AllocationCOO(counter,a.I,a.J,a.V)

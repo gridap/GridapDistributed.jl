@@ -55,6 +55,10 @@ function main(parts,das)
   eh1 = u - uh1
   @test sqrt(sum(∫( abs2(eh1) )dΩ)) < 1.0e-9
 
+  map_parts(A1.values, A1.rows.partition, A1.cols.partition) do mat, rows, cols
+     @test size(mat) == (num_lids(rows),num_lids(cols))
+  end
+
   writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
     celldata=["err"=>cont[Ω]],
     cellfields=["uh"=>uh,"zh"=>zh,"eh"=>eh])
