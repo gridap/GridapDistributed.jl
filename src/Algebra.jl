@@ -1,4 +1,22 @@
 
+# To be added in Gridap?
+function change_axes(a::Algebra.ArrayCounter,axes)
+  @notimplemented
+end
+
+# To be added in Gridap?
+function change_axes(a::Algebra.CounterCOO{T,A}, axes::A) where {T,A}
+  b=Algebra.CounterCOO{T}(axes)
+  b.nnz = a.nnz
+  b
+end
+
+# To be added in Gridap?
+function change_axes(a::Algebra.AllocationCOO{T,A}, axes::A) where {T,A}
+  counter=change_axes(a.counter,axes)
+  Algebra.AllocationCOO(counter,a.I,a.J,a.V)
+end
+
 function local_views(a)
   @abstractmethod
 end
@@ -139,6 +157,15 @@ struct DistributedAllocationCOO{A,B,C,D} <:GridapType
   end
 end
 
+function change_axes(a::DistributedAllocationCOO{A,B,<:PRange,<:PRange},
+                     axes::Tuple{<:PRange,<:PRange}) where {A,B}
+  local_axes=map_parts(axes[1].partition,axes[2].partition) do rows,cols
+    (Base.OneTo(num_lids(rows)), Base.OneTo(num_lids(cols)))
+  end
+  allocs=map_parts(change_axes,a.allocs,local_axes)
+  DistributedAllocationCOO(a.par_strategy,allocs,axes[1],axes[2])
+end
+
 function local_views(a::DistributedAllocationCOO)
   a.allocs
 end
@@ -224,8 +251,11 @@ function _fa_create_from_nz_with_callback(callback,a)
   to_lids!(I,rows)
   to_lids!(J,cols)
 
+  # Adjust local matrix size to linear system's index sets
+  b=change_axes(a,(rows,cols))
+
   # Compress local portions
-  values = map_parts(create_from_nz,a.allocs)
+  values = map_parts(create_from_nz,b.allocs)
 
   # Build the matrix exchanger. This can be empty since no ghost rows
   exchanger = empty_exchanger(parts)
@@ -318,8 +348,11 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   to_lids!(I,rows)
   to_lids!(J,cols)
 
+  # Adjust local matrix size to linear system's index sets
+  b=change_axes(a,(rows,cols))
+
   # Compress the local matrices
-  values = map_parts(create_from_nz,a.allocs)
+  values = map_parts(create_from_nz,b.allocs)
 
   # Wait the transfer to finish
   if t2 !== nothing
@@ -335,6 +368,10 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
 
   A, callback_output
 end
+
+
+
+
 
 struct PVectorBuilder{T,B}
   local_vector_type::Type{T}
