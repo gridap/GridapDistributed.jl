@@ -25,7 +25,7 @@ Before using `GridapDistributed.jl` package, one needs to build the [`MPI.jl`](h
 
 ## MPI-parallel Julia script execution instructions
 
-In order to execute a MPI-parallel `GridapDistributed.jl` driver, we can leverate the `mpiexecjl` script provided by `MPI.jl`. (Click [here](https://juliaparallel.github.io/MPI.jl/stable/configuration/#Julia-wrapper-for-mpiexec) for installation instructions). As an example, assuming that we are located on the root directory of `GridapDistributed.jl`,
+In order to execute a MPI-parallel `GridapDistributed.jl` driver, we can leverage the `mpiexecjl` script provided by `MPI.jl`. (Click [here](https://juliaparallel.github.io/MPI.jl/stable/configuration/#Julia-wrapper-for-mpiexec) for installation instructions). As an example, assuming that we are located on the root directory of `GridapDistributed.jl`,
 an hypothetic MPI-parallel `GridapDistributed.jl` driver named `driver.jl` can be executed on 4 MPI tasks as:
 
 ```
