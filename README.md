@@ -25,24 +25,11 @@ Before using `GridapDistributed.jl` package, one needs to build the [`MPI.jl`](h
 
 ## MPI-parallel Julia script execution instructions
 
-In order to execute a MPI-parallel `GridapDistributed.jl` driver, we have first to figure out the path of the `mpirun` script corresponding to the MPI library with which `MPI.jl` was built. In order to do so, we can run the following commands from the root directory of  `GridapDistributed.jl` git repo:
-
-```
-$ julia --project=. -e "using MPI;println(MPI.mpiexec_path)" 
-/home/amartin/.julia/artifacts/2fcd463fb9498f362be9d1c4ef70a63c920b0e96/bin/mpiexec
-```
-
-Alternatively, for convenience, one can assign the path of `mpirun` to an environment variable, i.e.
-
-```
-$ export MPIRUN=$(julia --project=. -e "using MPI;println(MPI.mpiexec_path)")
-```
-
-As an example, assuming that we are located on the root directory of `GridapDistributed.jl`,
+In order to execute a MPI-parallel `GridapDistributed.jl` driver, we can leverate the `mpiexecjl` script provided by `MPI.jl`. (Click [here](https://juliaparallel.github.io/MPI.jl/stable/configuration/#Julia-wrapper-for-mpiexec) for installation instructions). As an example, assuming that we are located on the root directory of `GridapDistributed.jl`,
 an hypothetic MPI-parallel `GridapDistributed.jl` driver named `driver.jl` can be executed on 4 MPI tasks as:
 
 ```
-$MPIRUN -np 4 julia --project=. -J sys-image.so driver.jl
+mpiexecjl --project=. -n 4 julia -J sys-image.so driver.jl
 ```
 
 where `-J sys-image.so` is optional, but highly recommended in order to reduce JIT compilation times. Here, `sys-image.so` is assumed to be a Julia system image pre-generated for the driver at hand using the [`PackageCompiler.jl`](https://julialang.github.io/PackageCompiler.jl/dev/index.html) package. See the `test/TestApp/compile` folder for example scripts with system image generation along with a test application with source available at `test/TestApp/`. These scripts are triggered from `.github/workflows/ci.yml` file on Github CI actions.
