@@ -204,7 +204,8 @@ function Geometry.DiscreteModel(
   end
 
   partition = map_parts(IndexSet,parts,lcell_to_cell,lcell_to_part)
-  gids = PRange(ncells,partition,gid_to_part)
+  exchanger = Exchanger(partition;reuse_parts_rcv=true)
+  gids = PRange(ncells,partition,exchanger,gid_to_part)
 
   models = map_parts(lcell_to_cell) do lcell_to_cell
     DiscreteModelPortion(model,lcell_to_cell)
