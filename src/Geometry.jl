@@ -80,6 +80,10 @@ end
 
 local_views(a::DistributedDiscreteModel) = a.models
 
+function Geometry.num_cells(model::DistributedDiscreteModel)
+ num_gids(model.gids)
+end
+
 function Geometry.get_grid(model::DistributedDiscreteModel)
   DistributedGrid(map_parts(get_grid,model.models))
 end
@@ -392,5 +396,3 @@ function _find_owned_skeleton_facets(glue,gids)
   end
   findall(part->part==gids.part,tface_to_part)
 end
-
-
