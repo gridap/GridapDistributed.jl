@@ -35,8 +35,4 @@ mpiexecjl --project=. -n 4 julia -J sys-image.so driver.jl
 where `-J sys-image.so` is optional, but highly recommended in order to reduce JIT compilation times. Here, `sys-image.so` is assumed to be a Julia system image pre-generated for the driver at hand using the [`PackageCompiler.jl`](https://julialang.github.io/PackageCompiler.jl/dev/index.html) package. See the `test/TestApp/compile` folder for example scripts with system image generation along with a test application with source available at `test/TestApp/`. These scripts are triggered from `.github/workflows/ci.yml` file on Github CI actions.
 
 
-Two big warnings when executing MPI-parallel drivers:
-
- * Data race conditions associated to the generation of precompiled modules in cache. See [here](https://juliaparallel.github.io/MPI.jl/stable/knownissues/).
-
- * Each time that `GridapDistributed.jl` is modified, the first time that a parallel driver is executed, the program fails during MPI initialization. But the second, and subsequent times, it works ok. I still do not know the cause of the problem, but it is related to module precompilation as well.
+A warning when executing MPI-parallel drivers: Data race conditions in the generation of precompiled modules in cache. See [here](https://juliaparallel.github.io/MPI.jl/stable/knownissues/).
