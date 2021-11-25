@@ -14,10 +14,8 @@ At present, `GridapDistributed.jl` provides scalable parallel data structures fo
 
 ## Remarks 
 
-1. `GridapDistributed.jl` is not a parallel mesh generator. Grid handling currently available within `GridapDistributed.jl` is restricted to Cartesian-like meshes of arbitrary-dimensional, topologically n-cube domains. 
-2. `GridapDistributed.jl` is not a library of parallel linear solvers at this moment. The linear solver kernel within `GridapDistributed.jl`, leveraged, e.g., via the backslash operator `\`, is just a sparse LU solver applied to the global system gathered on a master task (and thus obviously not scalable, but very useful for testing and debug purposes). It is in our future plans to provide highly scalable linear and nonlinear solvers tailored for the FE discretization of PDEs.
-
- Complementarily, one may leverage two satellite packages of `GridapDistributed.jl` to address 1. and 2., namely [`GridapP4est.jl`](https://github.com/gridap/GridapP4est.jl), for peta-scale handling of meshes which can be decomposed as forest of quadtrees/octrees of the computational domain., and  [`GridapPETSc.jl`](https://github.com/gridap/GridapPETSc.jl), which offers to the full set of scalable linear and non-linear solvers in the [PETSc](https://petsc.org/release/) numerical software package. We refer to the readme of these two packages for further details.
+1. `GridapDistributed.jl` is not a parallel mesh generator. Grid handling currently available within `GridapDistributed.jl` is restricted to Cartesian-like meshes of arbitrary-dimensional, topologically n-cube domains. See [`GridapP4est.jl`](https://github.com/gridap/GridapP4est.jl), for peta-scale handling of meshes which can be decomposed as forest of quadtrees/octrees of the computational domain, and [`GridapGmsh.jl`](https://github.com/gridap/GridapGmsh.jl) for unstrucuted mesh generation.
+2. `GridapDistributed.jl` is not a library of parallel linear solvers at this moment. The linear solver kernel within `GridapDistributed.jl`, leveraged, e.g., via the backslash operator `\`, is just a sparse LU solver applied to the global system gathered on a master task (and thus obviously not scalable, but very useful for testing and debug purposes). It is in our future plans to provide highly scalable linear and nonlinear solvers tailored for the FE discretization of PDEs. For the moment, see [`GridapPETSc.jl`](https://github.com/gridap/GridapPETSc.jl) to use the full set of scalable linear and non-linear solvers in the [PETSc](https://petsc.org/release/) numerical software package. 
 
 ## Build 
 
@@ -25,31 +23,15 @@ Before using `GridapDistributed.jl` package, one needs to build the [`MPI.jl`](h
 
 ## MPI-parallel Julia script execution instructions
 
-In order to execute a MPI-parallel `GridapDistributed.jl` driver, we have first to figure out the path of the `mpirun` script corresponding to the MPI library with which `MPI.jl` was built. In order to do so, we can run the following commands from the root directory of  `GridapDistributed.jl` git repo:
-
-```
-$ julia --project=. -e "using MPI;println(MPI.mpiexec_path)" 
-/home/amartin/.julia/artifacts/2fcd463fb9498f362be9d1c4ef70a63c920b0e96/bin/mpiexec
-```
-
-Alternatively, for convenience, one can assign the path of `mpirun` to an environment variable, i.e.
-
-```
-$ export MPIRUN=$(julia --project=. -e "using MPI;println(MPI.mpiexec_path)")
-```
-
-As an example, assuming that we are located on the root directory of `GridapDistributed.jl`,
+In order to execute a MPI-parallel `GridapDistributed.jl` driver, we can leverage the `mpiexecjl` script provided by `MPI.jl`. (Click [here](https://juliaparallel.github.io/MPI.jl/stable/configuration/#Julia-wrapper-for-mpiexec) for installation instructions). As an example, assuming that we are located on the root directory of `GridapDistributed.jl`,
 an hypothetic MPI-parallel `GridapDistributed.jl` driver named `driver.jl` can be executed on 4 MPI tasks as:
 
 ```
-$MPIRUN -np 4 julia --project=. -J sys-image.so driver.jl
+mpiexecjl --project=. -n 4 julia -J sys-image.so driver.jl
 ```
 
 where `-J sys-image.so` is optional, but highly recommended in order to reduce JIT compilation times. Here, `sys-image.so` is assumed to be a Julia system image pre-generated for the driver at hand using the [`PackageCompiler.jl`](https://julialang.github.io/PackageCompiler.jl/dev/index.html) package. See the `test/TestApp/compile` folder for example scripts with system image generation along with a test application with source available at `test/TestApp/`. These scripts are triggered from `.github/workflows/ci.yml` file on Github CI actions.
 
+## Known issues
 
-Two big warnings when executing MPI-parallel drivers:
-
- * Data race conditions associated to the generation of precompiled modules in cache. See [here](https://juliaparallel.github.io/MPI.jl/stable/knownissues/).
-
- * Each time that `GridapDistributed.jl` is modified, the first time that a parallel driver is executed, the program fails during MPI initialization. But the second, and subsequent times, it works ok. I still do not know the cause of the problem, but it is related to module precompilation as well.
+A warning when executing MPI-parallel drivers: Data race conditions in the generation of precompiled modules in cache. See [here](https://juliaparallel.github.io/MPI.jl/stable/knownissues/).

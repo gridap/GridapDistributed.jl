@@ -21,6 +21,8 @@ function main(parts)
   model = CartesianDiscreteModel(parts,domain,cells)
   writevtk(model,joinpath(output,"model"))
 
+  @test num_cells(model)==prod(cells)
+
   gmodel = CartesianDiscreteModel(domain,cells)
 
   if length(cells) == 2 && prod(cells) == 16
