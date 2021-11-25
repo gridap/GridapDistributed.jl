@@ -35,8 +35,8 @@ function main(parts,strategy,local_matrix_type)
   V = TestFESpace(model,reffe,dirichlet_tags="boundary")
   U = TrialFESpace(u,V)
 
-  assem=SparseMatrixAssembler(local_matrix_type,Vector{Float64},U,V)
-  op = FEOperator(r,j,U,V,assem,strategy)
+  assem=SparseMatrixAssembler(local_matrix_type,Vector{Float64},U,V,strategy)
+  op = FEOperator(r,j,U,V,assem)
 
   uh = zero(U)
   b,A = residual_and_jacobian(op,uh)
