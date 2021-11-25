@@ -1,5 +1,5 @@
 module PLaplacianTests
-
+using SparseMatricesCSR
 using Gridap
 using Gridap.Algebra
 using GridapDistributed
@@ -7,11 +7,12 @@ using PartitionedArrays
 using Test
 
 function main(parts)
-  main(parts,FullyAssembledRows())
-  main(parts,SubAssembledRows())
+
+  main(parts,FullyAssembledRows(),SparseMatrixCSR{0,Float64,Int})
+  main(parts,SubAssembledRows(),SparseMatrixCSC{Float64,Int})
 end
 
-function main(parts,strategy)
+function main(parts,strategy,local_matrix_type)
 
   output = mkpath(joinpath(@__DIR__,"output"))
 
@@ -34,7 +35,8 @@ function main(parts,strategy)
   V = TestFESpace(model,reffe,dirichlet_tags="boundary")
   U = TrialFESpace(u,V)
 
-  op = FEOperator(r,j,U,V,strategy)
+  assem=SparseMatrixAssembler(local_matrix_type,Vector{Float64},U,V)
+  op = FEOperator(r,j,U,V,assem,strategy)
 
   uh = zero(U)
   b,A = residual_and_jacobian(op,uh)
