@@ -424,15 +424,16 @@ function local_assembly_strategy(::FullyAssembledRows,rows,cols)
 end
 
 # Assembler high level constructors
-
 function FESpaces.SparseMatrixAssembler(
+  local_mat_type,
+  local_vec_type,
   trial::DistributedFESpace,
   test::DistributedFESpace,
   par_strategy=SubAssembledRows())
 
-  Tv = get_vector_type(get_part(local_views(trial)))
+  Tv = local_vec_type
   T = eltype(Tv)
-  Tm = SparseMatrixCSC{T,Int}
+  Tm = local_mat_type
   cols = trial.gids.partition
   rows = test.gids.partition
   assems = map_parts(local_views(test),local_views(trial),rows,cols) do v,u,rows,cols
@@ -444,4 +445,14 @@ function FESpaces.SparseMatrixAssembler(
   rows = get_free_dof_ids(test)
   cols = get_free_dof_ids(trial)
   DistributedSparseMatrixAssembler(par_strategy,assems,matrix_builder,vector_builder,rows,cols)
+end
+
+function FESpaces.SparseMatrixAssembler(
+  trial::DistributedFESpace,
+  test::DistributedFESpace,
+  par_strategy=SubAssembledRows())
+  Tv = get_vector_type(get_part(local_views(trial)))
+  T = eltype(Tv)
+  Tm = SparseMatrixCSC{T,Int}
+  SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)
 end
