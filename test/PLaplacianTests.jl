@@ -5,9 +5,10 @@ using Gridap.Algebra
 using GridapDistributed
 using PartitionedArrays
 using Test
+using SparseArrays
+
 
 function main(parts)
-
   main(parts,FullyAssembledRows(),SparseMatrixCSR{0,Float64,Int})
   main(parts,SubAssembledRows(),SparseMatrixCSC{Float64,Int})
 end
