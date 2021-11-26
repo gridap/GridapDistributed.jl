@@ -1,5 +1,5 @@
 module PoissonTests
-
+using SparseMatricesCSR
 using Gridap
 using Gridap.Algebra
 using Gridap.FESpaces
@@ -37,7 +37,8 @@ function main(parts)
 
   a(u,v) = ∫( ∇(v)⋅∇(u) )dΩ
   l(v) = ∫( v*f )dΩ + ∫( v*g )dΓn
-  op = AffineFEOperator(a,l,U,V)
+  assem=SparseMatrixAssembler(SparseMatrixCSR{0,Float64,Int},Vector{Float64},U,V)
+  op = AffineFEOperator(a,l,U,V,assem)
 
   uh = solve(op)
   eh = u - uh
@@ -64,7 +65,7 @@ function main(parts)
     ∫( (γ/h)*jump(v*n_Λ)⋅jump(u*n_Λ) -
        jump(v*n_Λ)⋅mean(∇(u)) -
        mean(∇(v))⋅jump(u*n_Λ) )*dΛ
-  
+
   l_dg(v) =
     ∫( v*f )*dΩ +
     ∫( v*g )dΓn +
