@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.2] - 2021-11-27
 
 ### Added 
- - Added new overload for `SparseMatrixAssembler` to let one select the local matrix and vector types. Since PR [#65](https://github.com/gridap/GridapDistributed.jl/pull/65)
+ - Added new overload for `SparseMatrixAssembler` to let one select the local matrix and vector types. Since PR [#63](https://github.com/gridap/GridapDistributed.jl/pull/63)
 
 ## [0.2.1] - 2021-11-25
 
