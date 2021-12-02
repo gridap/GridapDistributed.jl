@@ -14,4 +14,6 @@ using Test
 
 @time @testset "PLaplacian" begin include("PLaplacianTests.jl") end
 
+@time @testset "DivConformingTests" begin include("DivConformingTests.jl") end
+
 end # module

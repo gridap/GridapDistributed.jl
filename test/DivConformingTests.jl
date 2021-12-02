@@ -9,13 +9,6 @@ using PartitionedArrays
 using Test
 using FillArrays
 
-u(x) = VectorValue(2*x[1],x[1]+x[2])
-p(x) = x[1]-x[2]
-∇p(x) = VectorValue(1,-1)
-∇(::typeof(p)) = ∇p
-divergence(::typeof(u)) = (x) -> 3
-f(x) = u(x) + ∇p(x)
-
 function setup_p1_model()
   ptr  = [ 1, 5, 9 ]
   data = [ 1,2,3,4, 2,5,4,6  ]
@@ -43,7 +36,7 @@ end
 
 function setup_p2_model()
   ptr  = [ 1, 5, 9 ]
-  data = [ 1,2,3,4, 2,5,4,6  ]
+  data = [ 1,2,3,4, 5,1,6,3  ]
   cell_vertex_lids = Gridap.Arrays.Table(data,ptr)
   node_coordinates = Vector{Point{2,Float64}}(undef,6)
 
@@ -120,10 +113,6 @@ function main(parts)
     c1  = Gridap.CellData.get_contribution(dc1,t1)
     c2  = Gridap.CellData.get_contribution(dc2,t2)
     tol = 1.0e-12
-    println(model.gids.partition.parts[1].lid_to_gid)
-    println(model.gids.partition.parts[2].lid_to_gid)
-    println(c1[1]-c2[2])
-    println(c1[2]-c2[1])
     @test norm(c1[1]-c2[2]) < tol
     @test norm(c1[2]-c2[1]) < tol
   end
