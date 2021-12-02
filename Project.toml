@@ -15,10 +15,8 @@ WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
 FillArrays = "0.8.4, 0.9, 0.10, 0.11, 0.12"
-Gridap = "0.17.4"
 MPI = "0.16, 0.17, 0.18, 0.19"
 SparseMatricesCSR = "0.6.6"
-PartitionedArrays = "0.2.8"
 WriteVTK = "1.12.0"
 julia = "1.3"
 
