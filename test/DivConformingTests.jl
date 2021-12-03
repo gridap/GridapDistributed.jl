@@ -59,6 +59,33 @@ function setup_p2_model()
   Gridap.Geometry.UnstructuredDiscreteModel(grid)
 end
 
+function f(model,reffe)
+    V = FESpace(model,reffe,conformity=:Hdiv)
+    U = TrialFESpace(V)
+
+    das = FullyAssembledRows()
+    trian = Triangulation(das,model)
+    degree = 2
+    dΩ = Measure(trian,degree)
+    a(u,v) = ∫( u⋅v )*dΩ
+
+    u  = get_trial_fe_basis(U)
+    v  = get_fe_basis(V)
+    dc = a(u,v)
+
+    assem = SparseMatrixAssembler(U,V,das)
+    data = collect_cell_matrix(U,V,a(u,v))
+    A = assemble_matrix(assem,data)
+    t1  = trian.trians.parts[1]
+    t2  = trian.trians.parts[2]
+    dc1 = dc.contribs.parts[1]
+    dc2 = dc.contribs.parts[2]
+    c1  = Gridap.CellData.get_contribution(dc1,t1)
+    c2  = Gridap.CellData.get_contribution(dc2,t2)
+    tol = 1.0e-12
+    @test norm(c1[1]-c2[2]) < tol
+    @test norm(c1[2]-c2[1]) < tol
+end
 
 function main(parts)
     @assert isa(parts,SequentialData)
@@ -90,31 +117,9 @@ function main(parts)
     model = GridapDistributed.DistributedDiscreteModel(models,gids)
 
     reffe=ReferenceFE(raviart_thomas,Float64,0)
-    V = FESpace(model,reffe,conformity=:Hdiv)
-    U = TrialFESpace(V)
-
-    das = FullyAssembledRows()
-    trian = Triangulation(das,model)
-    degree = 2
-    dΩ = Measure(trian,degree)
-    a(u,v) = ∫( u⋅v )*dΩ
-
-    u  = get_trial_fe_basis(U)
-    v  = get_fe_basis(V)
-    dc = a(u,v)
-
-    assem = SparseMatrixAssembler(U,V,das)
-    data = collect_cell_matrix(U,V,a(u,v))
-    A = assemble_matrix(assem,data)
-    t1  = trian.trians.parts[1]
-    t2  = trian.trians.parts[2]
-    dc1 = dc.contribs.parts[1]
-    dc2 = dc.contribs.parts[2]
-    c1  = Gridap.CellData.get_contribution(dc1,t1)
-    c2  = Gridap.CellData.get_contribution(dc2,t2)
-    tol = 1.0e-12
-    @test norm(c1[1]-c2[2]) < tol
-    @test norm(c1[2]-c2[1]) < tol
+    f(model,reffe)
+    reffe=ReferenceFE(QUAD, raviart_thomas, 0)
+    f(model,reffe)
   end
 
 end # module
