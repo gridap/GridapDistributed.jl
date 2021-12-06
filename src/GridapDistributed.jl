@@ -17,6 +17,7 @@ const PArrays = PartitionedArrays
 
 using SparseArrays
 using WriteVTK
+using FillArrays
 
 import Gridap.TensorValues: inner, outer, double_contraction, symmetric_part
 import LinearAlgebra: det, tr, cross, dot, ⋅
@@ -35,6 +36,8 @@ include("CellData.jl")
 include("Visualization.jl")
 
 include("FESpaces.jl")
+
+include("DivConformingFESpaces.jl")
 
 include("MultiField.jl")
 
