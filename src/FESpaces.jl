@@ -41,127 +41,198 @@ function Base.zero(f::DistributedFESpace)
   FEFunction(f,free_values,isconsistent)
 end
 
-function generate_gids(
-  cell_range::PRange,
-  cell_to_ldofs::AbstractPData{<:AbstractArray},
-  nldofs::AbstractPData{<:Integer})
-
-  neighbors = cell_range.exchanger.parts_snd
-  ngcells = length(cell_range)
-
-  # Find and count number owned dofs
-  ldof_to_part, nodofs = map_parts(
-    cell_range.partition,cell_to_ldofs,nldofs) do partition,cell_to_ldofs,nldofs
-
-    ldof_to_part = fill(Int32(0),nldofs)
-    cache = array_cache(cell_to_ldofs)
-    for cell in 1:length(cell_to_ldofs)
-      owner = partition.lid_to_part[cell]
-      ldofs = getindex!(cache,cell_to_ldofs,cell)
-      for ldof in ldofs
-        if ldof>0
-          #TODO this simple approach concentrates dofs
-          # in the last part and creates inbalances
-          ldof_to_part[ldof] = max(owner,ldof_to_part[ldof])
-        end
-      end
-    end
-    nodofs = count(p->p==partition.part,ldof_to_part)
-    ldof_to_part, nodofs
-  end
-
-  # Find the global range of owned dofs
-  first_gdof, ngdofsplus1 = xscan(+,reduce,nodofs,init=1)
-  ngdofs = ngdofsplus1 - 1
-
-  # Distribute gdofs to owned ones
-  parts = get_part_ids(nodofs)
-  ldof_to_gdof = map_parts(
-    parts,first_gdof,ldof_to_part) do part,first_gdof,ldof_to_part
-
-    offset = first_gdof-1
-    ldof_to_gdof = Vector{Int}(undef,length(ldof_to_part))
-    odof = 0
-    gdof = 0
-    for (ldof,owner) in enumerate(ldof_to_part)
-      if owner == part
-        odof += 1
-        ldof_to_gdof[ldof] = odof
-      else
-        ldof_to_gdof[ldof] = gdof
-      end
-    end
-    for (ldof,owner) in enumerate(ldof_to_part)
-      if owner == part
-        ldof_to_gdof[ldof] += offset
-      end
-    end
-    ldof_to_gdof
-  end
-
-  # Create cell-wise global dofs
-  cell_to_gdofs = map_parts(
-    parts,
-    ldof_to_gdof,cell_to_ldofs,cell_range.partition) do part,
-    ldof_to_gdof,cell_to_ldofs,partition
-
-    cache = array_cache(cell_to_ldofs)
+function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_prange)
+  map_parts(cell_wise_vector,
+          dof_wise_vector,
+          cell_to_ldofs,
+          cell_prange.partition) do cwv,dwv,cell_to_ldofs,partition
+    cache  = array_cache(cell_to_ldofs)
     ncells = length(cell_to_ldofs)
-    ptrs = Vector{Int32}(undef,ncells+1)
-    for cell in 1:ncells
-      ldofs = getindex!(cache,cell_to_ldofs,cell)
-      ptrs[cell+1] = length(ldofs)
-    end
-    PArrays.length_to_ptrs!(ptrs)
-    ndata = ptrs[end]-1
-    data = Vector{Int}(undef,ndata)
+    ptrs = cwv.ptrs
+    data = cwv.data
     gdof = 0
     for cell in partition.oid_to_lid
       ldofs = getindex!(cache,cell_to_ldofs,cell)
       p = ptrs[cell]-1
       for (i,ldof) in enumerate(ldofs)
-        if ldof > 0 && ldof_to_gdof[ldof] != gdof
-          data[i+p] = ldof_to_gdof[ldof]
+        if ldof > 0
+          data[i+p] = dwv[ldof]
         end
       end
     end
-    PArrays.Table(data,ptrs)
   end
+end
 
-  # Exchange the global dofs
-  exchange!(cell_to_gdofs,cell_range.exchanger)
-
-  # Distribute global dof ids also to ghost
-  map_parts(
-    parts,
-    cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_part,cell_range.partition) do part,
-    cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_part,partition
+function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_range)
+  map_parts(dof_wise_vector,
+            cell_wise_vector,
+            cell_to_ldofs,
+            cell_range.partition) do dwv,cwv,cell_to_ldofs,partition
 
     gdof = 0
     cache = array_cache(cell_to_ldofs)
     for cell in partition.hid_to_lid
       ldofs = getindex!(cache,cell_to_ldofs,cell)
-      p = cell_to_gdofs.ptrs[cell]-1
+      p = cwv.ptrs[cell]-1
       for (i,ldof) in enumerate(ldofs)
-        if ldof > 0 && ldof_to_part[ldof] == partition.lid_to_part[cell]
-          ldof_to_gdof[ldof] = cell_to_gdofs.data[i+p]
+        if ldof > 0
+          dwv[ldof] = cwv.data[i+p]
         end
       end
     end
   end
+end
 
-  # Setup dof partition
-  dof_partition = map_parts(parts,ldof_to_gdof,ldof_to_part) do part,ldof_to_gdof,ldof_to_part
-    IndexSet(part,ldof_to_gdof,ldof_to_part)
+
+function dof_wise_to_cell_wise(dof_wise_vector,cell_to_ldofs,cell_prange)
+    cwv=map_parts(dof_wise_vector,cell_to_ldofs,cell_prange.partition) do dwv,cell_to_ldofs,partition
+      cache = array_cache(cell_to_ldofs)
+      ncells = length(cell_to_ldofs)
+      ptrs = Vector{Int32}(undef,ncells+1)
+      for cell in 1:ncells
+        ldofs = getindex!(cache,cell_to_ldofs,cell)
+        ptrs[cell+1] = length(ldofs)
+      end
+      PArrays.length_to_ptrs!(ptrs)
+      ndata = ptrs[end]-1
+      data = Vector{Int}(undef,ndata)
+      gdof = 0
+      PArrays.Table(data,ptrs)
+    end
+    dof_wise_to_cell_wise!(cwv,dof_wise_vector,cell_to_ldofs,cell_prange)
+    cwv
+end
+
+
+function generate_gids(
+cell_range::PRange,
+cell_to_ldofs::AbstractPData{<:AbstractArray},
+nldofs::AbstractPData{<:Integer})
+
+neighbors = cell_range.exchanger.parts_snd
+ngcells = length(cell_range)
+
+# Find and count number owned dofs
+ldof_to_part, nodofs = map_parts(
+  cell_range.partition,cell_to_ldofs,nldofs) do partition,cell_to_ldofs,nldofs
+
+  ldof_to_part = fill(Int32(0),nldofs)
+  cache = array_cache(cell_to_ldofs)
+  for cell in 1:length(cell_to_ldofs)
+    owner = partition.lid_to_part[cell]
+    ldofs = getindex!(cache,cell_to_ldofs,cell)
+    for ldof in ldofs
+      if ldof>0
+        #TODO this simple approach concentrates dofs
+        # in the last part and creates inbalances
+        ldof_to_part[ldof] = max(owner,ldof_to_part[ldof])
+      end
+    end
   end
+  nodofs = count(p->p==partition.part,ldof_to_part)
+  ldof_to_part, nodofs
+end
 
-  # Setup dof exchanger
-  dof_exchanger = Exchanger(dof_partition,neighbors)
+cell_ldofs_to_part = dof_wise_to_cell_wise(ldof_to_part,
+                                            cell_to_ldofs,
+                                            cell_range)
+# Exchange the dof owners
+exchange!(cell_ldofs_to_part,cell_range.exchanger)
 
-  # Setup dof range
-  dofs = PRange(ngdofs,dof_partition,dof_exchanger)
+cell_wise_to_dof_wise!(ldof_to_part,
+                        cell_ldofs_to_part,
+                        cell_to_ldofs,
+                        cell_range)
 
-  dofs
+
+# Find the global range of owned dofs
+first_gdof, ngdofsplus1 = xscan(+,reduce,nodofs,init=1)
+ngdofs = ngdofsplus1 - 1
+
+# Distribute gdofs to owned ones
+parts = get_part_ids(nodofs)
+ldof_to_gdof = map_parts(
+  parts,first_gdof,ldof_to_part) do part,first_gdof,ldof_to_part
+
+  offset = first_gdof-1
+  ldof_to_gdof = Vector{Int}(undef,length(ldof_to_part))
+  odof = 0
+  gdof = 0
+  for (ldof,owner) in enumerate(ldof_to_part)
+    if owner == part
+      odof += 1
+      ldof_to_gdof[ldof] = odof
+    else
+      ldof_to_gdof[ldof] = gdof
+    end
+  end
+  for (ldof,owner) in enumerate(ldof_to_part)
+    if owner == part
+      ldof_to_gdof[ldof] += offset
+    end
+  end
+  ldof_to_gdof
+end
+
+# Create cell-wise global dofs
+cell_to_gdofs = dof_wise_to_cell_wise(ldof_to_gdof,
+                                      cell_to_ldofs,
+                                      cell_range)
+
+# Exchange the global dofs
+exchange!(cell_to_gdofs,cell_range.exchanger)
+
+
+# Distribute global dof ids also to ghost
+map_parts(
+  parts,
+  cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_part,cell_range.partition) do part,
+  cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_part,partition
+
+  gdof = 0
+  cache = array_cache(cell_to_ldofs)
+  for cell in partition.hid_to_lid
+    ldofs = getindex!(cache,cell_to_ldofs,cell)
+    p = cell_to_gdofs.ptrs[cell]-1
+    for (i,ldof) in enumerate(ldofs)
+      if ldof > 0 && ldof_to_part[ldof] == partition.lid_to_part[cell]
+        ldof_to_gdof[ldof] = cell_to_gdofs.data[i+p]
+      end
+    end
+  end
+end
+
+dof_wise_to_cell_wise!(cell_to_gdofs,ldof_to_gdof,cell_to_ldofs,cell_range)
+
+exchange!(cell_to_gdofs,cell_range.exchanger)
+
+cell_wise_to_dof_wise!(ldof_to_gdof,
+                        cell_to_gdofs,
+                        cell_to_ldofs,
+                        cell_range)
+
+# Setup dof partition
+dof_partition = map_parts(parts,ldof_to_gdof,ldof_to_part) do part,ldof_to_gdof,ldof_to_part
+  IndexSet(part,ldof_to_gdof,ldof_to_part)
+end
+
+# map_parts(parts,dof_partition,cell_to_ldofs,cell_to_gdofs,cell_range.partition) do part, partition, cell_to_ldofs,cell_to_gdofs, cell_range
+#   if (part==3)
+#     println("XXXX $(part)")
+#     println(partition)
+#     println(cell_to_ldofs)
+#     println(cell_to_gdofs)
+#     println(cell_range)
+#   end
+# end
+
+# Setup dof exchanger
+dof_exchanger = Exchanger(dof_partition,neighbors)
+
+# Setup dof range
+dofs = PRange(ngdofs,dof_partition,dof_exchanger)
+
+dofs
 end
 
 # FEFunction related
