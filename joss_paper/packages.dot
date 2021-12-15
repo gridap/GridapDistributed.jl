@@ -1,0 +1,19 @@
+# https://sketchviz.com/@amartinhuertas/b0df811af7c1491a18745cf84ee7f99b/dc105bf5cfb5f7ae6523d7f072bedbdb67a6512b
+digraph T {
+  graph [ fontname = "Handlee" ];
+  edge  [ fontname = "Handlee" ];
+  node  [ shape=rectangle fontname = "Handlee" fontsize=14 ];
+  edge  [ style=plain ];
+  "Gridap.jl" []
+  "GridapDistributed.jl" [style=filled;]
+  "PartitionedArrays.jl" 
+  "GridapP4est.jl" 
+  "Gridap.jl" -> "GridapDistributed.jl" [dir=back fontsize=10 style=plane xlabel="<<implements,uses>>"]
+  "Gridap.jl" -> "GridapPETSc.jl" [dir=back fontsize=10 style=plane label="<<implements,uses>>"]
+  "Gridap.jl" -> "GridapP4est.jl" [dir=back fontsize=10 style=plane label="<<uses>>"]
+  "GridapDistributed.jl"  -> "PartitionedArrays.jl" [fontsize=10 xlabel="<<uses>>         "]
+  "GridapP4est.jl"  -> "PartitionedArrays.jl" [fontsize=10 xlabel="<<uses>>"]
+  "GridapPETSc.jl"  -> "PartitionedArrays.jl" [fontsize=10 xlabel="<<uses>>"]
+  "GridapP4est.jl"  -> "GridapDistributed.jl" [constraint=false fontsize=10 label="<<uses>>"]
+}    
+

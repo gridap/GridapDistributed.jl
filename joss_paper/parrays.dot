@@ -1,0 +1,31 @@
+https://sketchviz.com/@amartinhuertas/d721d186fa183ded6733fcc5df8af47c/a99394e4f702f2e3dca269e471d264767cb0a95a
+digraph T {
+  graph [ fontname = "Handlee" ];
+  edge  [ fontname = "Handlee" ];
+  node  [ shape=rectangle fontname = "Handlee" fontsize=14 ];
+  edge  [ style=plain ];
+  subgraph cluster0 {
+    color=lightgrey;
+    PVector
+    PSparseMatrix
+    PRange
+    AbstractBackend [style=dashed]
+    AbstractPData  [style=dashed]
+    PRange -> AbstractBackend
+    PRange -> AbstractPData
+    PVector -> AbstractBackend
+    PVector -> AbstractPData
+    PSparseMatrix -> AbstractBackend
+    PSparseMatrix -> PRange [constraint=false]
+    PVector -> PRange [constraint=false]
+    PSparseMatrix -> AbstractPData
+    AbstractBackend -> MPIBackend [style=dashed, dir=back]
+    AbstractBackend -> SequentialBackend [style=dashed, dir=back]
+    AbstractPData -> MPIData [style=dashed, dir=back]
+    AbstractPData -> SequentialData [style=dashed, dir=back]
+    label = "PartitionedArrays.jl";
+    fontsize = 20;
+  }
+  #"GridapDistributed.jl" -> PVector:sw [lhead=cluster0 constraint=false label="<<uses>>"]
+} 
+
