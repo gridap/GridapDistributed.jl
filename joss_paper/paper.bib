@@ -1,59 +1,62 @@
-@article{Pearson:2017,
-  	url = {http://adsabs.harvard.edu/abs/2017arXiv170304627P},
+@techreport{petsc-user-ref,
+  author = {Satish Balay and Shrirang Abhyankar and Mark~F. Adams and Steven Benson and Jed Brown
+    and Peter Brune and Kris Buschelman and Emil Constantinescu and Lisandro Dalcin and Alp Dener
+    and Victor Eijkhout and William~D. Gropp and V\'{a}clav Hapla and Tobin Isaac and Pierre Jolivet
+    and Dmitry Karpeev and Dinesh Kaushik and Matthew~G. Knepley and Fande Kong and Scott Kruger
+    and Dave~A. May and Lois Curfman McInnes and Richard Tran Mills and Lawrence Mitchell and Todd Munson
+    and Jose~E. Roman and Karl Rupp and Patrick Sanan and Jason Sarich and Barry~F. Smith
+    and Stefano Zampini and Hong Zhang and Hong Zhang and Junchao Zhang},
+  title       = {{PETSc/TAO} Users Manual},
+  institution = {Argonne National Laboratory},
+  number      = {ANL-21/39 - Revision 3.16},
+  year        = {2021},
+}
+
+
+
+@manual{mpi40,
+    author = "{Message Passing Interface Forum}",
+    title  = "{MPI}: A Message-Passing Interface Standard Version 4.0",
+    url    = "https://www.mpi-forum.org/docs/mpi-4.0/mpi40-report.pdf",
+    year   = 2021,
+    month  = jun
+}
+
+@article{Verdugo:2021,
+  	url = {https://arxiv.org/abs/2109.12818},
   	Archiveprefix = {arXiv},
-  	Author = {{Pearson}, S. and {Price-Whelan}, A.~M. and {Johnston}, K.~V.},
-  	Eprint = {1703.04627},
+  	Author = {{Verdugo}, F. and {Badia}, S.},
+  	Eprint = {2109.12818},
   	Journal = {ArXiv e-prints},
-  	Keywords = {Astrophysics - Astrophysics of Galaxies},
-  	Month = mar,
-  	Title = {{Gaps in Globular Cluster Streams: Pal 5 and the Galactic Bar}},
-  	Year = 2017
+  	Keywords = {Mathematical software},
+  	Month = sep,
+  	Title = {{The software design of Gridap: a Finite Element package based on the Julia JIT compiler}},
+  	Year = 2021
 }
 
-@book{Binney:2008,
-  	url = {http://adsabs.harvard.edu/abs/2008gady.book.....B},
-  	Author = {{Binney}, J. and {Tremaine}, S.},
-  	Booktitle = {Galactic Dynamics: Second Edition, by James Binney and Scott Tremaine.~ISBN 978-0-691-13026-2 (HB).~Published by Princeton University Press, Princeton, NJ USA, 2008.},
-  	Publisher = {Princeton University Press},
-  	Title = {{Galactic Dynamics: Second Edition}},
-  	Year = 2008
-}
-
-@article{gaia,
-    author = {{Gaia Collaboration}},
-    title = "{The Gaia mission}",
-    journal = {Astronomy and Astrophysics},
-    archivePrefix = "arXiv",
-    eprint = {1609.04153},
-    primaryClass = "astro-ph.IM",
-    keywords = {space vehicles: instruments, Galaxy: structure, astrometry, parallaxes, proper motions, telescopes},
-    year = 2016,
-    month = nov,
-    volume = 595,
-    doi = {10.1051/0004-6361/201629272},
-    url = {http://adsabs.harvard.edu/abs/2016A%26A...595A...1G},
-}
-
-@article{astropy,
-    author = {{Astropy Collaboration}},
-    title = "{Astropy: A community Python package for astronomy}",
-    journal = {Astronomy and Astrophysics},
-    archivePrefix = "arXiv",
-    eprint = {1307.6212},
-    primaryClass = "astro-ph.IM",
-    keywords = {methods: data analysis, methods: miscellaneous, virtual observatory tools},
-    year = 2013,
-    month = oct,
-    volume = 558,
-    doi = {10.1051/0004-6361/201322068},
-    url = {http://adsabs.harvard.edu/abs/2013A%26A...558A..33A}
-}
-
-@misc{fidgit,
-  author = {A. M. Smith and K. Thaney and M. Hahnel},
-  title = {Fidgit: An ungodly union of GitHub and Figshare},
-  year = {2020},
+@misc{gridapetsc,
+  author = {F. Verdugo, V. Sande, A. F. Martin},
+  title = {GridapPETSc},
+  year = {2021},
   publisher = {GitHub},
   journal = {GitHub repository},
-  url = {https://github.com/arfon/fidgit}
+  url = {https://github.com/gridap/GridapPETSc.jl}
+}
+
+@misc{gridap4est,
+  author = {A. F. Martin},
+  title = {GridapP4est},
+  year = {2021},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  url = {https://github.com/gridap/GridapP4est.jl}
+}
+
+@misc{parrays,
+  author = {F. Verdugo},
+  title = {PartitionedArrays},
+  year = {2021},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  url = {https://github.com/fverdugo/PartitionedArrays.jl}
 }
