@@ -80,7 +80,7 @@ confirms a remarkable ability of the ecosystem of Julia packages at hand to effi
 ![](galewsky_visualization.png){width=35%}
 ![](galewsky_scaling.png){width=55%}
 \begin{figure}[!h]
-\caption{Magnitude of the vorticity field after 6.5 simulation days with a coarser 48x48 quadrilaterals/panel cube sphere mesh (left) and strong scaling (right) of the non-linear rotating shallow water equations solver on the Australian Gadi@NCI supercomputer.\label{fig:galewsky_scaling}}
+\caption{Magnitude of the vorticity field after 6.5 simulation days with a coarser 48x48 quadrilaterals/panel cubed sphere mesh (left) and strong scaling (right) of the non-linear rotating shallow water equations solver on the Australian Gadi@NCI supercomputer.\label{fig:galewsky_scaling}}
 \end{figure}
 
 
