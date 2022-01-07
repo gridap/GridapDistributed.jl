@@ -318,6 +318,13 @@ function FESpaces.TrialFESpace(fun,f::DistributedSingleFieldFESpace)
   DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
 end
 
+function FESpaces.HomogeneousTrialFESpace(f::DistributedSingleFieldFESpace)
+  spaces = map_parts(f.spaces) do s
+    HomogeneousTrialFESpace(s)
+  end
+  DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
+end
+
 function generate_gids(
   model::DistributedDiscreteModel,
   spaces::AbstractPData{<:SingleFieldFESpace})
