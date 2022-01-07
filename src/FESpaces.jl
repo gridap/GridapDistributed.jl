@@ -318,6 +318,13 @@ function FESpaces.TrialFESpace(fun,f::DistributedSingleFieldFESpace)
   DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
 end
 
+function FESpaces.TrialFESpace!(f::DistributedSingleFieldFESpace,fun)
+  spaces = map_parts(f.spaces) do s
+    TrialFESpace!(s,fun)
+  end
+  DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
+end
+
 function FESpaces.HomogeneousTrialFESpace(f::DistributedSingleFieldFESpace)
   spaces = map_parts(f.spaces) do s
     HomogeneousTrialFESpace(s)
