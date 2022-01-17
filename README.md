@@ -44,6 +44,10 @@ which solves, in parallel, a 2D Poisson problem defined on the unit square.
 (In order to fully understand the code snippet, familiarity with the high level API of Gridap is assumed.)
 The domain is discretized using the parallel Cartesian-like mesh generator built-in in GridapDistributed. The only minimal burden posed on the programmer versus Gridap is a call to the `prun` function of [`PartitionedArrays.jl`](https://github.com/fverdugo/PartitionedArrays.jl) right at the beginning of the program. With this function, the programer sets up the `PartitionedArrays.jl` communication backend (i.e., MPI communication backend in the example), specifies the number of parts and their layout (i.e., `(2,2)` 2D layout in the example), and provides a function (using Julia do-block syntax for function arguments in the example) to be run on each part. This function is equivalent to a sequential Gridap script, except for the `CartesianDiscreteModel` call, which, in GridapDistributed, requires the `parts` argument passed back by the `prun` function.
 
+## Documentation
+
+Given that GridapDistributed.jl and Gridap.jl share the same high-level API, we refer to the documentation of the latter for more details. As illustrated in the example above, for most users, there will be minor differences among the APIs of `Gridap.jl` and `GridapDistributed.jl` to be aware of. We refer to the `test/` folder for additional `GridapDistributed.jl` examples.
+
 ## Remarks 
 
 1. `GridapDistributed.jl` is not a parallel mesh generator. Grid handling currently available within `GridapDistributed.jl` is restricted to Cartesian-like meshes of arbitrary-dimensional, topologically n-cube domains. See [`GridapP4est.jl`](https://github.com/gridap/GridapP4est.jl), for peta-scale handling of meshes which can be decomposed as forest of quadtrees/octrees of the computational domain, and [`GridapGmsh.jl`](https://github.com/gridap/GridapGmsh.jl) for unstrucuted mesh generation.
