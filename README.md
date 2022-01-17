@@ -32,6 +32,16 @@ mpiexecjl --project=. -n 4 julia -J sys-image.so driver.jl
 
 where `-J sys-image.so` is optional, but highly recommended in order to reduce JIT compilation times. Here, `sys-image.so` is assumed to be a Julia system image pre-generated for the driver at hand using the [`PackageCompiler.jl`](https://julialang.github.io/PackageCompiler.jl/dev/index.html) package. See the `test/TestApp/compile` folder for example scripts with system image generation along with a test application with source available at `test/TestApp/`. These scripts are triggered from `.github/workflows/ci.yml` file on Github CI actions.
 
+## Contributing to GridapDistributed
+
+GridapDistributed is a collaborative project open to contributions. If you want to contribute, please take into account:
+
+  - Before opening a PR with a significant contribution, contact the project administrators by [opening an issue](https://github.com/gridap/GridapDistributed.jl/issues/new) describing what you are willing to implement. Wait for feed-back from other community members.
+  - We adhere to the contribution and code-of-conduct instructions of the Gridap.jl project, available [here](https://github.com/gridap/Gridap.jl/blob/master/CONTRIBUTING.md) and [here](https://github.com/gridap/Gridap.jl/blob/master/CODE_OF_CONDUCT.md), resp.  Please, carefully read and follow the instructions in these files.
+  - Open a PR with your contribution.
+
+Want to help? We have [issues waiting for help](https://github.com/gridap/GridapDistributed.jl/labels/help%20wanted). You can start contributing to the Gridap project by solving some of those issues.
+
 ## Known issues
 
 A warning when executing MPI-parallel drivers: Data race conditions in the generation of precompiled modules in cache. See [here](https://juliaparallel.github.io/MPI.jl/stable/knownissues/).
