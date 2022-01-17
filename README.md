@@ -12,6 +12,38 @@ Parallel distributed-memory version of `Gridap.jl`.
 
 At present, `GridapDistributed.jl` provides scalable parallel data structures for grid handling,  finite element spaces setup, and distributed linear system assembly. For the latter part, i.e., global distributed sparse matrices and vectors, `GridapDistributed.jl` relies on [`PartitionedArrays.jl`](https://github.com/fverdugo/PartitionedArrays.jl) as distributed linear algebra backend. This implies, among others, that all `GridapDistributed.jl` driver programs can be either run in sequential execution mode--very useful for developing/debugging parallel programs--, see `test/sequential/` folder for examples, or in message-passing (MPI) execution mode--when you want to deploy the code in the actual parallel computer and perform a fast simulation., see `test/mpi/` folder for examples.
 
+## Example
+
+The abovementioned design goal in action can be observed in the following example Julia code snippet 
+
+```julia
+using Gridap
+using GridapDistributed
+using PartitionedArrays
+partition = (2,2)
+prun(mpi,partition) do parts
+  domain = (0,1,0,1)
+  mesh_partition = (4,4)
+  model = CartesianDiscreteModel(parts,domain,mesh_partition)
+  order = 2
+  u((x,y)) = (x+y)^order
+  f(x) = -Δ(u,x)
+  reffe = ReferenceFE(lagrangian,Float64,order)
+  V = TestFESpace(model,reffe,dirichlet_tags="boundary")
+  U = TrialFESpace(u,V)
+  Ω = Triangulation(model)
+  dΩ = Measure(Ω,2*order)
+  a(u,v) = ∫( ∇(v)⋅∇(u) )dΩ
+  l(v) = ∫( v*f )dΩ
+  op = AffineFEOperator(a,l,U,V)
+  uh = solve(op)
+  writevtk(Ω,"results",cellfields=["uh"=>uh,"grad_uh"=>∇(uh)])
+end
+```
+which solves, in parallel, a 2D Poisson problem defined on the unit square. 
+(In order to fully understand the code snippet, familiarity with the high level API of Gridap is assumed.)
+The domain is discretized using the parallel Cartesian-like mesh generator built-in in GridapDistributed. The only minimal burden posed on the programmer versus Gridap is a call to the `prun` function of [`PartitionedArrays.jl`](https://github.com/fverdugo/PartitionedArrays.jl) right at the beginning of the program. With this function, the programer sets up the `PartitionedArrays.jl` communication backend (i.e., MPI communication backend in the example), specifies the number of parts and their layout (i.e., `(2,2)` 2D layout in the example), and provides a function (using Julia do-block syntax for function arguments in the example) to be run on each part. This function is equivalent to a sequential Gridap script, except for the `CartesianDiscreteModel` call, which, in GridapDistributed, requires the `parts` argument passed back by the `prun` function.
+
 ## Remarks 
 
 1. `GridapDistributed.jl` is not a parallel mesh generator. Grid handling currently available within `GridapDistributed.jl` is restricted to Cartesian-like meshes of arbitrary-dimensional, topologically n-cube domains. See [`GridapP4est.jl`](https://github.com/gridap/GridapP4est.jl), for peta-scale handling of meshes which can be decomposed as forest of quadtrees/octrees of the computational domain, and [`GridapGmsh.jl`](https://github.com/gridap/GridapGmsh.jl) for unstrucuted mesh generation.
