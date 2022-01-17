@@ -40,7 +40,7 @@ GridapDistributed is a collaborative project open to contributions. If you want 
   - We adhere to the contribution and code-of-conduct instructions of the Gridap.jl project, available [here](https://github.com/gridap/Gridap.jl/blob/master/CONTRIBUTING.md) and [here](https://github.com/gridap/Gridap.jl/blob/master/CODE_OF_CONDUCT.md), resp.  Please, carefully read and follow the instructions in these files.
   - Open a PR with your contribution.
 
-Want to help? We have [issues waiting for help](https://github.com/gridap/GridapDistributed.jl/labels/help%20wanted). You can start contributing to the Gridap project by solving some of those issues.
+Want to help? We have [issues waiting for help](https://github.com/gridap/GridapDistributed.jl/labels/help%20wanted). You can start contributing to the GridapDistributed project by solving some of those issues.
 
 ## Known issues
 
