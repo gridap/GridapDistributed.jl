@@ -1,7 +1,6 @@
 using Gridap
 using GridapDistributed
 using PartitionedArrays
-
 partition = (2,2)
 prun(mpi,partition) do parts
   domain = (0,1,0,1)
