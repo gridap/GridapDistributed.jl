@@ -152,3 +152,14 @@ function Visualization.create_vtk_file(
       celldata=c,nodaldata=n)
   end
 end
+
+function Base.setindex!(
+  pvd::WriteVTK.CollectionFile,
+  datafiles::AbstractPData{<:WriteVTK.PVTKFile},
+  time::Real)
+  map_parts(datafiles) do datafile
+    if datafile.pvtkargs.ismain
+      collection_add_timestep(pvd, datafile, time)
+    end
+  end
+end
