@@ -3,6 +3,7 @@
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://gridap.github.io/GridapDistributed.jl/stable)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://gridap.github.io/GridapDistributed.jl/dev)
 ![CI](https://github.com/Gridap/GridapDistributed.jl/workflows/CI/badge.svg)
+[![DOI](https://zenodo.org/badge/258832236.svg)](https://zenodo.org/badge/latestdoi/258832236)
 
 Parallel distributed-memory version of `Gridap.jl`.
 
