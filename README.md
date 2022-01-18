@@ -73,6 +73,21 @@ where `-J sys-image.so` is optional, but highly recommended in order to reduce J
 
 A warning when executing MPI-parallel drivers: Data race conditions in the generation of precompiled modules in cache. See [here](https://juliaparallel.github.io/MPI.jl/stable/knownissues/).
 
+## How to cite GridapDistributed
+
+In order to give credit to the `Gridap` and `GridapDistributed` contributors, we simply ask you to cite the `Gridap` main project as indicated [here](https://github.com/gridap/Gridap.jl#how-to-cite-gridap) and the sub-packages you use as indicated in the corresponding repositories. Please, use the reference below in any publication in which you have made use of `GridapDistributed`:
+
+```
+@misc{Martin_GridapDistributed_2021,
+author = {Martin, Alberto and Verdugo, Francesc and Badia, Santiago},
+doi = {10.5281/zenodo.5772591},
+month = {12},
+title = {{GridapDistributed}},
+url = {https://github.com/gridap/GridapDistributed.jl},
+year = {2021}
+}
+```
+
 ## Contributing to GridapDistributed
 
 GridapDistributed is a collaborative project open to contributions. If you want to contribute, please take into account:
