@@ -79,7 +79,7 @@ In order to give credit to the `Gridap` and `GridapDistributed` contributors, we
 
 ```
 @misc{Martin_GridapDistributed_2021,
-author = {Martin, Alberto and Verdugo, Francesc and Badia, Santiago},
+author = {Martin, Alberto F. and Verdugo, Francesc and Badia, Santiago},
 doi = {10.5281/zenodo.5772591},
 month = {12},
 title = {{GridapDistributed}},
