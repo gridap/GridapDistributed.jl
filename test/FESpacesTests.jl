@@ -34,9 +34,15 @@ function main(parts,das)
   uh = interpolate(u,U)
   eh = u - uh
 
+  uh_dir = interpolate_dirichlet(u,U)
+  uh_everywhere = interpolate_everywhere(u,U)
+  eh2 = u - uh_everywhere
+
   dΩ = Measure(Ω,3)
   cont  = ∫( abs2(eh) )dΩ
+  cont2  = ∫( abs2(eh2) )dΩ
   @test sqrt(sum(cont)) < 1.0e-9
+  @test sqrt(sum(cont2)) < 1.0e-9
 
   # Assembly
   Ωass  = Triangulation(das,model)
