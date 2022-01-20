@@ -153,8 +153,8 @@ function Visualization.create_vtk_file(
   end
 end
 
-struct DistributedPvd{T}
-  pvds::AbstractPData{T}
+struct DistributedPvd{T<:AbstractPData}
+  pvds::T
 end
 
 function Visualization.createpvd(parts::AbstractPData,args...;kwargs...)
