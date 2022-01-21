@@ -47,6 +47,7 @@ MultiField.num_fields(m::DistributedMultiFieldFESpace) = length(m.field_fe_space
 Base.iterate(m::DistributedMultiFieldFESpace) = iterate(m.field_fe_space)
 Base.iterate(m::DistributedMultiFieldFESpace,state) = iterate(m.field_fe_space,state)
 Base.getindex(m::DistributedMultiFieldFESpace,field_id::Integer) = m.field_fe_space[field_id]
+Base.length(m::DistributedMultiFieldFESpace) = length(m.field_fe_space)
 
 function FESpaces.get_vector_type(fs::DistributedMultiFieldFESpace)
   fs.vector_type
@@ -313,5 +314,3 @@ function propagate_to_ghost_multifield!(
     end
   end
 end
-
-
