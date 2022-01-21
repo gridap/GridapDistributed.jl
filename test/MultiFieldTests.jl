@@ -32,6 +32,7 @@ function main(parts)
   VxQ = MultiFieldFESpace([V,Q])
   UxP = MultiFieldFESpace([U,P]) # This generates again the global numbering
   UxP = TrialFESpace([u,p],VxQ) # This reuses the one computed
+  @test length(UxP) == 2
 
   uh, ph = interpolate([u,p],UxP)
   eu = u - uh
