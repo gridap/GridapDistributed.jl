@@ -25,6 +25,8 @@ Base.iterate(m::DistributedMultiFieldFEFunction) = iterate(m.field_fe_fun)
 Base.iterate(m::DistributedMultiFieldFEFunction,state) = iterate(m.field_fe_fun,state)
 Base.getindex(m::DistributedMultiFieldFEFunction,field_id::Integer) = m.field_fe_fun[field_id]
 
+local_views(a::Vector{<:DistributedCellField}) = [ai.fields for ai in a]
+
 struct DistributedMultiFieldFESpace{A,B,C,D} <: DistributedFESpace
   field_fe_space::A
   part_fe_space::B
@@ -148,6 +150,25 @@ function FESpaces.interpolate_everywhere!(
     free_values_i = restrict_to_field(fe,free_values,i)
     dirichlet_values_i = dirichlet_values[i]
     fe_space_i = fe.field_fe_space[i]
+    fe_fun_i = interpolate_everywhere!(objects[i], free_values_i,dirichlet_values_i,fe_space_i)
+    push!(field_fe_fun,fe_fun_i)
+  end
+  DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
+end
+
+function FESpaces.interpolate_everywhere(
+  objects::Vector{<:DistributedCellField},fe::DistributedMultiFieldFESpace)
+  local_objects = local_views(objects)
+  local_spaces = local_views(fe)
+  part_fe_fun = map_parts(local_spaces,local_objects...) do f,o...
+    interpolate_everywhere(o,f)
+  end
+  free_values = zero_free_values(fe)
+  field_fe_fun = DistributedSingleFieldFEFunction[]
+  for i in 1:num_fields(fe)
+    free_values_i = restrict_to_field(fe,free_values,i)
+    fe_space_i = fe.field_fe_space[i]
+    dirichlet_values_i = get_dirichlet_dof_values(fe_space_i)
     fe_fun_i = interpolate_everywhere!(objects[i], free_values_i,dirichlet_values_i,fe_space_i)
     push!(field_fe_fun,fe_fun_i)
   end
