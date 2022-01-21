@@ -117,6 +117,78 @@ function FESpaces.interpolate!(objects,free_values::AbstractVector,fe::Distribut
   DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
 end
 
+function FESpaces.interpolate_everywhere(objects,fe::DistributedMultiFieldFESpace)
+  free_values = zero_free_values(fe)
+  local_vals = consistent_local_views(free_values,fe.gids,true)
+  part_fe_fun = map_parts(local_vals,local_views(fe)) do x,f
+    interpolate!(objects,x,f)
+  end
+  field_fe_fun = DistributedSingleFieldFEFunction[]
+  for i in 1:num_fields(fe)
+    free_values_i = restrict_to_field(fe,free_values,i)
+    fe_space_i = fe.field_fe_space[i]
+    dirichlet_values_i = zero_dirichlet_values(fe_space_i)
+    fe_fun_i = interpolate_everywhere!(objects[i], free_values_i,dirichlet_values_i,fe_space_i)
+    push!(field_fe_fun,fe_fun_i)
+  end
+  DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
+end
+
+function FESpaces.interpolate_everywhere!(
+  objects,free_values::AbstractVector,
+  dirichlet_values::Vector{AbstractPData{<:AbstractVector}},
+  fe::DistributedMultiFieldFESpace)
+  local_vals = consistent_local_views(free_values,fe.gids,true)
+  part_fe_fun = map_parts(local_vals,local_views(fe)) do x,f
+    interpolate!(objects,x,f)
+  end
+  field_fe_fun = DistributedSingleFieldFEFunction[]
+  for i in 1:num_fields(fe)
+    free_values_i = restrict_to_field(fe,free_values,i)
+    dirichlet_values_i = dirichlet_values[i]
+    fe_space_i = fe.field_fe_space[i]
+    fe_fun_i = interpolate_everywhere!(objects[i], free_values_i,dirichlet_values_i,fe_space_i)
+    push!(field_fe_fun,fe_fun_i)
+  end
+  DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
+end
+
+function FESpaces.interpolate_dirichlet(objects,fe::DistributedMultiFieldFESpace)
+  free_values = zero_free_values(fe)
+  local_vals = consistent_local_views(free_values,fe.gids,true)
+  part_fe_fun = map_parts(local_vals,local_views(fe)) do x,f
+    interpolate!(objects,x,f)
+  end
+  field_fe_fun = DistributedSingleFieldFEFunction[]
+  for i in 1:num_fields(fe)
+    free_values_i = restrict_to_field(fe,free_values,i)
+    fe_space_i = fe.field_fe_space[i]
+    dirichlet_values_i = zero_dirichlet_values(fe_space_i)
+    fe_fun_i = interpolate_everywhere!(objects[i], free_values_i,dirichlet_values_i,fe_space_i)
+    push!(field_fe_fun,fe_fun_i)
+  end
+  DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
+end
+
+function FESpaces.interpolate_dirichlet!(
+  objects,free_values::AbstractVector,
+  dirichlet_values::Vector{AbstractPData{<:AbstractVector}},
+  fe::DistributedMultiFieldFESpace)
+  local_vals = consistent_local_views(free_values,fe.gids,true)
+  part_fe_fun = map_parts(local_vals,local_views(fe)) do x,f
+    interpolate!(objects,x,f)
+  end
+  field_fe_fun = DistributedSingleFieldFEFunction[]
+  for i in 1:num_fields(fe)
+    free_values_i = restrict_to_field(fe,free_values,i)
+    dirichlet_values_i = dirichlet_values[i]
+    fe_space_i = fe.field_fe_space[i]
+    fe_fun_i = interpolate_everywhere!(objects[i], free_values_i,dirichlet_values_i,fe_space_i)
+    push!(field_fe_fun,fe_fun_i)
+  end
+  DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
+end
+
 struct DistributedMultiFieldFEBasis{A,B} <: GridapType
   field_fe_basis::A
   part_fe_basis::B
@@ -313,5 +385,3 @@ function propagate_to_ghost_multifield!(
     end
   end
 end
-
-
