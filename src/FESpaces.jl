@@ -259,10 +259,6 @@ function FESpaces.get_free_dof_values(uh::DistributedSingleFieldFEFunction)
   uh.metadata.free_values
 end
 
-function FESpaces.get_dirichlet_dof_values(U::DistributedSingleFieldFESpace)
-  map_parts(get_dirichlet_dof_values,U.spaces)
-end
-
 # Single field related
 
 struct DistributedSingleFieldFESpace{A,B,C} <: DistributedFESpace
@@ -287,6 +283,10 @@ end
 
 function FESpaces.get_free_dof_ids(fs::DistributedSingleFieldFESpace)
   fs.gids
+end
+
+function FESpaces.get_dirichlet_dof_values(U::DistributedSingleFieldFESpace)
+  map_parts(get_dirichlet_dof_values,U.spaces)
 end
 
 function FESpaces.FEFunction(
@@ -387,6 +387,14 @@ function FESpaces.interpolate!(
   FEFunction(f,free_values)
 end
 
+function FESpaces.interpolate!(
+  u::DistributedCellField,free_values::AbstractVector,f::DistributedSingleFieldFESpace)
+  map_parts(local_views(u),f.spaces,local_views(free_values)) do ui,V,vec
+    interpolate!(ui,vec,V)
+  end
+  FEFunction(f,free_values)
+end
+
 function FESpaces.interpolate_dirichlet(u, f::DistributedSingleFieldFESpace)
   free_values = zero_free_values(f)
   dirichlet_values = get_dirichlet_dof_values(f)
@@ -421,6 +429,16 @@ function FESpaces.interpolate_everywhere!(
   f::DistributedSingleFieldFESpace)
   map_parts(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
     interpolate_everywhere!(u,fvec,dvec,V)
+  end
+  FEFunction(f,free_values,dirichlet_values)
+end
+
+function FESpaces.interpolate_everywhere!(
+  u::DistributedCellField, free_values::AbstractVector,
+  dirichlet_values::AbstractPData{<:AbstractVector},
+  f::DistributedSingleFieldFESpace)
+  map_parts(local_views(u),f.spaces,local_views(free_values),dirichlet_values) do ui,V,fvec,dvec
+    interpolate_everywhere!(ui,fvec,dvec,V)
   end
   FEFunction(f,free_values,dirichlet_values)
 end
