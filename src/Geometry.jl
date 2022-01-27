@@ -149,7 +149,8 @@ function _cartesian_model_with_periodic_bcs(parts,desc)
   models = map_parts(parts,gcids) do part, gcids
     cmin = CartesianIndex(map((p,i,n)->( p&&n!=1 ? i+1 : i),desc.isperiodic,Tuple(first(gcids)),nparts))
     cmax = CartesianIndex(map((p,i,n)->( p&&n!=1 ? i+1 : i),desc.isperiodic,Tuple(last(gcids)),nparts))
-    CartesianDiscreteModel(_desc,cmin,cmax)
+    remove_boundary = map((p,n)->(p&&n!=1 ? true : false),desc.isperiodic,nparts)
+    CartesianDiscreteModel(_desc,cmin,cmax,remove_boundary)
   end
   gids = PRange(parts,desc.partition,PArrays.with_ghost,isperiodic_global)
   model = DistributedDiscreteModel(models,gids)
