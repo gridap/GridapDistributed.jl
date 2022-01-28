@@ -1,8 +1,7 @@
-module PeriodicBCsTests
-
+module PeriodicBCsTestsSeq
+using PartitionedArrays
 using Gridap
 using GridapDistributed
-using PartitionedArrays
 using Test
 
 nps = [(1,1),(1,2),(2,1),(2,2)]
@@ -20,4 +19,10 @@ for np in nps
   end
 end
 
+include("../PeriodicBCsTests.jl")
+prun(PeriodicBCsTests.main,sequential,(2,2))
+prun(PeriodicBCsTests.main,sequential,(2,1))
+prun(PeriodicBCsTests.main,sequential,(1,1))
+prun(PeriodicBCsTests.main,sequential,(1,2))
+prun(PeriodicBCsTests.main,sequential,(2,3))
 end # module
