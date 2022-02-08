@@ -19,7 +19,7 @@ At present, `GridapDistributed.jl` provides scalable parallel data structures fo
 
 `GridapDistributed.jl` driver programs can be either run in sequential execution mode (very useful for developing/debugging parallel programs, see `test/sequential/` folder for examples) or in message-passing (MPI) execution mode (when you want to deploy the code in the actual parallel computer and perform a fast simulation, see `test/mpi/` folder for examples).
 
-## Example
+## Simple example
 
 The following Julia code snippet solves a 2D Poisson problem in parallel on the unit square
 
@@ -49,11 +49,53 @@ end
 ```
 The domain is discretized using the parallel Cartesian-like mesh generator built-in in `GridapDistributed`. The only minimal difference with respect to the sequential `Gridap` script is a call to the `prun` function of [`PartitionedArrays.jl`](https://github.com/fverdugo/PartitionedArrays.jl) right at the beginning of the program. With this function, the programer sets up the `PartitionedArrays.jl` communication backend (i.e., MPI in the example), specifies the number of parts and their layout (i.e., 2x2 partition in the example), and provides a function (using Julia do-block syntax for function arguments in the example) to be run on each part. The function body is equivalent to a sequential `Gridap` script, except for the `CartesianDiscreteModel` call, which in `GridapDistributed` also requires the `parts` argument passed back by the `prun` function.
 
+## Using parallel solvers
 
-## Remarks 
+`GridapDistributed.jl` is _not_ a library of parallel linear solvers. The linear solver kernel within `GridapDistributed.jl`, defined with the backslash operator `\`, is just a sparse LU solver applied to the global system gathered on a master task (not scalable, but very useful for testing and debug purposes). 
 
-1. `GridapDistributed.jl` is not a parallel unstructured mesh generator. Grid handling currently available within `GridapDistributed.jl` is restricted to Cartesian-like meshes of arbitrary-dimensional, topologically n-cube domains. See [`GridapP4est.jl`](https://github.com/gridap/GridapP4est.jl), for peta-scale handling of meshes which can be decomposed as forest of quadtrees/octrees of the computational domain, and [`GridapGmsh.jl`](https://github.com/gridap/GridapGmsh.jl) for unstrucuted mesh generation.
-2. `GridapDistributed.jl` is not a library of parallel linear solvers at this moment. The linear solver kernel within `GridapDistributed.jl`, leveraged, e.g., via the backslash operator `\`, is just a sparse LU solver applied to the global system gathered on a master task (and thus obviously not scalable, but very useful for testing and debug purposes). It is in our future plans to provide highly scalable linear and nonlinear solvers tailored for the FE discretization of PDEs. For the moment, see [`GridapPETSc.jl`](https://github.com/gridap/GridapPETSc.jl) to use the full set of scalable linear and non-linear solvers in the [PETSc](https://petsc.org/release/) numerical software package. 
+We provide the full set of scalable linear and nonlinear solvers in the [PETSc](https://petsc.org/release/) in the package [`GridapPETSc.jl`](https://github.com/gridap/GridapPETSc.jl). One can find in the `test/` folder of `GridapPETSc` some examples that combine `GridapDistributed` with `PETSc` solver. Other linear solver libraries on top of `GridapDistributed` can be developed in the future. 
+
+## Partitioned meshes
+
+`GridapDistributed.jl` provides a built-in parallel generator of Cartesian-like meshes of arbitrary-dimensional, topologically n-cube domains. 
+
+Distributed unstructured meshes are generated using [`GridapGmsh.jl`](https://github.com/gridap/GridapGmsh.jl). Examples of distributed solvers on unstructured meshes that combine `GridapDistributed`, `GridapGmsh` and `GridapPETSc` can be found in the `demo/` folder of `GridapGmsh`.
+
+We also refer to [`GridapP4est.jl`](https://github.com/gridap/GridapP4est.jl), for peta-scale handling of meshes which can be decomposed as forest of quadtrees/octrees of the computational domain.
+
+## A more complex example
+
+In the following example, we combine `GridapDistributed` (for the parallel implementation of the PDE discretisation), `GridapGmsh` (for the distributed unstructured mesh), and `GridapPETSc` (for the linear solver step). The mesh file can be found [here](https://github.com/gridap/GridapGmsh.jl/blob/gridap_distributed/demo/demo.msh).
+
+```julia
+using Gridap
+using GridapGmsh
+using GridapPETSc
+using GridapDistributed
+using PartitionedArrays
+n = 6
+prun(mpi,n) do parts
+  options = "-ksp_type cg -pc_type gamg -ksp_monitor"
+  GridapPETSc.with(args=split(options)) do
+    model = GmshDiscreteModel(parts,"demo/demo.msh")
+    order = 1
+    dirichlet_tags = ["boundary1","boundary2"]
+    u_boundary1(x) = 0.0
+    u_boundary2(x) = 1.0
+    reffe = ReferenceFE(lagrangian,Float64,order)
+    V = TestFESpace(model,reffe,dirichlet_tags=dirichlet_tags)
+    U = TrialFESpace(V,[u_boundary1,u_boundary2])
+    Ω = Interior(model)
+    dΩ = Measure(Ω,2*order)
+    a(u,v) = ∫( ∇(u)⋅∇(v) )dΩ
+    l(v) = 0
+    op = AffineFEOperator(a,l,U,V)
+    solver = PETScLinearSolver()
+    uh = solve(solver,op)
+    writevtk(Ω,"demo",cellfields=["uh"=>uh])
+  end
+end
+```
 
 ## Build 
 
