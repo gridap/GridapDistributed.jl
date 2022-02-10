@@ -65,7 +65,7 @@ Distributed unstructured meshes are generated using [`GridapGmsh.jl`](https://gi
 
 ## A more complex example
 
-In the following example, we combine `GridapDistributed` (for the parallel implementation of the PDE discretisation), `GridapGmsh` (for the distributed unstructured mesh), and `GridapPETSc` (for the linear solver step). The mesh file can be found [here](https://github.com/gridap/GridapGmsh.jl/blob/gridap_distributed/demo/demo.msh).
+In the following example, we combine `GridapDistributed` (for the parallel implementation of the PDE discretisation), `GridapGmsh` (for the distributed unstructured mesh), and `GridapPETSc` (for the linear solver step). The mesh file can be found [here](https://github.com/gridap/Tutorials/blob/master/models/demo.msh).
 
 ```julia
 using Gridap
@@ -77,7 +77,7 @@ n = 6
 prun(mpi,n) do parts
   options = "-ksp_type cg -pc_type gamg -ksp_monitor"
   GridapPETSc.with(args=split(options)) do
-    model = GmshDiscreteModel(parts,"demo/demo.msh")
+    model = GmshDiscreteModel(parts,"demo.msh")
     order = 1
     dirichlet_tags = ["boundary1","boundary2"]
     u_boundary1(x) = 0.0
