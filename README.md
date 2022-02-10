@@ -15,7 +15,7 @@ At present, `GridapDistributed.jl` provides scalable parallel data structures fo
 
 ## Documentation
 
-`GridapDistributed.jl` and `Gridap.jl` share almost the same high-level API. We refer to the documentation of `Gridap.jl` for more details about the API. In the example below, we show the minor differences among the APIs of `Gridap.jl` and `GridapDistributed.jl`. We refer to the `test/` folder for additional `GridapDistributed.jl` examples.
+`GridapDistributed.jl` and `Gridap.jl` share almost the same high-level API. We refer to the documentation of `Gridap.jl` for more details about the API. In the example below, we show the minor differences among the APIs of `Gridap.jl` and `GridapDistributed.jl`. We also refer to the following [tutorial](https://gridap.github.io/Tutorials/dev/pages/t016_poisson_distributed/) for additional examples and rationale.
 
 `GridapDistributed.jl` driver programs can be either run in sequential execution mode (very useful for developing/debugging parallel programs, see `test/sequential/` folder for examples) or in message-passing (MPI) execution mode (when you want to deploy the code in the actual parallel computer and perform a fast simulation, see `test/mpi/` folder for examples).
 
@@ -53,15 +53,15 @@ The domain is discretized using the parallel Cartesian-like mesh generator built
 
 `GridapDistributed.jl` is _not_ a library of parallel linear solvers. The linear solver kernel within `GridapDistributed.jl`, defined with the backslash operator `\`, is just a sparse LU solver applied to the global system gathered on a master task (not scalable, but very useful for testing and debug purposes). 
 
-We provide the full set of scalable linear and nonlinear solvers in the [PETSc](https://petsc.org/release/) in the package [`GridapPETSc.jl`](https://github.com/gridap/GridapPETSc.jl). One can find in the `test/` folder of `GridapPETSc` some examples that combine `GridapDistributed` with `PETSc` solver. Other linear solver libraries on top of `GridapDistributed` can be developed in the future. 
+We provide the full set of scalable linear and nonlinear solvers in the [PETSc](https://petsc.org/release/) library in [`GridapPETSc.jl`](https://github.com/gridap/GridapPETSc.jl). For an example which combines `GridapDistributed` with `GridapPETSc.jl`, we refer to the following [tutorial](https://gridap.github.io/Tutorials/dev/pages/t016_poisson_distributed/). Additional examples can be found in the `test/` folder of `GridapPETSc`. Other linear solver libraries on top of `GridapDistributed` can be developed in the future. 
 
 ## Partitioned meshes
 
 `GridapDistributed.jl` provides a built-in parallel generator of Cartesian-like meshes of arbitrary-dimensional, topologically n-cube domains. 
 
-Distributed unstructured meshes are generated using [`GridapGmsh.jl`](https://github.com/gridap/GridapGmsh.jl). Examples of distributed solvers on unstructured meshes that combine `GridapDistributed`, `GridapGmsh` and `GridapPETSc` can be found in the `demo/` folder of `GridapGmsh`.
+Distributed unstructured meshes are generated using [`GridapGmsh.jl`](https://github.com/gridap/GridapGmsh.jl). We also refer to [`GridapP4est.jl`](https://github.com/gridap/GridapP4est.jl), for peta-scale handling of meshes which can be decomposed as forest of quadtrees/octrees of the computational domain. Examples of distributed solvers that combine all these building blocks can be found in the following [tutorial](https://gridap.github.io/Tutorials/dev/pages/t016_poisson_distributed/).
 
-We also refer to [`GridapP4est.jl`](https://github.com/gridap/GridapP4est.jl), for peta-scale handling of meshes which can be decomposed as forest of quadtrees/octrees of the computational domain.
+
 
 ## A more complex example
 
