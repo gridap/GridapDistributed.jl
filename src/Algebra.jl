@@ -106,6 +106,8 @@ function Algebra.nz_counter(
   DistributedCounterCOO(builder.par_strategy,counters,rows,cols)
 end
 
+"""
+"""
 struct DistributedCounterCOO{A,B,C,D} <: GridapType
   par_strategy::A
   counters::B

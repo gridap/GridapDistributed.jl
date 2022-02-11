@@ -24,7 +24,8 @@ MultiField.num_fields(m::DistributedMultiFieldFEFunction) = length(m.field_fe_fu
 Base.iterate(m::DistributedMultiFieldFEFunction) = iterate(m.field_fe_fun)
 Base.iterate(m::DistributedMultiFieldFEFunction,state) = iterate(m.field_fe_fun,state)
 Base.getindex(m::DistributedMultiFieldFEFunction,field_id::Integer) = m.field_fe_fun[field_id]
-
+"""
+"""
 struct DistributedMultiFieldFESpace{A,B,C,D} <: DistributedFESpace
   field_fe_space::A
   part_fe_space::B
@@ -117,7 +118,8 @@ function FESpaces.interpolate!(objects,free_values::AbstractVector,fe::Distribut
   end
   DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
 end
-
+"""
+"""
 struct DistributedMultiFieldFEBasis{A,B} <: GridapType
   field_fe_basis::A
   part_fe_basis::B
