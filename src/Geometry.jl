@@ -88,6 +88,11 @@ end
 
 local_views(a::DistributedDiscreteModel) = a.models
 
+Geometry.num_cell_dims(::DistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dc
+Geometry.num_cell_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dc
+Geometry.num_point_dims(::DistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dp
+Geometry.num_point_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dp
+
 function Geometry.num_cells(model::DistributedDiscreteModel)
  num_gids(model.gids)
 end
