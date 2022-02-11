@@ -2,7 +2,8 @@
 abstract type DistributedCellDatum <: GridapType end
 
 # DistributedCellPoint
-
+"""
+"""
 struct DistributedCellPoint{A<:AbstractPData{<:CellPoint}} <: DistributedCellDatum
   points::A
 end
@@ -10,7 +11,8 @@ end
 local_views(a::DistributedCellPoint) = a.points
 
 # DistributedCellField
-
+"""
+"""
 struct DistributedCellField{A,B} <: DistributedCellDatum
   fields::A
   metadata::B
@@ -182,7 +184,8 @@ function Fields.curl(a::DistributedCellField)
 end
 
 # Integration related
-
+"""
+"""
 struct DistributedMeasure{A<:AbstractPData{<:Measure}} <: GridapType
   measures::A
 end
@@ -199,7 +202,8 @@ end
 function CellData.get_cell_points(a::DistributedMeasure)
   DistributedCellPoint(map_parts(get_cell_points,a.measures))
 end
-
+"""
+"""
 struct DistributedDomainContribution{A<:AbstractPData{<:DomainContribution}} <: GridapType
   contribs::A
 end
@@ -316,4 +320,3 @@ end
 CellData.jump(a::DistributedCellField) = DistributedCellField(map_parts(jump,a.fields))
 CellData.jump(a::SkeletonPair{<:DistributedCellField}) = a.⁺ + a.⁻
 CellData.mean(a::DistributedCellField) = DistributedCellField(map_parts(mean,a.fields))
-

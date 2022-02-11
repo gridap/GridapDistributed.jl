@@ -248,11 +248,14 @@ dofs
 end
 
 # FEFunction related
-
+"""
+"""
 struct DistributedFEFunctionData{T<:AbstractVector} <:GridapType
   free_values::T
 end
 
+"""
+"""
 const DistributedSingleFieldFEFunction = DistributedCellField{A,<:DistributedFEFunctionData{T}} where {A,T}
 
 function FESpaces.get_free_dof_values(uh::DistributedSingleFieldFEFunction)
@@ -260,7 +263,8 @@ function FESpaces.get_free_dof_values(uh::DistributedSingleFieldFEFunction)
 end
 
 # Single field related
-
+"""
+"""
 struct DistributedSingleFieldFESpace{A,B,C} <: DistributedFESpace
   spaces::A
   gids::B
@@ -539,7 +543,8 @@ function FESpaces.collect_cell_matrix_and_vector(
     collect_cell_matrix_and_vector(u,v,m,l,f)
   end
 end
-
+"""
+"""
 struct DistributedSparseMatrixAssembler{A,B,C,D,E,F} <: SparseMatrixAssembler
   strategy::A
   assems::B

@@ -27,6 +27,8 @@ Base.getindex(m::DistributedMultiFieldFEFunction,field_id::Integer) = m.field_fe
 
 local_views(a::Vector{<:DistributedCellField}) = [ai.fields for ai in a]
 
+"""
+"""
 struct DistributedMultiFieldFESpace{A,B,C,D} <: DistributedFESpace
   field_fe_space::A
   part_fe_space::B
@@ -176,6 +178,8 @@ function FESpaces.interpolate_everywhere(
 end
 
 
+"""
+"""
 struct DistributedMultiFieldFEBasis{A,B} <: GridapType
   field_fe_basis::A
   part_fe_basis::B

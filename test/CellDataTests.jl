@@ -20,8 +20,9 @@ function main(parts)
   g = CellField(4.5,Γ)
   v = CellField(x->x,Ω)
 
-  writevtk(Ω,joinpath(output,"Ω"),cellfields=["f"=>f])
-  writevtk(Γ,joinpath(output,"Γ"),cellfields=["f"=>f,"g"=>g])
+  u(x) = sum(x)
+  writevtk(Ω,joinpath(output,"Ω"),cellfields=["f"=>f,"u"=>u])
+  writevtk(Γ,joinpath(output,"Γ"),cellfields=["f"=>f,"g"=>g,"u"=>u])
 
   x_Γ = get_cell_points(Γ)
   @test isa(f(x_Γ),AbstractPData)
