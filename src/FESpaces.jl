@@ -11,7 +11,7 @@ function FESpaces.get_free_dof_ids(fs::DistributedFESpace)
   @abstractmethod
 end
 
-function get_dirichlet_dof_ids(f::DistributedFESpace)
+function FESpaces.get_dirichlet_dof_ids(f::DistributedFESpace)
   @abstractmethod
 end
 
@@ -295,34 +295,39 @@ end
 
 function FESpaces.FEFunction(
   f::DistributedSingleFieldFESpace,free_values::AbstractVector,isconsistent=false)
-  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  fields = map_parts(FEFunction,f.spaces,local_vals)
-  metadata = DistributedFEFunctionData(free_values)
-  DistributedCellField(fields,metadata)
+  _EvaluationFunction(FEFunction,f,free_values,isconsistent)
 end
 
 function FESpaces.FEFunction(
   f::DistributedSingleFieldFESpace,free_values::AbstractVector,
   dirichlet_values::AbstractPData{<:AbstractVector},isconsistent=false)
-  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  fields = map_parts(FEFunction,f.spaces,local_vals,dirichlet_values)
-  metadata = DistributedFEFunctionData(free_values)
-  DistributedCellField(fields,metadata)
+  _EvaluationFunction(FEFunction,f,free_values,dirichlet_values,isconsistent)
 end
 
 function FESpaces.EvaluationFunction(
   f::DistributedSingleFieldFESpace,free_values::AbstractVector,isconsistent=false)
-  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  fields = map_parts(EvaluationFunction,f.spaces,local_vals)
-  metadata = DistributedFEFunctionData(free_values)
-  DistributedCellField(fields,metadata)
+  _EvaluationFunction(EvaluationFunction,f,free_values,isconsistent)
 end
 
 function FESpaces.EvaluationFunction(
   f::DistributedSingleFieldFESpace,free_values::AbstractVector,
   dirichlet_values::AbstractPData{<:AbstractVector},isconsistent=false)
+  _EvaluationFunction(EvaluationFunction,f,free_values,dirichlet_values,isconsistent)
+end
+
+function _EvaluationFunction(func,
+  f::DistributedSingleFieldFESpace,free_values::AbstractVector,isconsistent=false)
   local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  fields = map_parts(EvaluationFunction,f.spaces,local_vals,dirichlet_values)
+  fields = map_parts(func,f.spaces,local_vals)
+  metadata = DistributedFEFunctionData(free_values)
+  DistributedCellField(fields,metadata)
+end
+
+function _EvaluationFunction(func,
+  f::DistributedSingleFieldFESpace,free_values::AbstractVector,
+  dirichlet_values::AbstractPData{<:AbstractVector},isconsistent=false)
+  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
+  fields = map_parts(func,f.spaces,local_vals,dirichlet_values)
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
 end
@@ -433,6 +438,16 @@ function FESpaces.interpolate_everywhere!(
   f::DistributedSingleFieldFESpace)
   map_parts(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
     interpolate_everywhere!(u,fvec,dvec,V)
+  end
+  FEFunction(f,free_values,dirichlet_values)
+end
+
+function FESpaces.interpolate_everywhere(u::DistributedCellField,
+  f::DistributedSingleFieldFESpace)
+  free_values = zero_free_values(f)
+  dirichlet_values = get_dirichlet_dof_values(f)
+  map_parts(local_views(u),f.spaces,local_views(free_values),dirichlet_values) do ui,V,fvec,dvec
+    interpolate_everywhere!(ui,fvec,dvec,V)
   end
   FEFunction(f,free_values,dirichlet_values)
 end
