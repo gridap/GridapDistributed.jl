@@ -19,8 +19,11 @@ function all_tests(parts)
    TestApp.PoissonTests.main(parts)
    PArrays.toc!(t,"Poisson")
 
-  TestApp.PLaplacianTests.main(parts)
-  PArrays.toc!(t,"PLaplacian")
+   TestApp.PLaplacianTests.main(parts)
+   PArrays.toc!(t,"PLaplacian")
+
+   TestApp.TransientDistributedCellFieldTests.main(parts)
+   PArrays.toc!(t,"TransientDistributedCellField")
 
   display(t)
 end
