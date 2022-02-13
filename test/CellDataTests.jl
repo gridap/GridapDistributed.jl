@@ -20,8 +20,9 @@ function main(parts)
   g = CellField(4.5,Γ)
   v = CellField(x->x,Ω)
 
-  writevtk(Ω,joinpath(output,"Ω"),cellfields=["f"=>f])
-  writevtk(Γ,joinpath(output,"Γ"),cellfields=["f"=>f,"g"=>g])
+  u(x) = sum(x)
+  writevtk(Ω,joinpath(output,"Ω"),cellfields=["f"=>f,"u"=>u])
+  writevtk(Γ,joinpath(output,"Γ"),cellfields=["f"=>f,"g"=>g,"u"=>u])
 
   createpvd(parts,joinpath(output,"Ω_pvd")) do pvd
     pvd[0.1] = createvtk(Ω,joinpath(output,"Ω_1"),cellfields=["f"=>f])
