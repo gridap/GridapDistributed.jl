@@ -45,4 +45,6 @@ include("MultiField.jl")
 
 include("TransientDistributedCellField.jl")
 
+include("TransientMultiFieldDistributedCellField.jl")
+
 end # module

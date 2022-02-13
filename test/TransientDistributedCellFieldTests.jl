@@ -8,8 +8,8 @@ using PartitionedArrays
 using Test
 
 function main(parts)
-  domain = (0,1)
-  cells = (4,)
+  domain = (0,1,0,1)
+  cells = (4,4)
   𝒯 = CartesianDiscreteModel(parts,domain,cells)
   Ω = Interior(𝒯)
   dΩ = Measure(Ω,2)

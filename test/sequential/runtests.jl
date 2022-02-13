@@ -16,6 +16,12 @@ using Test
 
 @time @testset "DivConformingTests" begin include("DivConformingTests.jl") end
 
-@time @testset "TransientDistributedCellFieldTests" begin include("TransientDistributedCellFieldTests.jl") end
+@time @testset "TransientDistributedCellFieldTests" begin
+  include("TransientDistributedCellFieldTests.jl")
+end
+
+@time @testset "TransientMultiFieldDistributedCellFieldTests" begin
+  include("TransientMultiFieldDistributedCellFieldTests.jl")
+end
 
 end # module
