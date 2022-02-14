@@ -4,10 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased 
+## [0.2.5] - 2022-02-14
 
-### Added 
+### Added
+ - Support for periodic boundary conditions for `CartesianDiscreteModel`. Since PR [#79](https://github.com/gridap/GridapDistributed.jl/pull/79)
  - Skeleton documentation and some content. Since PR [#77](https://github.com/gridap/GridapDistributed.jl/pull/77)
+
+### Fixed
+- Visualization of functions and numbers.  Since PR [#78](https://github.com/gridap/GridapDistributed.jl/pull/78)
 
 ## [0.2.4] - 2021-12-09
 
