@@ -22,6 +22,8 @@ function main(parts)
   writevtk(model,joinpath(output,"model"))
 
   @test num_cells(model)==prod(cells)
+  @test num_cell_dims(model) == length(cells)
+  @test num_point_dims(model) == length(cells)
 
   gmodel = CartesianDiscreteModel(domain,cells)
 

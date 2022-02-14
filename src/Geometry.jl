@@ -1,6 +1,8 @@
 
 # We do not inherit from Grid on purpose.
 # This object cannot implement the Grid interface in a strict sense
+"""
+"""
 struct DistributedGrid{Dc,Dp,A} <: GridapType
   grids::A
   function DistributedGrid(grids::AbstractPData{<:Grid{Dc,Dp}}) where {Dc,Dp}
@@ -28,6 +30,8 @@ Geometry.num_point_dims(::Type{<:DistributedGrid{Dc,Dp}}) where {Dc,Dp} = Dp
 
 # We do not inherit from GridTopology on purpose.
 # This object cannot implement the GridTopology interface in a strict sense
+"""
+"""
 struct DistributedGridTopology{Dc,Dp,A} <: GridapType
   topos::A
   function DistributedGridTopology(topos::AbstractPData{<:GridTopology{Dc,Dp}}) where {Dc,Dp}
@@ -53,6 +57,8 @@ Geometry.num_cell_dims(::Type{<:DistributedGridTopology{Dc,Dp}}) where {Dc,Dp} =
 Geometry.num_point_dims(::DistributedGridTopology{Dc,Dp}) where {Dc,Dp} = Dp
 Geometry.num_point_dims(::Type{<:DistributedGridTopology{Dc,Dp}}) where {Dc,Dp} = Dp
 
+"""
+"""
 struct DistributedFaceLabeling{A<:AbstractPData{<:FaceLabeling}}
   labels::A
 end
@@ -67,6 +73,8 @@ end
 
 # We do not inherit from DiscreteModel on purpose.
 # This object cannot implement the DiscreteModel interface in a strict sense
+"""
+"""
 struct DistributedDiscreteModel{Dc,Dp,A,B} <: GridapType
   models::A
   gids::B
@@ -79,6 +87,11 @@ struct DistributedDiscreteModel{Dc,Dp,A,B} <: GridapType
 end
 
 local_views(a::DistributedDiscreteModel) = a.models
+
+Geometry.num_cell_dims(::DistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dc
+Geometry.num_cell_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dc
+Geometry.num_point_dims(::DistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dp
+Geometry.num_point_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dp
 
 function Geometry.num_cells(model::DistributedDiscreteModel)
  num_gids(model.gids)
@@ -260,6 +273,8 @@ end
 
 # We do not inherit from Triangulation on purpose.
 # This object cannot implement the Triangulation interface in a strict sense
+"""
+"""
 struct DistributedTriangulation{Dc,Dp,A,B} <: GridapType
   trians::A
   model::B

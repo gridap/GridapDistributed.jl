@@ -1,3 +1,5 @@
+"""
+"""
 struct DistributedVisualizationData{A<:AbstractPData}
   visdata::A
 end
@@ -112,6 +114,9 @@ function _prepare_fdata(trians,a::Nothing)
 end
 
 function _prepare_fdata(trians,a)
+  _fdata(v::DistributedCellField,trians) = v.fields
+  _fdata(v::AbstractPData,trians) = v
+  _fdata(v,trians) = map_parts(ti->v,trians)
   if length(a) == 0
     return map_parts(trians) do t
       Dict()
@@ -121,7 +126,7 @@ function _prepare_fdata(trians,a)
   vs = []
   for (k,v) in a
     push!(ks,k)
-    push!(vs,v.fields)
+    push!(vs,_fdata(v,trians))
   end
   map_parts(vs...) do vs...
     b = []
@@ -131,7 +136,6 @@ function _prepare_fdata(trians,a)
     b
   end
 end
-
 
 # Vtk related
 
