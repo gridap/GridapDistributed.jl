@@ -11,10 +11,6 @@ function FESpaces.get_free_dof_ids(fs::DistributedFESpace)
   @abstractmethod
 end
 
-function FESpaces.get_dirichlet_dof_ids(f::DistributedFESpace)
-  @abstractmethod
-end
-
 function FESpaces.FEFunction(f::DistributedFESpace,::AbstractVector)
   @abstractmethod
 end
@@ -37,15 +33,7 @@ function FESpaces.zero_free_values(f::DistributedFESpace)
   fill!(vec,zero(eltype(vec)))
 end
 
-function FESpaces.zero_dirichlet_values(f::DistributedFESpace)
-  V = get_vector_type(f)
-  vec = allocate_vector(V,num_dirichlet_dofs(f))
-  fill!(vec,zero(eltype(vec)))
-end
-
 FESpaces.num_free_dofs(f::DistributedFESpace) = length(get_free_dof_ids(f))
-
-FESpaces.num_dirichlet_dofs(f::DistributedFESpace) = length(get_dirichlet_dof_ids(f))
 
 function Base.zero(f::DistributedFESpace)
   free_values = zero_free_values(f)
@@ -407,10 +395,7 @@ end
 function FESpaces.interpolate_dirichlet(u, f::DistributedSingleFieldFESpace)
   free_values = zero_free_values(f)
   dirichlet_values = get_dirichlet_dof_values(f)
-  map_parts(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
-    interpolate_dirichlet!(u,fvec,dvec,V)
-  end
-  FEFunction(f,free_values,dirichlet_values)
+  interpolate_dirichlet!(u,free_values,dirichlet_values,f)
 end
 
 function FESpaces.interpolate_dirichlet!(
@@ -426,10 +411,7 @@ end
 function FESpaces.interpolate_everywhere(u, f::DistributedSingleFieldFESpace)
   free_values = zero_free_values(f)
   dirichlet_values = get_dirichlet_dof_values(f)
-  map_parts(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
-    interpolate_everywhere!(u,fvec,dvec,V)
-  end
-  FEFunction(f,free_values,dirichlet_values)
+  interpolate_everywhere!(u,free_values,dirichlet_values,f)
 end
 
 function FESpaces.interpolate_everywhere!(
@@ -438,16 +420,6 @@ function FESpaces.interpolate_everywhere!(
   f::DistributedSingleFieldFESpace)
   map_parts(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
     interpolate_everywhere!(u,fvec,dvec,V)
-  end
-  FEFunction(f,free_values,dirichlet_values)
-end
-
-function FESpaces.interpolate_everywhere(u::DistributedCellField,
-  f::DistributedSingleFieldFESpace)
-  free_values = zero_free_values(f)
-  dirichlet_values = get_dirichlet_dof_values(f)
-  map_parts(local_views(u),f.spaces,local_views(free_values),dirichlet_values) do ui,V,fvec,dvec
-    interpolate_everywhere!(ui,fvec,dvec,V)
   end
   FEFunction(f,free_values,dirichlet_values)
 end
