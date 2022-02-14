@@ -1,27 +1,27 @@
-function generate_precompile_execution_file()
- source_code="""
- module sysimagegenerator
-    using TestApp
-    using PartitionedArrays
-    const PArrays = PartitionedArrays
-    using MPI
-
-    include("../../mpi/runtests_np4_body.jl")
-
-    prun(all_tests,mpi,(1,1))
-
-    MPI.Finalize()
-
- end #module
- """
- open("sysimagegenerator.jl","w") do io
-   println(io,source_code)
- end
-end
-
 using Pkg
 using PackageCompiler
-generate_precompile_execution_file()
+
+source_code="""
+module sysimagegenerator
+   using TestApp
+   using PartitionedArrays
+   const PArrays = PartitionedArrays
+   using MPI
+
+   include("../../mpi/runtests_np4_body.jl")
+
+   prun(all_tests,mpi,(1,1))
+
+   MPI.Finalize()
+
+end #module
+"""
+
+warmup_file = joinpath(@__DIR__,"sysimagegenerator.jl")
+open(warmup_file,"w") do io
+  println(io,source_code)
+end
+
 pkgs = Symbol[]
 push!(pkgs, :TestApp)
 
@@ -33,4 +33,4 @@ end
 
 create_sysimage(pkgs,
   sysimage_path=joinpath(@__DIR__,"TestApp.so"),
-  precompile_execution_file=joinpath(@__DIR__,"sysimagegenerator.jl"))
+  precompile_execution_file=warmup_file)
