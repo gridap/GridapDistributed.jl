@@ -22,5 +22,8 @@ function all_tests(parts)
   TestApp.PLaplacianTests.main(parts)
   PArrays.toc!(t,"PLaplacian")
 
+  TestApp.PeriodicBCsTests.main(parts)
+  PArrays.toc!(t,"PeriodicBCs")
+
   display(t)
 end
