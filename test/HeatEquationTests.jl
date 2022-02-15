@@ -1,4 +1,4 @@
-module DistributedHeatEquationTests
+module HeatEquationTests
 
 using Gridap
 using GridapODEs
