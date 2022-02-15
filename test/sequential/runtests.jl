@@ -26,4 +26,8 @@ end
   include("TransientMultiFieldDistributedCellFieldTests.jl")
 end
 
+@time @testset "HeatEquation" begin include("HeatEquationTests.jl") end
+
+@time @testset "StokesOpenBoundary" begin include("StokesOpenBoundaryTests.jl") end
+
 end # module

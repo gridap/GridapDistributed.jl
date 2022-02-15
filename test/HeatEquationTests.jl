@@ -33,14 +33,16 @@ function main(parts)
   dΩ = Measure(Ω,degree)
 
   #
+  m(u,v) = ∫(u*v)dΩ
   a(u,v) = ∫(∇(v)⋅∇(u))dΩ
-  b(v,t) = ∫(v*f(t))dΩ
+  b(t,v) = ∫(v*f(t))dΩ
 
-  res(t,u,v) = a(u,v) + ∫(∂t(u)*v)dΩ - b(v,t)
+  res(t,u,v) = a(u,v) + m(∂t(u),v) - b(t,v)
   jac(t,u,du,v) = a(du,v)
-  jac_t(t,u,dut,v) = ∫(dut*v)dΩ
+  jac_t(t,u,dut,v) = m(dut,v)
 
   op = TransientFEOperator(res,jac,jac_t,U,V0)
+  op_constant = TransientConstantMatrixFEOperator(m,a,b,U,V0)
 
   t0 = 0.0
   tF = 1.0
@@ -53,12 +55,19 @@ function main(parts)
   ode_solver = ThetaMethod(ls,dt,θ)
 
   sol_t = solve(ode_solver,op,uh0,t0,tF)
+  sol_t_const = solve(ode_solver,op_constant,uh0,t0,tF)
 
   l2(w) = w*w
 
   tol = 1.0e-6
 
   for (uh_tn, tn) in sol_t
+    e = u(tn) - uh_tn
+    el2 = sqrt(sum( ∫(l2(e))dΩ ))
+    @test el2 < tol
+  end
+
+  for (uh_tn, tn) in sol_t_const
     e = u(tn) - uh_tn
     el2 = sqrt(sum( ∫(l2(e))dΩ ))
     @test el2 < tol

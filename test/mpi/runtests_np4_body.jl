@@ -34,5 +34,8 @@ function all_tests(parts)
   TestApp.HeatEquationTests.main(parts)
   PArrays.toc!(t,"HeatEquation")
 
+  TestApp.StokesOpenBoundaryTests.main(parts)
+  PArrays.toc!(t,"StokesOpenBoundary")
+
   display(t)
 end
