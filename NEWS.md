@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Support for periodic boundary conditions for `CartesianDiscreteModel`. Since PR [#79](https://github.com/gridap/GridapDistributed.jl/pull/79)
  - Skeleton documentation and some content. Since PR [#77](https://github.com/gridap/GridapDistributed.jl/pull/77)
+ - Added `interpolate_everywhere` and `interpolate_dirichlet` functions. Since PR [#74](https://github.com/gridap/GridapDistributed.jl/pull/74)
 
 ### Fixed
 - Visualization of functions and numbers.  Since PR [#78](https://github.com/gridap/GridapDistributed.jl/pull/78)

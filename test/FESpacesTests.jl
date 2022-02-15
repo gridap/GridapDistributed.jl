@@ -34,9 +34,26 @@ function main(parts,das)
   uh = interpolate(u,U)
   eh = u - uh
 
+  uh_dir = interpolate_dirichlet(u,U)
+  free_values = zero_free_values(U)
+  dirichlet_values = get_dirichlet_dof_values(U)
+  uh_dir2 = interpolate_dirichlet!(u,free_values,dirichlet_values,U)
+
+  uh_everywhere = interpolate_everywhere(u,U)
+  uh_everywhere_ = interpolate_everywhere!(u,free_values,dirichlet_values,U)
+  eh2 = u - uh_everywhere
+
+  uh_everywhere2 = interpolate_everywhere(uh_everywhere,U)
+  uh_everywhere2_ = interpolate_everywhere!(uh_everywhere,free_values,dirichlet_values,U)
+  eh3 = u - uh_everywhere2
+
   dΩ = Measure(Ω,3)
   cont  = ∫( abs2(eh) )dΩ
+  cont2  = ∫( abs2(eh2) )dΩ
+  cont3  = ∫( abs2(eh3) )dΩ
   @test sqrt(sum(cont)) < 1.0e-9
+  @test sqrt(sum(cont2)) < 1.0e-9
+  @test sqrt(sum(cont3)) < 1.0e-9
 
   # Assembly
   Ωass  = Triangulation(das,model)
