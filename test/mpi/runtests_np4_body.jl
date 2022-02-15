@@ -28,5 +28,8 @@ function all_tests(parts)
    TestApp.TransientMultiFieldDistributedCellFieldTests.main(parts)
    PArrays.toc!(t,"TransientMultiFieldDistributedCellField")
 
+  TestApp.PeriodicBCsTests.main(parts)
+  PArrays.toc!(t,"PeriodicBCs")
+
   display(t)
 end

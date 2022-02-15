@@ -4,6 +4,8 @@ using Test
 
 @time @testset "Geometry" begin include("GeometryTests.jl") end
 
+@time @testset "PeriodicBCs" begin include("PeriodicBCsTests.jl") end
+
 @time @testset "CellData" begin include("CellDataTests.jl") end
 
 @time @testset "FESpaces" begin include("FESpacesTests.jl") end
