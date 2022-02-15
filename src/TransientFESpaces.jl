@@ -1,28 +1,32 @@
 # Functions for transient FE spaces
 
-function Fields.evaluate!(Ut::DistributedSingleFieldFESpace,U::TransientTrialFESpace,t::Real)
-  if isa(U.dirichlet_t,Vector)
-    objects_at_t = map( o->o(t), U.dirichlet_t)
-  else
-    objects_at_t = U.dirichlet_t(t)
-  end
-  TrialFESpace!(Ut,objects_at_t)
-  Ut
-end
-
 Fields.evaluate(U::DistributedSingleFieldFESpace,t::Nothing) = U
 
 (U::DistributedSingleFieldFESpace)(t) = U
 
 ∂t(U::DistributedSingleFieldFESpace) = HomogeneousTrialFESpace(U)
+∂t(U::DistributedMultiFieldFESpace) = MultiFieldFESpace(∂t.(U.field_fe_space))
 ∂tt(U::DistributedSingleFieldFESpace) = HomogeneousTrialFESpace(U)
+∂tt(U::DistributedMultiFieldFESpace) = MultiFieldFESpace(∂tt.(U.field_fe_spaces))
 
+function TransientMultiFieldFESpace(spaces::Vector{<:DistributedSingleFieldFESpace})
+  MultiFieldFESpace(spaces)
+end
 
 # Functions for transient FE Functions
 
 function ODETools.allocate_jacobian(
   op::TransientFETools.TransientFEOperatorFromWeakForm,
   duh::DistributedCellField,
+  cache)
+  _matdata_jacobians = TransientFETools.fill_initial_jacobians(op,duh)
+  matdata = _vcat_distributed_matdata(_matdata_jacobians)
+  allocate_matrix(op.assem_t,matdata)
+end
+
+function ODETools.allocate_jacobian(
+  op::TransientFETools.TransientFEOperatorFromWeakForm,
+  duh::DistributedMultiFieldFEFunction,
   cache)
   _matdata_jacobians = TransientFETools.fill_initial_jacobians(op,duh)
   matdata = _vcat_distributed_matdata(_matdata_jacobians)
