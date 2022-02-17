@@ -1,5 +1,5 @@
 module StokesOpenBoundaryTestsSeq
 using PartitionedArrays
-include("../StokesOpenBoundaryTests.jl")
+include("../../GridapODEs/StokesOpenBoundaryTests.jl")
 prun(StokesOpenBoundaryTests.main,sequential,(2,2))
 end # module

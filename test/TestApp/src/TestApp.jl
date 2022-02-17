@@ -6,4 +6,8 @@ module TestApp
   include("../../PLaplacianTests.jl")
   include("../../PoissonTests.jl")
   include("../../PeriodicBCsTests.jl")
-end 
+  include("../../GridapODEs/TransientDistributedCellFieldTests.jl")
+  include("../../GridapODEs/TransientMultiFieldDistributedCellFieldTests.jl")
+  include("../../GridapODEs/HeatEquationTests.jl")
+  include("../../GridapODEs/StokesOpenBoundaryTests.jl")
+end
