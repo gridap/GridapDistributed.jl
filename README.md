@@ -23,7 +23,7 @@ At present, `GridapDistributed.jl` provides scalable parallel data structures fo
 
 ## Simple example (MPI-parallel execution mode)
 
-The following Julia code snippet solves a 2D Poisson problem in parallel on the unit square. The example follows the MPI-parallel execution mode (note the `mpi` argument to the `prun` function call) and thus it must be executed on 4 MPI tasks (note the mesh is partitioned into 4 parts) using the instructions [below](https://github.com/gridap/GridapDistributed.jl/edit/master/README.md#mpi-parallel-julia-script-execution-instructions). If a user wants to use the sequential execution mode, one just replaces `mpi` by `sequential` in the call to `prun`. `GridapDistributed.jl` sequential execution mode scripts are executed as any other julia sequential script.
+The following Julia code snippet solves a 2D Poisson problem in parallel on the unit square. The example follows the MPI-parallel execution mode (note the `mpi` argument to the `prun` function call) and thus it must be executed on 4 MPI tasks (note the mesh is partitioned into 4 parts) using the instructions [below](https://github.com/gridap/GridapDistributed.jl#mpi-parallel-julia-script-execution-instructions). If a user wants to use the sequential execution mode, one just replaces `mpi` by `sequential` in the call to `prun`. `GridapDistributed.jl` sequential execution mode scripts are executed as any other julia sequential script.
 
 ```julia
 using Gridap
