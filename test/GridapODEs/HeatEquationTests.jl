@@ -1,7 +1,7 @@
 module HeatEquationTests
 
 using Gridap
-using GridapODEs
+using Gridap.GridapODEs
 using GridapDistributed
 using PartitionedArrays
 using Test

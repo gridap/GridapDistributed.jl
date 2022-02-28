@@ -2,9 +2,9 @@ module TransientMultiFieldDistributedCellFieldTests
 
 using Gridap
 using GridapDistributed
-using GridapODEs: ∂t, ∂tt
-using GridapODEs.TransientFETools: TransientCellField
-using GridapODEs.TransientFETools: TransientTrialFESpace, TransientMultiFieldFESpace
+using Gridap.GridapODEs.ODETools: ∂t, ∂tt
+using Gridap.GridapODEs.TransientFETools: TransientCellField
+using Gridap.GridapODEs.TransientFETools: TransientTrialFESpace, TransientMultiFieldFESpace
 using PartitionedArrays
 using Test
 

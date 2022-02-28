@@ -3,7 +3,7 @@ module StokesOpenBoundaryTests
 using Gridap
 using LinearAlgebra
 using Test
-using GridapODEs
+using Gridap.GridapODEs
 using GridapDistributed
 using PartitionedArrays
 
