@@ -449,3 +449,78 @@ function _find_owned_skeleton_facets(glue,gids)
   end
   findall(part->part==gids.part,tface_to_part)
 end
+
+function add_ghost_cells(dtrian::DistributedTriangulation)
+  dmodel = dtrian.model
+  gids = dmodel.gids
+  mcell_intrian = map_parts(dmodel.models,dtrian.trians) do model, trian
+    @notimplementedif num_cell_dims(model) != num_cell_dims(trian)
+    D = num_cell_dims(model)
+    glue = get_glue(trian,Val(D))
+    @assert isa(glue,FaceToFaceGlue)
+    nmcells = num_cells(model)
+    mcell_intrian = fill(false,nmcells)
+    tcell_to_mcell = glue.tface_to_mface
+    mcell_intrian[tcell_to_mcell] .= true
+    mcell_intrian
+  end
+  exchange!(mcell_intrian,gids.exchanger)
+  trians = map_parts(Triangulation,dmodel.models,mcell_intrian)
+  DistributedTriangulation(trians,dmodel)
+end
+
+function generate_cell_gids(dtrian::DistributedTriangulation)
+
+  dmodel = dtrian.model
+  mgids = dmodel.gids
+
+  # count number owned cells
+  notcells, tcell_to_mcell = map_parts(
+    dmodel.models,dtrian.trians,mgids.partition) do model,trian,partition
+    @notimplementedif num_cell_dims(model) != num_cell_dims(trian)
+    D = num_cell_dims(model)
+    glue = get_glue(trian,Val(D))
+    @assert isa(glue,FaceToFaceGlue)
+    tcell_to_mcell = glue.tface_to_mface
+    notcells = count(tcell_to_mcell) do mcell
+      partition.lid_to_part[mcell] == partition.part
+    end
+    notcells, tcell_to_mcell
+  end
+
+  # Find the global range of owned dofs
+  first_gtcell, ngtcellsplus1 = xscan(+,reduce,notcells,init=1)
+  ngtcells = ngtcellsplus1 - 1
+
+  # Assign global cell ids to owned cells
+  mcell_to_gtcell = map_parts(
+    first_gtcell,tcell_to_mcell,mgids.partition) do first_gtcell,tcell_to_mcell,partition
+    mcell_to_gtcell = zeros(Int,length(partition.lid_to_part))
+    gtcell = first_gtcell
+    for mcell in tcell_to_mcell
+      if partition.lid_to_part[mcell] == partition.part
+        mcell_to_gtcell[mcell] = gtcell
+        gtcell += 1
+      end
+    end
+    mcell_to_gtcell
+  end
+
+  # Assign global cell ids to ghost cells
+  exchange!(mcell_to_gtcell,mgids.exchanger)
+
+  # Prepare new partition
+  partition = map_parts(mcell_to_gtcell,tcell_to_mcell,mgids.partition) do mcell_to_gtcell,tcell_to_mcell,partition
+    tcell_to_gtcell = mcell_to_gtcell[tcell_to_mcell]
+    tcell_to_part = partition.lid_to_part[tcell_to_mcell]
+    IndexSet(partition.part,tcell_to_gtcell,tcell_to_part)
+  end
+
+  # Prepare the PRange
+  neighbors = mgids.exchanger.parts_snd
+  exchanger = Exchanger(partition,neighbors)
+  gids = PRange(ngtcells,partition,exchanger)
+
+  gids
+end
+
