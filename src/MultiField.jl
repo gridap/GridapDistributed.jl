@@ -322,7 +322,7 @@ function generate_multi_field_gids(
   # Merge neighbors
   function merge_neigs(f_neigs)
     dict = Dict{Int32,Int32}()
-    for f in length(f_neigs)
+    for f in 1:length(f_neigs)
       for neig in f_neigs[f]
         dict[neig] = neig
       end
