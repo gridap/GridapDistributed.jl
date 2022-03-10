@@ -18,6 +18,6 @@ using Test
 
 @time @testset "DivConformingTests" begin include("DivConformingTests.jl") end
 
-@time @testset "GridapODEs" begin include("GridapODEs/runtests.jl") end
+@time @testset "ODEs" begin include("ODEs/runtests.jl") end
 
 end # module

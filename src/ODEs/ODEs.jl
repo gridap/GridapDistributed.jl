@@ -1,4 +1,4 @@
-module GridapODEs
+module ODEs
 
 using GridapDistributed: DistributedCellDatum, DistributedCellField, DistributedMeasure
 using GridapDistributed: DistributedSingleFieldFEFunction, DistributedMultiFieldFEFunction
@@ -12,11 +12,11 @@ using Gridap.Algebra
 using Gridap.FESpaces
 using Gridap.MultiField: num_fields
 using Gridap.Helpers: first_and_tail
-using Gridap.GridapODEs.TransientFETools
-using Gridap.GridapODEs.ODETools
+using Gridap.ODEs.TransientFETools
+using Gridap.ODEs.ODETools
 using PartitionedArrays
 
-import Gridap.GridapODEs.ODETools: ∂t, ∂tt
+import Gridap.ODEs.ODETools: ∂t, ∂tt
 import Gridap.TensorValues: inner, outer, double_contraction, symmetric_part
 import LinearAlgebra: det, tr, cross, dot, ⋅
 import Base: inv, abs, abs2, *, +, -, /, adjoint, transpose, real, imag, conj

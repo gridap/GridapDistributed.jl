@@ -41,6 +41,6 @@ include("DivConformingFESpaces.jl")
 
 include("MultiField.jl")
 
-include("GridapODEs/GridapODEs.jl")
+include("ODEs/ODEs.jl")
 
 end # module

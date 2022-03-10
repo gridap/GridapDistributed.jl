@@ -2,9 +2,9 @@ module TransientMultiFieldDistributedCellFieldTests
 
 using Gridap
 using GridapDistributed
-using Gridap.GridapODEs.ODETools: ∂t, ∂tt
-using Gridap.GridapODEs.TransientFETools: TransientCellField
-using Gridap.GridapODEs.TransientFETools: TransientTrialFESpace, TransientMultiFieldFESpace
+using Gridap.ODEs.ODETools: ∂t, ∂tt
+using Gridap.ODEs.TransientFETools: TransientCellField
+using Gridap.ODEs.TransientFETools: TransientTrialFESpace, TransientMultiFieldFESpace
 using PartitionedArrays
 using Test
 
@@ -35,28 +35,28 @@ function main(parts)
   @test isa(dda(0),GridapDistributed.DistributedMultiFieldFEFunction)
 
   b(t) = TransientCellField(a(t),(da(t),dda(t)))
-  @test isa(b(0),GridapDistributed.GridapODEs.TransientDistributedCellField)
-  @test isa(b(0),GridapDistributed.GridapODEs.TransientMultiFieldDistributedCellField)
+  @test isa(b(0),GridapDistributed.ODEs.TransientDistributedCellField)
+  @test isa(b(0),GridapDistributed.ODEs.TransientMultiFieldDistributedCellField)
 
   db(t) = ∂t(b(t))
-  @test isa(db(0),GridapDistributed.GridapODEs.TransientDistributedCellField)
-  @test isa(db(0),GridapDistributed.GridapODEs.TransientMultiFieldDistributedCellField)
+  @test isa(db(0),GridapDistributed.ODEs.TransientDistributedCellField)
+  @test isa(db(0),GridapDistributed.ODEs.TransientMultiFieldDistributedCellField)
 
   ddb(t) = ∂t(db(t))
-  @test isa(ddb(0),GridapDistributed.GridapODEs.TransientDistributedCellField)
-  @test isa(ddb(0),GridapDistributed.GridapODEs.TransientMultiFieldDistributedCellField)
+  @test isa(ddb(0),GridapDistributed.ODEs.TransientDistributedCellField)
+  @test isa(ddb(0),GridapDistributed.ODEs.TransientMultiFieldDistributedCellField)
 
   b1(t) = b(t)[1]
-  @test isa(b1(0),GridapDistributed.GridapODEs.TransientDistributedCellField)
-  @test isa(b1(0),GridapDistributed.GridapODEs.TransientSingleFieldDistributedCellField)
+  @test isa(b1(0),GridapDistributed.ODEs.TransientDistributedCellField)
+  @test isa(b1(0),GridapDistributed.ODEs.TransientSingleFieldDistributedCellField)
 
   db1(t) = ∂t(b1(t))
-  @test isa(db1(0),GridapDistributed.GridapODEs.TransientDistributedCellField)
-  @test isa(db1(0),GridapDistributed.GridapODEs.TransientSingleFieldDistributedCellField)
+  @test isa(db1(0),GridapDistributed.ODEs.TransientDistributedCellField)
+  @test isa(db1(0),GridapDistributed.ODEs.TransientSingleFieldDistributedCellField)
 
   ddb1(t) = ∂t(db1(t))
-  @test isa(ddb1(0),GridapDistributed.GridapODEs.TransientDistributedCellField)
-  @test isa(ddb1(0),GridapDistributed.GridapODEs.TransientSingleFieldDistributedCellField)
+  @test isa(ddb1(0),GridapDistributed.ODEs.TransientDistributedCellField)
+  @test isa(ddb1(0),GridapDistributed.ODEs.TransientSingleFieldDistributedCellField)
 
   @test (∑(∫(b(0.5)[1])dΩ)) == (∑(∫(b1(0.5))dΩ))
   @test (∑(∫(db(0.5)[1])dΩ)) == (∑(∫(db1(0.5))dΩ))

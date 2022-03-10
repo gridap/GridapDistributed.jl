@@ -1,4 +1,4 @@
-module GridapODEsTests
+module ODEsTests
 
 using Test
 
