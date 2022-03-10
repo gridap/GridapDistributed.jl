@@ -363,6 +363,12 @@ function Geometry.InterfaceTriangulation(
   filter_cells_when_needed(portion,gids,trian)
 end
 
+function Geometry.InterfaceTriangulation(a::DistributedTriangulation,b::DistributedTriangulation)
+  trians = map_parts(InterfaceTriangulation,a.trians,b.trians)
+  @assert a.model === b.model
+  DistributedTriangulation(trians,a.model)
+end
+
 function filter_cells_when_needed(
   portion::PArrays.WithGhost,
   cell_gids::AbstractIndexSet,
