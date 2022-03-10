@@ -15,13 +15,15 @@ At present, `GridapDistributed.jl` provides scalable parallel data structures fo
 
 ## Documentation
 
-`GridapDistributed.jl` and `Gridap.jl` share almost the same high-level API. We refer to the documentation of `Gridap.jl` for more details about the API. In the example below, we show the minor differences among the APIs of `Gridap.jl` and `GridapDistributed.jl`. We also refer to the following [tutorial](https://gridap.github.io/Tutorials/dev/pages/t016_poisson_distributed/) for additional examples and rationale.
+`GridapDistributed.jl` and `Gridap.jl` share almost the same high-level API. We refer to the documentation of `Gridap.jl` for more details about the API. In the example below, we show the minor differences among the APIs of `Gridap.jl` and `GridapDistributed.jl`. We also refer to the following [tutorial](https://gridap.github.io/Tutorials/dev/pages/t016_poisson_distributed/) and the [`GridapDistributed.jl`](https://gridap.github.io/GridapDistributed.jl/dev) documentation for additional examples and rationale.
 
-`GridapDistributed.jl` driver programs can be either run in sequential execution mode (very useful for developing/debugging parallel programs, see `test/sequential/` folder for examples) or in message-passing (MPI) execution mode (when you want to deploy the code in the actual parallel computer and perform a fast simulation, see `test/mpi/` folder for examples).
+## Execution modes
 
-## Simple example
+`GridapDistributed.jl` driver programs can be either run in sequential execution mode (very useful for developing/debugging parallel programs, see `test/sequential/` folder for examples) or in message-passing (MPI) execution mode (when you want to deploy the code in the actual parallel computer and perform a fast simulation, see `test/mpi/` folder for examples). In any case, even if you do no have access to a parallel machine, you should be able to run in both modes in your local desktop/laptop. 
 
-The following Julia code snippet solves a 2D Poisson problem in parallel on the unit square
+## Simple example (MPI-parallel execution mode)
+
+The following Julia code snippet solves a 2D Poisson problem in parallel on the unit square. The example follows the MPI-parallel execution mode (note the `mpi` argument to the `prun` function call) and thus it must be executed on 4 MPI tasks (note the mesh is partitioned into 4 parts) using the instructions [below](https://github.com/gridap/GridapDistributed.jl#mpi-parallel-julia-script-execution-instructions). If a user wants to use the sequential execution mode, one just replaces `mpi` by `sequential` in the call to `prun`. `GridapDistributed.jl` sequential execution mode scripts are executed as any other julia sequential script.
 
 ```julia
 using Gridap
@@ -61,9 +63,7 @@ We provide the full set of scalable linear and nonlinear solvers in the [PETSc](
 
 Distributed unstructured meshes are generated using [`GridapGmsh.jl`](https://github.com/gridap/GridapGmsh.jl). We also refer to [`GridapP4est.jl`](https://github.com/gridap/GridapP4est.jl), for peta-scale handling of meshes which can be decomposed as forest of quadtrees/octrees of the computational domain. Examples of distributed solvers that combine all these building blocks can be found in the following [tutorial](https://gridap.github.io/Tutorials/dev/pages/t016_poisson_distributed/).
 
-
-
-## A more complex example
+## A more complex example  (MPI-parallel execution mode)
 
 In the following example, we combine `GridapDistributed` (for the parallel implementation of the PDE discretisation), `GridapGmsh` (for the distributed unstructured mesh), and `GridapPETSc` (for the linear solver step). The mesh file can be found [here](https://github.com/gridap/Tutorials/blob/master/models/demo.msh).
 
