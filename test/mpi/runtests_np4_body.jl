@@ -25,5 +25,8 @@ function all_tests(parts)
   TestApp.PeriodicBCsTests.main(parts)
   PArrays.toc!(t,"PeriodicBCs")
 
+  TestApp.SurfaceCouplingTests.main(parts)
+  PArrays.toc!(t,"SurfaceCoupling")
+
   display(t)
 end

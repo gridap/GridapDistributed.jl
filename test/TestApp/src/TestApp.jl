@@ -6,4 +6,5 @@ module TestApp
   include("../../PLaplacianTests.jl")
   include("../../PoissonTests.jl")
   include("../../PeriodicBCsTests.jl")
+  include("../../SurfaceCouplingTests.jl")
 end 
