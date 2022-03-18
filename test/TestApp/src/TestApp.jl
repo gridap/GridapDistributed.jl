@@ -7,4 +7,8 @@ module TestApp
   include("../../PoissonTests.jl")
   include("../../PeriodicBCsTests.jl")
   include("../../SurfaceCouplingTests.jl")
-end 
+  include("../../TransientDistributedCellFieldTests.jl")
+  include("../../TransientMultiFieldDistributedCellFieldTests.jl")
+  include("../../HeatEquationTests.jl")
+  include("../../StokesOpenBoundaryTests.jl")
+end
