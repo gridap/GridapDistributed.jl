@@ -6,6 +6,7 @@ module TestApp
   include("../../PLaplacianTests.jl")
   include("../../PoissonTests.jl")
   include("../../PeriodicBCsTests.jl")
+  include("../../SurfaceCouplingTests.jl")
   include("../../TransientDistributedCellFieldTests.jl")
   include("../../TransientMultiFieldDistributedCellFieldTests.jl")
   include("../../HeatEquationTests.jl")

@@ -445,6 +445,19 @@ function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
   DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
 
+function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;kwargs...)
+  trian = add_ghost_cells(_trian)
+  trian_gids = generate_cell_gids(trian)
+  spaces = map_parts(trian.trians) do t
+    FESpace(t,reffe;kwargs...)
+  end
+  cell_to_ldofs = map_parts(get_cell_dof_ids,spaces)
+  nldofs = map_parts(num_free_dofs,spaces)
+  gids = generate_gids(trian_gids,cell_to_ldofs,nldofs)
+  vector_type = _find_vector_type(spaces,gids)
+  DistributedSingleFieldFESpace(spaces,gids,vector_type)
+end
+
 function _find_vector_type(spaces,gids)
   #TODO Now the user can select the local vector type but not the global one
   # new kw-arg global_vector_type ?

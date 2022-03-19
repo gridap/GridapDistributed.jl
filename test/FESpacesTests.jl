@@ -25,8 +25,10 @@ function main(parts,das)
   reffe = ReferenceFE(lagrangian,Float64,1)
   V = TestFESpace(model,reffe,dirichlet_tags="boundary")
   U = TrialFESpace(u,V)
+  V2 = FESpace(Ω,reffe)
   @test get_vector_type(V) <: PVector
   @test get_vector_type(U) <: PVector
+  @test get_vector_type(V2) <: PVector
 
   free_values = PVector(1.0,V.gids)
   fh = FEFunction(U,free_values)

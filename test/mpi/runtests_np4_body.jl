@@ -31,6 +31,9 @@ function all_tests(parts)
   TestApp.PeriodicBCsTests.main(parts)
   PArrays.toc!(t,"PeriodicBCs")
 
+  TestApp.SurfaceCouplingTests.main(parts)
+  PArrays.toc!(t,"SurfaceCoupling")
+
   TestApp.HeatEquationTests.main(parts)
   PArrays.toc!(t,"HeatEquation")
 

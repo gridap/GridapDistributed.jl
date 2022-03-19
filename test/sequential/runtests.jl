@@ -18,6 +18,8 @@ using Test
 
 @time @testset "DivConformingTests" begin include("DivConformingTests.jl") end
 
+@time @testset "SurfaceCouplingTests" begin include("SurfaceCouplingTests.jl") end
+
 @time @testset "TransientDistributedCellFieldTests" begin
   include("TransientDistributedCellFieldTests.jl")
 end

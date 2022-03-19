@@ -64,6 +64,35 @@ function main(parts)
   Γ = Boundary(no_ghost,model,tags="boundary")
   writevtk(Γ,joinpath(output,"Γ"))
 
+  function is_in(coords)
+    R = 1.6
+    n = length(coords)
+    x = (1/n)*sum(coords) - 2.0
+    d = x[1]^2 + x[2]^2 - R^2
+    d < 0
+  end
+
+  cell_to_entity = map_parts(model.models) do model
+    grid = get_grid(model)
+    cell_to_coords = get_cell_coordinates(grid)
+    cell_to_is_solid = lazy_map(is_in,cell_to_coords)
+    cell_to_is_fluid = lazy_map(!,cell_to_is_solid)
+    labels = get_face_labeling(model)
+    cell_to_entity = labels.d_to_dface_to_entity[end]
+    solid = maximum(cell_to_entity) + 1
+    fluid = solid + 1
+    cell_to_entity[Gridap.Arrays.collect1d(cell_to_is_solid)] .= solid
+    cell_to_entity[Gridap.Arrays.collect1d(cell_to_is_fluid)] .= fluid
+    add_tag!(labels,"solid",[solid])
+    add_tag!(labels,"fluid",[fluid])
+    cell_to_entity
+  end
+  exchange!(cell_to_entity,model.gids.exchanger) # Make tags consistent
+
+  Ωs = Interior(model,tags="solid")
+  Ωf = Interior(model,tags="fluid")
+  Γfs = Interface(Ωf,Ωs)
+
 end
 
 function test_local_part_face_labelings_consistency(lmodel::CartesianDiscreteModel{D},gids,gmodel) where {D}
