@@ -7,64 +7,16 @@ using GridapDistributed
 using PartitionedArrays
 using Test
 
-function main(parts)
-  main(parts,SubAssembledRows())
-  main(parts,FullyAssembledRows())
-end
+u((x,y)) = x+y
 
-function main(parts,das)
-  output = mkpath(joinpath(@__DIR__,"output"))
-
-  domain = (0,4,0,4)
-  cells = (4,4)
-  model = CartesianDiscreteModel(parts,domain,cells)
-  Ω = Triangulation(model)
-  Γ = Boundary(model)
-
-  u((x,y)) = x+y
-  reffe = ReferenceFE(lagrangian,Float64,1)
-  V = TestFESpace(model,reffe,dirichlet_tags="boundary")
-  U = TrialFESpace(u,V)
-  V2 = FESpace(Ω,reffe)
-  @test get_vector_type(V) <: PVector
-  @test get_vector_type(U) <: PVector
-  @test get_vector_type(V2) <: PVector
-
-  free_values = PVector(1.0,V.gids)
-  fh = FEFunction(U,free_values)
-  zh = zero(U)
-  uh = interpolate(u,U)
-  eh = u - uh
-
-  uh_dir = interpolate_dirichlet(u,U)
-  free_values = zero_free_values(U)
-  dirichlet_values = get_dirichlet_dof_values(U)
-  uh_dir2 = interpolate_dirichlet!(u,free_values,dirichlet_values,U)
-
-  uh_everywhere = interpolate_everywhere(u,U)
-  uh_everywhere_ = interpolate_everywhere!(u,free_values,dirichlet_values,U)
-  eh2 = u - uh_everywhere
-
-  uh_everywhere2 = interpolate_everywhere(uh_everywhere,U)
-  uh_everywhere2_ = interpolate_everywhere!(uh_everywhere,free_values,dirichlet_values,U)
-  eh3 = u - uh_everywhere2
-
-  dΩ = Measure(Ω,3)
-  cont  = ∫( abs2(eh) )dΩ
-  cont2  = ∫( abs2(eh2) )dΩ
-  cont3  = ∫( abs2(eh3) )dΩ
-  @test sqrt(sum(cont)) < 1.0e-9
-  @test sqrt(sum(cont2)) < 1.0e-9
-  @test sqrt(sum(cont3)) < 1.0e-9
-
+function assemble_tests(das,dΩ,dΩass,U,V)
   # Assembly
-  Ωass  = Triangulation(das,model)
-  dΩass = Measure(Ωass,3)
   dv = get_fe_basis(V)
   du = get_trial_fe_basis(U)
   a(u,v) = ∫( ∇(v)⋅∇(u) )dΩass
   l(v) = ∫( 0*dv )dΩass
   assem = SparseMatrixAssembler(U,V,das)
+  zh = zero(U)
 
   data = collect_cell_matrix_and_vector(U,V,a(du,dv),l(dv),zh)
   A1,b1 = assemble_matrix_and_vector(assem,data)
@@ -77,12 +29,6 @@ function main(parts,das)
   map_parts(A1.values, A1.rows.partition, A1.cols.partition) do mat, rows, cols
      @test size(mat) == (num_lids(rows),num_lids(cols))
   end
-
-  writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
-    celldata=["err"=>cont[Ω]],
-    cellfields=["uh"=>uh,"zh"=>zh,"eh"=>eh])
-
-  writevtk(Γ,joinpath(output,"Γ"),cellfields=["uh"=>uh])
 
   A2,b2 = allocate_matrix_and_vector(assem,data)
   assemble_matrix_and_vector!(A2,b2,assem,data)
@@ -122,7 +68,84 @@ function main(parts,das)
   b2=allocate_vector(assem,vecdata)
   assemble_vector!(b2,assem,vecdata)
   @test abs(sum(b2)-length(b2)) < 1.0e-12
+end
 
+
+function main(parts)
+  main(parts,SubAssembledRows())
+  main(parts,FullyAssembledRows())
+end
+
+function main(parts,das)
+  output = mkpath(joinpath(@__DIR__,"output"))
+
+  domain = (0,4,0,4)
+  cells = (4,4)
+  model = CartesianDiscreteModel(parts,domain,cells)
+  Ω = Triangulation(model)
+  Γ = Boundary(model)
+
+  reffe = ReferenceFE(lagrangian,Float64,1)
+  V = TestFESpace(model,reffe,dirichlet_tags="boundary")
+  U = TrialFESpace(u,V)
+  V2 = FESpace(Ω,reffe)
+  @test get_vector_type(V) <: PVector
+  @test get_vector_type(U) <: PVector
+  @test get_vector_type(V2) <: PVector
+
+  free_values = PVector(1.0,V.gids)
+  fh = FEFunction(U,free_values)
+  zh = zero(U)
+  uh = interpolate(u,U)
+  eh = u - uh
+
+  uh_dir = interpolate_dirichlet(u,U)
+  free_values = zero_free_values(U)
+  dirichlet_values = get_dirichlet_dof_values(U)
+  uh_dir2 = interpolate_dirichlet!(u,free_values,dirichlet_values,U)
+
+  uh_everywhere = interpolate_everywhere(u,U)
+  uh_everywhere_ = interpolate_everywhere!(u,free_values,dirichlet_values,U)
+  eh2 = u - uh_everywhere
+
+  uh_everywhere2 = interpolate_everywhere(uh_everywhere,U)
+  uh_everywhere2_ = interpolate_everywhere!(uh_everywhere,free_values,dirichlet_values,U)
+  eh3 = u - uh_everywhere2
+
+  dΩ = Measure(Ω,3)
+  cont  = ∫( abs2(eh) )dΩ
+  cont2  = ∫( abs2(eh2) )dΩ
+  cont3  = ∫( abs2(eh3) )dΩ
+  @test sqrt(sum(cont)) < 1.0e-9
+  @test sqrt(sum(cont2)) < 1.0e-9
+  @test sqrt(sum(cont3)) < 1.0e-9
+
+  writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
+           celldata=["err"=>cont[Ω]],
+           cellfields=["uh"=>uh,"zh"=>zh,"eh"=>eh])
+
+  writevtk(Γ,joinpath(output,"Γ"),cellfields=["uh"=>uh])
+
+  # Assembly
+  Ωass  = Triangulation(das,model)
+  dΩass = Measure(Ωass,3)
+  assemble_tests(das,dΩ,dΩass,U,V)
+
+  # I need to use the square [0,2]² in the sequel so that
+  # when integrating over the interior facets, the entries
+  # of the vector which is assembled in assemble_tests(...)
+  # become one.
+  domain = (0,2,0,2)
+  cells = (4,4)
+  model = CartesianDiscreteModel(parts,domain,cells)
+  D     = num_cell_dims(model)
+  Γ     = Triangulation(ReferenceFE{D-1},model)
+  Γass  = Triangulation(das,ReferenceFE{D-1},model)
+  dΓ    = Measure(Γ,3)
+  dΓass = Measure(Γass,3)
+  V = TestFESpace(Γ,reffe,dirichlet_tags="boundary")
+  U = TrialFESpace(u,V)
+  assemble_tests(das,dΓ,dΓass,U,V)
 end
 
 end # module
