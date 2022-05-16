@@ -42,8 +42,10 @@ function main(parts,das)
   uh_dir2 = interpolate_dirichlet!(u,free_values,dirichlet_values,U)
 
   uh_everywhere = interpolate_everywhere(u,U)
-  uh_everywhere_ = interpolate_everywhere!(u,free_values,dirichlet_values,U)
+  dirichlet_values0 = zero_dirichlet_values(U)
+  uh_everywhere_ = interpolate_everywhere!(u,free_values,dirichlet_values0,U)
   eh2 = u - uh_everywhere
+  eh2_ = u - uh_everywhere_
 
   uh_everywhere2 = interpolate_everywhere(uh_everywhere,U)
   uh_everywhere2_ = interpolate_everywhere!(uh_everywhere,free_values,dirichlet_values,U)
@@ -52,9 +54,11 @@ function main(parts,das)
   dΩ = Measure(Ω,3)
   cont  = ∫( abs2(eh) )dΩ
   cont2  = ∫( abs2(eh2) )dΩ
+  cont2_  = ∫( abs2(eh2_) )dΩ
   cont3  = ∫( abs2(eh3) )dΩ
   @test sqrt(sum(cont)) < 1.0e-9
   @test sqrt(sum(cont2)) < 1.0e-9
+  @test sqrt(sum(cont2_)) < 1.0e-9
   @test sqrt(sum(cont3)) < 1.0e-9
 
   # Assembly

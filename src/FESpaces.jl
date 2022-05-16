@@ -281,6 +281,10 @@ function FESpaces.get_dirichlet_dof_values(U::DistributedSingleFieldFESpace)
   map_parts(get_dirichlet_dof_values,U.spaces)
 end
 
+function FESpaces.zero_dirichlet_values(U::DistributedSingleFieldFESpace)
+  map_parts(zero_dirichlet_values,U.spaces)
+end
+
 function FESpaces.FEFunction(
   f::DistributedSingleFieldFESpace,free_values::AbstractVector,isconsistent=false)
   _EvaluationFunction(FEFunction,f,free_values,isconsistent)
