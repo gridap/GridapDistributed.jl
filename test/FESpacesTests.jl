@@ -127,6 +127,18 @@ function main(parts,das)
   assemble_vector!(b2,assem,vecdata)
   @test abs(sum(b2)-length(b2)) < 1.0e-12
 
+  u2((x,y)) = 2*(x+y)
+  TrialFESpace!(U,u2)
+  u2h = interpolate(u2,U)
+  e2h = u2 - u2h
+  cont  = ∫( abs2(e2h) )dΩ
+  @test sqrt(sum(cont)) < 1.0e-9
+
+  U0 = HomogeneousTrialFESpace(U)
+  u0h = interpolate(0.0,U0)
+  cont  = ∫( abs2(u0h) )dΩ
+  @test sqrt(sum(cont)) < 1.0e-14
+
 end
 
 end # module
