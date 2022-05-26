@@ -24,7 +24,7 @@ function main(parts,strategy,local_matrix_type)
   k = 1
   u((x,y)) = (x+y)^k
   σ(∇u) =(1.0+∇u⋅∇u)*∇u
-  dσ(∇du,∇u) = 2*∇u⋅∇du + (1.0+∇u⋅∇u)*∇du
+  dσ(∇du,∇u) = (2*∇u⋅∇du)*∇u + (1.0+∇u⋅∇u)*∇du
   f(x) = -divergence(y->σ(∇(u,y)),x)
 
   Ω = Triangulation(strategy,model)
