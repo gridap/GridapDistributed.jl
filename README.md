@@ -27,7 +27,7 @@ A `GridapDistributed.jl` driver program written in sequential execution mode as,
 julia test/sequential/PoissonTests.jl
 ```
 
-On the other hand, a driver program written in MPI execution mode, such as the one shown in the snippet in the next section, involves an invocation of the `mpiexecjl` script (see [below](https://github.com/gridap/GridapDistributed.jl/edit/master/README.md#mpi-parallel-julia-script-execution-instructions)) :
+On the other hand, a driver program written in MPI execution mode, such as the one shown in the snippet in the next section, involves an invocation of the `mpiexecjl` script (see [below](https://github.com/gridap/GridapDistributed.jl/edit/master/README.md#mpi-parallel-julia-script-execution-instructions](https://github.com/gridap/GridapDistributed.jl#mpi-parallel-julia-script-execution-instructions))):
 
 ```
 mpiexecjl -n 4 julia gridap_distributed_mpi_mode_example.jl
