@@ -22,16 +22,19 @@
     month  = jun
 }
 
+
+
 @article{Verdugo:2021,
-  	url = {https://arxiv.org/abs/2109.12818},
-  	Archiveprefix = {arXiv},
-  	Author = {{Verdugo}, F. and {Badia}, S.},
-  	Eprint = {2109.12818},
-  	Journal = {ArXiv e-prints},
-  	Keywords = {Mathematical software},
-  	Month = sep,
-  	Title = {{The software design of Gridap: a Finite Element package based on the Julia JIT compiler}},
-  	Year = 2021
+  doi = {10.1016/j.cpc.2022.108341},
+  url = {https://doi.org/10.1016/j.cpc.2022.108341},
+  year = {2022},
+  month = jul,
+  publisher = {Elsevier {BV}},
+  volume = {276},
+  pages = {108341},
+  author = {Francesc Verdugo and Santiago Badia},
+  title = {The software design of {G}ridap: a finite element package based on the {J}ulia {JIT} compiler},
+  journal = {Computer Physics Communications}
 }
 
 @misc{gridapetsc,
@@ -75,7 +78,7 @@ month = {feb},
 number = {1},
 pages = {65--98},
 publisher = {Society for Industrial and Applied Mathematics},
-title = {{Julia: A Fresh Approach to Numerical Computing}},
+title = {{Julia: a fresh approach to numerical computing}},
 volume = {59},
 year = {2017}
 }
@@ -90,7 +93,7 @@ month = {aug},
 number = {52},
 pages = {2520},
 publisher = {The Open Journal},
-title = {{Gridap: An extensible Finite Element toolbox in Julia}},
+title = {{Gridap: an extensible finite element toolbox in Julia}},
 url = {https://joss.theoj.org/papers/10.21105/joss.02520},
 volume = {5},
 year = {2020}
@@ -109,18 +112,18 @@ month = {dec},
 number = {6},
 pages = {C436--C468},
 publisher = {Society for Industrial and Applied Mathematics},
-title = {{A Generic Finite Element Framework on Parallel Tree-Based Adaptive Meshes}},
+title = {{A generic finite element framework on parallel tree-based adaptive meshes}},
 volume = {42},
 year = {2020}
 }
-@article{Gibson2019,
+@book{Gibson2019,
 address = {Cham},
 author = {Gibson, Thomas H. and McRae, Andrew T.T. and Cotter, Colin J. and Mitchell, Lawrence and Ham, David A.},
 doi = {10.1007/978-3-030-23957-2},
 isbn = {978-3-030-23956-5},
 publisher = {Springer International Publishing},
 series = {Mathematics of Planet Earth},
-title = {{Compatible Finite Element Methods for Geophysical Flows}},
+title = {{Compatible finite element methods for geophysical flows}},
 url = {http://link.springer.com/10.1007/978-3-030-23957-2},
 year = {2019}
 }
@@ -149,7 +152,7 @@ month = {may},
 number = {3},
 pages = {1103--1133},
 publisher = {Society for Industrial and Applied Mathematics},
-title = {{p4est: Scalable Algorithms for Parallel Adaptive Mesh Refinement on Forests of Octrees}},
+title = {{p4est: scalable algorithms for parallel adaptive mesh refinement on forests of octrees}},
 volume = {33},
 year = {2011}
 }
@@ -163,7 +166,7 @@ month = {mar},
 number = {1},
 pages = {93--114},
 publisher = {Academic Press},
-title = {{The “Cubed Sphere”: A New Method for the Solution of Partial Differential Equations in Spherical Geometry}},
+title = {{The “Cubed Sphere”: a new method for the solution of partial differential equations in spherical geometry}},
 volume = {124},
 year = {1996}
 }
@@ -181,4 +184,96 @@ title = {{An initial-value problem for testing numerical models of the global sh
 url = {https://www.tandfonline.com/doi/abs/10.3402/tellusa.v56i5.14436},
 volume = {56},
 year = {2016}
+}
+
+@misc{Lee2022,
+  doi = {10.48550/ARXIV.2203.04629},
+  url = {https://arxiv.org/abs/2203.04629},
+  author = {Lee, David and Martín, Alberto F. and Bladwell, Christopher and Badia, Santiago},
+  keywords = {Numerical Analysis (math.NA), FOS: Mathematics, FOS: Mathematics},
+  title = {A comparison of variational upwinding schemes for geophysical fluids, and their application to potential enstrophy conserving discretisations in space and time},
+  publisher = {arXiv},
+  year = {2022},
+  copyright = {Creative Commons Attribution 4.0 International}
+}
+
+@article{mfem,
+  title = {{MFEM}: A modular finite element methods library},
+  author = {R. Anderson and J. Andrej and A. Barker and J. Bramwell and J.-S. Camier and
+            J. Cerveny V. Dobrev and Y. Dudouit and A. Fisher and Tz. Kolev and W. Pazner and
+            M. Stowell and V. Tomov and I. Akkerman and J. Dahm and D. Medina and S. Zampini},
+  journal = {Computers \& Mathematics with Applications},
+  doi = {10.1016/j.camwa.2020.06.009},
+  volume = {81},
+  pages = {42-74},
+  year = {2021}
+}
+
+@article {freefem,
+    AUTHOR = {Hecht, F.}, TITLE = {New development in {FreeFem++}},
+   JOURNAL = {J. Numer. Math.},  FJOURNAL = {Journal of Numerical Mathematics},
+    VOLUME = {20}, YEAR = {2012},
+    NUMBER = {3-4}, PAGES = {251--265},
+      ISSN = {1570-2820}, MRCLASS = {65Y15}, MRNUMBER = {3043640},
+}
+
+@article{Badia2017,
+  doi = {10.1007/s11831-017-9244-1},
+  url = {https://doi.org/10.1007/s11831-017-9244-1},
+  year = {2017},
+  month = oct,
+  publisher = {Springer Science and Business Media {LLC}},
+  volume = {25},
+  number = {2},
+  pages = {195--271},
+  author = {Santiago Badia and Alberto F. Mart{\'{\i}}n and Javier Principe},
+  title = {{FEMPAR}: An Object-Oriented Parallel Finite Element Framework},
+  journal = {Archives of Computational Methods in Engineering}
+}
+
+@Article{libMeshPaper,
+  author  = {B.~S.~Kirk and J.~W.~Peterson and R.~H.~Stogner and G.~F.~Carey},
+  title   = {{\texttt{libMesh}: A C++ library for parallel adaptive mesh refinement/coarsening simulations}},
+  journal = {Engineering with Computers},
+  volume  = 22,
+  number  = {3--4},
+  pages   = {237--254},
+  year    = 2006,
+  note    = {\url{http://dx.doi.org/10.1007/s00366-006-0049-3}}
+}
+
+@article{dealII93,
+  title     = {The \texttt{deal.II} Library, Version 9.3},
+  author    = {Daniel Arndt and Wolfgang Bangerth and Bruno Blais and
+               Marc Fehling and Rene Gassm{\"o}ller and Timo Heister
+               and Luca Heltai and Uwe K{\"o}cher and Martin
+               Kronbichler and Matthias Maier and Peter Munch and
+               Jean-Paul Pelteret and Sebastian Proell and Konrad
+               Simon and Bruno Turcksin and David Wells and Jiaqi
+               Zhang},
+  journal   = {Journal of Numerical Mathematics},
+  year      = {2021},
+  url       = {https://dealii.org/deal93-preprint.pdf},
+  doi       = {10.1515/jnma-2021-0081},
+  volume    = {29},
+  number    = {3},
+  pages     = {171--186}
+}
+
+@article{Kirby2006,
+abstract = {As a key step towards a complete automation of the finite element method, we present a new algorithm for automatic and efficient evaluation of multilinear variational forms. The algorithm has been implemented in the form of a compiler, the FEniCS Form Compiler (FFC). We present benchmark results for a series of standard variational forms, including the incompressible Navier-Stokes equations and linear elasticity. The speedup compared to the standard quadrature-based approach is impressive; in some cases the speedup is as large as a factor of 1000. {\textcopyright} 2006 ACM.},
+archivePrefix = {arXiv},
+arxivId = {1112.0402},
+author = {Kirby, Robert C and Logg, Anders},
+doi = {10.1145/1163641.1163644},
+eprint = {1112.0402},
+file = {:home/fverdugo/.local/share/data/Mendeley Ltd./Mendeley Desktop/Downloaded/Kirby - Unknown - A Compiler for Variational Forms.pdf:pdf},
+issn = {00983500},
+journal = {ACM Transactions on Mathematical Software},
+keywords = {Automation,Compiler,Finite element,Variational form},
+number = {3},
+pages = {417--444},
+title = {{A compiler for variational forms}},
+volume = {32},
+year = {2006}
 }
