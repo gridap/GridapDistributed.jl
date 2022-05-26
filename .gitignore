@@ -8,3 +8,5 @@
 /docs/site/
 /tmp/
 *.vtu
+*.pvtu
+*.pvd

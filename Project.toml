@@ -1,7 +1,7 @@
 name = "GridapDistributed"
 uuid = "f9701e48-63b3-45aa-9a63-9bc6c271f355"
 authors = ["S. Badia <santiago.badia@monash.edu>", "A. F. Martin <alberto.martin@monash.edu>", "F. Verdugo <fverdugo@cimne.upc.edu>"]
-version = "0.2.4"
+version = "0.2.5"
 
 [deps]
 FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
@@ -14,10 +14,10 @@ SparseMatricesCSR = "a0a7dd2c-ebf4-11e9-1f05-cf50bc540ca1"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
-Gridap = "0.17.7"
-PartitionedArrays = "0.2.8"
+Gridap = "0.17.11"
 FillArrays = "0.8.4, 0.9, 0.10, 0.11, 0.12"
 MPI = "0.16, 0.17, 0.18, 0.19"
+PartitionedArrays = "0.2.10"
 SparseMatricesCSR = "0.6.6"
 WriteVTK = "1.12.0"
 julia = "1.3"

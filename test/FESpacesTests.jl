@@ -25,8 +25,10 @@ function main(parts,das)
   reffe = ReferenceFE(lagrangian,Float64,1)
   V = TestFESpace(model,reffe,dirichlet_tags="boundary")
   U = TrialFESpace(u,V)
+  V2 = FESpace(Ω,reffe)
   @test get_vector_type(V) <: PVector
   @test get_vector_type(U) <: PVector
+  @test get_vector_type(V2) <: PVector
 
   free_values = PVector(1.0,V.gids)
   fh = FEFunction(U,free_values)
@@ -34,9 +36,30 @@ function main(parts,das)
   uh = interpolate(u,U)
   eh = u - uh
 
+  uh_dir = interpolate_dirichlet(u,U)
+  free_values = zero_free_values(U)
+  dirichlet_values = get_dirichlet_dof_values(U)
+  uh_dir2 = interpolate_dirichlet!(u,free_values,dirichlet_values,U)
+
+  uh_everywhere = interpolate_everywhere(u,U)
+  dirichlet_values0 = zero_dirichlet_values(U)
+  uh_everywhere_ = interpolate_everywhere!(u,free_values,dirichlet_values0,U)
+  eh2 = u - uh_everywhere
+  eh2_ = u - uh_everywhere_
+
+  uh_everywhere2 = interpolate_everywhere(uh_everywhere,U)
+  uh_everywhere2_ = interpolate_everywhere!(uh_everywhere,free_values,dirichlet_values,U)
+  eh3 = u - uh_everywhere2
+
   dΩ = Measure(Ω,3)
   cont  = ∫( abs2(eh) )dΩ
+  cont2  = ∫( abs2(eh2) )dΩ
+  cont2_  = ∫( abs2(eh2_) )dΩ
+  cont3  = ∫( abs2(eh3) )dΩ
   @test sqrt(sum(cont)) < 1.0e-9
+  @test sqrt(sum(cont2)) < 1.0e-9
+  @test sqrt(sum(cont2_)) < 1.0e-9
+  @test sqrt(sum(cont3)) < 1.0e-9
 
   # Assembly
   Ωass  = Triangulation(das,model)
@@ -103,6 +126,18 @@ function main(parts,das)
   b2=allocate_vector(assem,vecdata)
   assemble_vector!(b2,assem,vecdata)
   @test abs(sum(b2)-length(b2)) < 1.0e-12
+
+  u2((x,y)) = 2*(x+y)
+  TrialFESpace!(U,u2)
+  u2h = interpolate(u2,U)
+  e2h = u2 - u2h
+  cont  = ∫( abs2(e2h) )dΩ
+  @test sqrt(sum(cont)) < 1.0e-9
+
+  U0 = HomogeneousTrialFESpace(U)
+  u0h = interpolate(0.0,U0)
+  cont  = ∫( abs2(u0h) )dΩ
+  @test sqrt(sum(cont)) < 1.0e-14
 
 end
 

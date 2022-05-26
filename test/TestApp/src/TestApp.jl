@@ -5,4 +5,10 @@ module TestApp
   include("../../MultiFieldTests.jl")
   include("../../PLaplacianTests.jl")
   include("../../PoissonTests.jl")
-end 
+  include("../../PeriodicBCsTests.jl")
+  include("../../SurfaceCouplingTests.jl")
+  include("../../TransientDistributedCellFieldTests.jl")
+  include("../../TransientMultiFieldDistributedCellFieldTests.jl")
+  include("../../HeatEquationTests.jl")
+  include("../../StokesOpenBoundaryTests.jl")
+end

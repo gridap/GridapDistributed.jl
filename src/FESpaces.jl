@@ -236,11 +236,14 @@ dofs
 end
 
 # FEFunction related
-
+"""
+"""
 struct DistributedFEFunctionData{T<:AbstractVector} <:GridapType
   free_values::T
 end
 
+"""
+"""
 const DistributedSingleFieldFEFunction = DistributedCellField{A,<:DistributedFEFunctionData{T}} where {A,T}
 
 function FESpaces.get_free_dof_values(uh::DistributedSingleFieldFEFunction)
@@ -248,7 +251,8 @@ function FESpaces.get_free_dof_values(uh::DistributedSingleFieldFEFunction)
 end
 
 # Single field related
-
+"""
+"""
 struct DistributedSingleFieldFESpace{A,B,C} <: DistributedFESpace
   spaces::A
   gids::B
@@ -273,18 +277,49 @@ function FESpaces.get_free_dof_ids(fs::DistributedSingleFieldFESpace)
   fs.gids
 end
 
+function FESpaces.get_dirichlet_dof_values(U::DistributedSingleFieldFESpace)
+  map_parts(get_dirichlet_dof_values,U.spaces)
+end
+
+function FESpaces.zero_dirichlet_values(U::DistributedSingleFieldFESpace)
+  map_parts(zero_dirichlet_values,U.spaces)
+end
+
 function FESpaces.FEFunction(
   f::DistributedSingleFieldFESpace,free_values::AbstractVector,isconsistent=false)
-  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  fields = map_parts(FEFunction,f.spaces,local_vals)
-  metadata = DistributedFEFunctionData(free_values)
-  DistributedCellField(fields,metadata)
+  _EvaluationFunction(FEFunction,f,free_values,isconsistent)
+end
+
+function FESpaces.FEFunction(
+  f::DistributedSingleFieldFESpace,free_values::AbstractVector,
+  dirichlet_values::AbstractPData{<:AbstractVector},isconsistent=false)
+  _EvaluationFunction(FEFunction,f,free_values,dirichlet_values,isconsistent)
 end
 
 function FESpaces.EvaluationFunction(
   f::DistributedSingleFieldFESpace,free_values::AbstractVector,isconsistent=false)
+  _EvaluationFunction(EvaluationFunction,f,free_values,isconsistent)
+end
+
+function FESpaces.EvaluationFunction(
+  f::DistributedSingleFieldFESpace,free_values::AbstractVector,
+  dirichlet_values::AbstractPData{<:AbstractVector},isconsistent=false)
+  _EvaluationFunction(EvaluationFunction,f,free_values,dirichlet_values,isconsistent)
+end
+
+function _EvaluationFunction(func,
+  f::DistributedSingleFieldFESpace,free_values::AbstractVector,isconsistent=false)
   local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  fields = map_parts(EvaluationFunction,f.spaces,local_vals)
+  fields = map_parts(func,f.spaces,local_vals)
+  metadata = DistributedFEFunctionData(free_values)
+  DistributedCellField(fields,metadata)
+end
+
+function _EvaluationFunction(func,
+  f::DistributedSingleFieldFESpace,free_values::AbstractVector,
+  dirichlet_values::AbstractPData{<:AbstractVector},isconsistent=false)
+  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
+  fields = map_parts(func,f.spaces,local_vals,dirichlet_values)
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
 end
@@ -318,6 +353,20 @@ function FESpaces.TrialFESpace(fun,f::DistributedSingleFieldFESpace)
   DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
 end
 
+function FESpaces.TrialFESpace!(f::DistributedSingleFieldFESpace,fun)
+  spaces = map_parts(f.spaces) do s
+    TrialFESpace!(s,fun)
+  end
+  DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
+end
+
+function FESpaces.HomogeneousTrialFESpace(f::DistributedSingleFieldFESpace)
+  spaces = map_parts(f.spaces) do s
+    HomogeneousTrialFESpace(s)
+  end
+  DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
+end
+
 function generate_gids(
   model::DistributedDiscreteModel,
   spaces::AbstractPData{<:SingleFieldFESpace})
@@ -339,6 +388,56 @@ function FESpaces.interpolate!(
   FEFunction(f,free_values)
 end
 
+function FESpaces.interpolate!(
+  u::DistributedCellField,free_values::AbstractVector,f::DistributedSingleFieldFESpace)
+  map_parts(local_views(u),f.spaces,local_views(free_values)) do ui,V,vec
+    interpolate!(ui,vec,V)
+  end
+  FEFunction(f,free_values)
+end
+
+function FESpaces.interpolate_dirichlet(u, f::DistributedSingleFieldFESpace)
+  free_values = zero_free_values(f)
+  dirichlet_values = get_dirichlet_dof_values(f)
+  interpolate_dirichlet!(u,free_values,dirichlet_values,f)
+end
+
+function FESpaces.interpolate_dirichlet!(
+  u, free_values::AbstractVector,
+  dirichlet_values::AbstractPData{<:AbstractVector},
+  f::DistributedSingleFieldFESpace)
+  map_parts(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
+    interpolate_dirichlet!(u,fvec,dvec,V)
+  end
+  FEFunction(f,free_values,dirichlet_values)
+end
+
+function FESpaces.interpolate_everywhere(u, f::DistributedSingleFieldFESpace)
+  free_values = zero_free_values(f)
+  dirichlet_values = get_dirichlet_dof_values(f)
+  interpolate_everywhere!(u,free_values,dirichlet_values,f)
+end
+
+function FESpaces.interpolate_everywhere!(
+  u, free_values::AbstractVector,
+  dirichlet_values::AbstractPData{<:AbstractVector},
+  f::DistributedSingleFieldFESpace)
+  map_parts(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
+    interpolate_everywhere!(u,fvec,dvec,V)
+  end
+  FEFunction(f,free_values,dirichlet_values)
+end
+
+function FESpaces.interpolate_everywhere!(
+  u::DistributedCellField, free_values::AbstractVector,
+  dirichlet_values::AbstractPData{<:AbstractVector},
+  f::DistributedSingleFieldFESpace)
+  map_parts(local_views(u),f.spaces,local_views(free_values),dirichlet_values) do ui,V,fvec,dvec
+    interpolate_everywhere!(ui,fvec,dvec,V)
+  end
+  FEFunction(f,free_values,dirichlet_values)
+end
+
 # Factories
 
 function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
@@ -346,6 +445,19 @@ function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
     FESpace(m,reffe;kwargs...)
   end
   gids =  generate_gids(model,spaces)
+  vector_type = _find_vector_type(spaces,gids)
+  DistributedSingleFieldFESpace(spaces,gids,vector_type)
+end
+
+function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;kwargs...)
+  trian = add_ghost_cells(_trian)
+  trian_gids = generate_cell_gids(trian)
+  spaces = map_parts(trian.trians) do t
+    FESpace(t,reffe;kwargs...)
+  end
+  cell_to_ldofs = map_parts(get_cell_dof_ids,spaces)
+  nldofs = map_parts(num_free_dofs,spaces)
+  gids = generate_gids(trian_gids,cell_to_ldofs,nldofs)
   vector_type = _find_vector_type(spaces,gids)
   DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
@@ -435,7 +547,8 @@ function FESpaces.collect_cell_matrix_and_vector(
     collect_cell_matrix_and_vector(u,v,m,l,f)
   end
 end
-
+"""
+"""
 struct DistributedSparseMatrixAssembler{A,B,C,D,E,F} <: SparseMatrixAssembler
   strategy::A
   assems::B

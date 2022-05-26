@@ -1,6 +1,8 @@
 
 # We do not inherit from Grid on purpose.
 # This object cannot implement the Grid interface in a strict sense
+"""
+"""
 struct DistributedGrid{Dc,Dp,A} <: GridapType
   grids::A
   function DistributedGrid(grids::AbstractPData{<:Grid{Dc,Dp}}) where {Dc,Dp}
@@ -28,6 +30,8 @@ Geometry.num_point_dims(::Type{<:DistributedGrid{Dc,Dp}}) where {Dc,Dp} = Dp
 
 # We do not inherit from GridTopology on purpose.
 # This object cannot implement the GridTopology interface in a strict sense
+"""
+"""
 struct DistributedGridTopology{Dc,Dp,A} <: GridapType
   topos::A
   function DistributedGridTopology(topos::AbstractPData{<:GridTopology{Dc,Dp}}) where {Dc,Dp}
@@ -53,6 +57,8 @@ Geometry.num_cell_dims(::Type{<:DistributedGridTopology{Dc,Dp}}) where {Dc,Dp} =
 Geometry.num_point_dims(::DistributedGridTopology{Dc,Dp}) where {Dc,Dp} = Dp
 Geometry.num_point_dims(::Type{<:DistributedGridTopology{Dc,Dp}}) where {Dc,Dp} = Dp
 
+"""
+"""
 struct DistributedFaceLabeling{A<:AbstractPData{<:FaceLabeling}}
   labels::A
 end
@@ -67,6 +73,8 @@ end
 
 # We do not inherit from DiscreteModel on purpose.
 # This object cannot implement the DiscreteModel interface in a strict sense
+"""
+"""
 struct DistributedDiscreteModel{Dc,Dp,A,B} <: GridapType
   models::A
   gids::B
@@ -79,6 +87,11 @@ struct DistributedDiscreteModel{Dc,Dp,A,B} <: GridapType
 end
 
 local_views(a::DistributedDiscreteModel) = a.models
+
+Geometry.num_cell_dims(::DistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dc
+Geometry.num_cell_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dc
+Geometry.num_point_dims(::DistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dp
+Geometry.num_point_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dp
 
 function Geometry.num_cells(model::DistributedDiscreteModel)
  num_gids(model.gids)
@@ -99,23 +112,61 @@ end
 # CartesianDiscreteModel
 
 function Geometry.CartesianDiscreteModel(
-  parts::AbstractPData{<:Integer},args...;kwargs...)
+  parts::AbstractPData{<:Integer},args...;isperiodic=map(i->false,size(parts)),kwargs...)
 
-  desc = CartesianDescriptor(args...; kwargs...)
+  desc = CartesianDescriptor(args...;isperiodic=isperiodic,kwargs...)
   nc = desc.partition
   msg = """
   A CartesianDiscreteModel needs a Cartesian subdomain partition
   of the right dimensions.
   """
   @assert length(size(parts)) == length(nc) msg
-  gcids = PCartesianIndices(parts,nc,PArrays.with_ghost)
-  gids = PRange(parts,nc,PArrays.with_ghost)
-  models = map_parts(parts,gcids) do part, gcids
-    cmin = first(gcids)
-    cmax = last(gcids)
-    CartesianDiscreteModel(desc,cmin,cmax)
+
+  if any(isperiodic)
+    model = _cartesian_model_with_periodic_bcs(parts,desc)
+  else
+    gcids = PCartesianIndices(parts,nc,PArrays.with_ghost)
+    models = map_parts(parts,gcids) do part, gcids
+      cmin = first(gcids)
+      cmax = last(gcids)
+      CartesianDiscreteModel(desc,cmin,cmax)
+    end
+    gids = PRange(parts,nc,PArrays.with_ghost)
+    model = DistributedDiscreteModel(models,gids)
   end
-  DistributedDiscreteModel(models,gids)
+  model
+end
+
+function _cartesian_model_with_periodic_bcs(parts,desc)
+  h = desc.sizes
+  _origin = map(desc.isperiodic,Tuple(desc.origin),h,size(parts)) do isp,o,h,np
+    isp&&np!=1 ? o-h : o
+  end
+  _sizes = h
+  _partition = map(desc.isperiodic,desc.partition,size(parts)) do isp,o,np
+    isp&&np!=1 ? o+2 : o
+  end
+   # Important, the map should be periodic if you want to integrate
+   # functions in the ghost cells.
+  _map = desc.map
+  _isperiodic = map(desc.isperiodic,size(parts)) do isp,np
+    np==1 ? isp : false
+  end
+  _desc = CartesianDescriptor(Point(_origin),_sizes,_partition;map=_map,isperiodic=_isperiodic)
+  isperiodic_global = map(desc.isperiodic,size(parts)) do isp,np
+    np==1 ? false : isp
+  end
+  in_bounds = Val(false)
+  gcids = PCartesianIndices(parts,desc.partition,PArrays.with_ghost,isperiodic_global,in_bounds)
+  nparts = size(parts)
+  models = map_parts(parts,gcids) do part, gcids
+    cmin = CartesianIndex(map((p,i,n)->( p&&n!=1 ? i+1 : i),desc.isperiodic,Tuple(first(gcids)),nparts))
+    cmax = CartesianIndex(map((p,i,n)->( p&&n!=1 ? i+1 : i),desc.isperiodic,Tuple(last(gcids)),nparts))
+    remove_boundary = map((p,n)->(p&&n!=1 ? true : false),desc.isperiodic,nparts)
+    CartesianDiscreteModel(_desc,cmin,cmax,remove_boundary)
+  end
+  gids = PRange(parts,desc.partition,PArrays.with_ghost,isperiodic_global)
+  model = DistributedDiscreteModel(models,gids)
 end
 
 ## Helpers to partition a serial model
@@ -222,6 +273,8 @@ end
 
 # We do not inherit from Triangulation on purpose.
 # This object cannot implement the Triangulation interface in a strict sense
+"""
+"""
 struct DistributedTriangulation{Dc,Dp,A,B} <: GridapType
   trians::A
   model::B
@@ -310,6 +363,12 @@ function Geometry.InterfaceTriangulation(
   filter_cells_when_needed(portion,gids,trian)
 end
 
+function Geometry.InterfaceTriangulation(a::DistributedTriangulation,b::DistributedTriangulation)
+  trians = map_parts(InterfaceTriangulation,a.trians,b.trians)
+  @assert a.model === b.model
+  DistributedTriangulation(trians,a.model)
+end
+
 function filter_cells_when_needed(
   portion::PArrays.WithGhost,
   cell_gids::AbstractIndexSet,
@@ -396,3 +455,78 @@ function _find_owned_skeleton_facets(glue,gids)
   end
   findall(part->part==gids.part,tface_to_part)
 end
+
+function add_ghost_cells(dtrian::DistributedTriangulation)
+  dmodel = dtrian.model
+  gids = dmodel.gids
+  mcell_intrian = map_parts(dmodel.models,dtrian.trians) do model, trian
+    @notimplementedif num_cell_dims(model) != num_cell_dims(trian)
+    D = num_cell_dims(model)
+    glue = get_glue(trian,Val(D))
+    @assert isa(glue,FaceToFaceGlue)
+    nmcells = num_cells(model)
+    mcell_intrian = fill(false,nmcells)
+    tcell_to_mcell = glue.tface_to_mface
+    mcell_intrian[tcell_to_mcell] .= true
+    mcell_intrian
+  end
+  exchange!(mcell_intrian,gids.exchanger)
+  trians = map_parts(Triangulation,dmodel.models,mcell_intrian)
+  DistributedTriangulation(trians,dmodel)
+end
+
+function generate_cell_gids(dtrian::DistributedTriangulation)
+
+  dmodel = dtrian.model
+  mgids = dmodel.gids
+
+  # count number owned cells
+  notcells, tcell_to_mcell = map_parts(
+    dmodel.models,dtrian.trians,mgids.partition) do model,trian,partition
+    @notimplementedif num_cell_dims(model) != num_cell_dims(trian)
+    D = num_cell_dims(model)
+    glue = get_glue(trian,Val(D))
+    @assert isa(glue,FaceToFaceGlue)
+    tcell_to_mcell = glue.tface_to_mface
+    notcells = count(tcell_to_mcell) do mcell
+      partition.lid_to_part[mcell] == partition.part
+    end
+    notcells, tcell_to_mcell
+  end
+
+  # Find the global range of owned dofs
+  first_gtcell, ngtcellsplus1 = xscan(+,reduce,notcells,init=1)
+  ngtcells = ngtcellsplus1 - 1
+
+  # Assign global cell ids to owned cells
+  mcell_to_gtcell = map_parts(
+    first_gtcell,tcell_to_mcell,mgids.partition) do first_gtcell,tcell_to_mcell,partition
+    mcell_to_gtcell = zeros(Int,length(partition.lid_to_part))
+    gtcell = first_gtcell
+    for mcell in tcell_to_mcell
+      if partition.lid_to_part[mcell] == partition.part
+        mcell_to_gtcell[mcell] = gtcell
+        gtcell += 1
+      end
+    end
+    mcell_to_gtcell
+  end
+
+  # Assign global cell ids to ghost cells
+  exchange!(mcell_to_gtcell,mgids.exchanger)
+
+  # Prepare new partition
+  partition = map_parts(mcell_to_gtcell,tcell_to_mcell,mgids.partition) do mcell_to_gtcell,tcell_to_mcell,partition
+    tcell_to_gtcell = mcell_to_gtcell[tcell_to_mcell]
+    tcell_to_part = partition.lid_to_part[tcell_to_mcell]
+    IndexSet(partition.part,tcell_to_gtcell,tcell_to_part)
+  end
+
+  # Prepare the PRange
+  neighbors = mgids.exchanger.parts_snd
+  exchanger = Exchanger(partition,neighbors)
+  gids = PRange(ngtcells,partition,exchanger)
+
+  gids
+end
+

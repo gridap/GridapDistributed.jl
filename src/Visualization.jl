@@ -1,3 +1,5 @@
+"""
+"""
 struct DistributedVisualizationData{A<:AbstractPData}
   visdata::A
 end
@@ -112,6 +114,9 @@ function _prepare_fdata(trians,a::Nothing)
 end
 
 function _prepare_fdata(trians,a)
+  _fdata(v::DistributedCellField,trians) = v.fields
+  _fdata(v::AbstractPData,trians) = v
+  _fdata(v,trians) = map_parts(ti->v,trians)
   if length(a) == 0
     return map_parts(trians) do t
       Dict()
@@ -121,7 +126,7 @@ function _prepare_fdata(trians,a)
   vs = []
   for (k,v) in a
     push!(ks,k)
-    push!(vs,v.fields)
+    push!(vs,_fdata(v,trians))
   end
   map_parts(vs...) do vs...
     b = []
@@ -131,7 +136,6 @@ function _prepare_fdata(trians,a)
     b
   end
 end
-
 
 # Vtk related
 
@@ -150,5 +154,38 @@ function Visualization.create_vtk_file(
       g,filebase;
       part=part,nparts=nparts,
       celldata=c,nodaldata=n)
+  end
+end
+
+struct DistributedPvd{T<:AbstractPData}
+  pvds::T
+end
+
+function Visualization.createpvd(parts::AbstractPData,args...;kwargs...)
+  pvds = map_main(parts) do part
+    paraview_collection(args...;kwargs...)
+  end
+  DistributedPvd(pvds)
+end
+
+function Visualization.createpvd(f,parts::AbstractPData,args...;kwargs...)
+  pvd = createpvd(parts,args...;kwargs...)
+  try
+    f(pvd)
+  finally
+    savepvd(pvd)
+  end
+end
+
+function Visualization.savepvd(pvd::DistributedPvd)
+  map_main(pvd.pvds) do pvd
+    vtk_save(pvd)
+  end
+end
+
+function Base.setindex!(pvd::DistributedPvd,pvtk::AbstractPData,time::Real)
+  map_parts(vtk_save,pvtk)
+  map_main(pvtk,pvd.pvds) do pvtk,pvd
+    pvd[time] = pvtk
   end
 end
