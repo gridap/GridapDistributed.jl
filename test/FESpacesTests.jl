@@ -85,6 +85,7 @@ function main(parts,das)
   Ω = Triangulation(model)
   Γ = Boundary(model)
 
+  u((x,y)) = x+y
   reffe = ReferenceFE(lagrangian,Float64,1)
   V = TestFESpace(model,reffe,dirichlet_tags="boundary")
   U = TrialFESpace(u,V)
@@ -105,8 +106,10 @@ function main(parts,das)
   uh_dir2 = interpolate_dirichlet!(u,free_values,dirichlet_values,U)
 
   uh_everywhere = interpolate_everywhere(u,U)
-  uh_everywhere_ = interpolate_everywhere!(u,free_values,dirichlet_values,U)
+  dirichlet_values0 = zero_dirichlet_values(U)
+  uh_everywhere_ = interpolate_everywhere!(u,free_values,dirichlet_values0,U)
   eh2 = u - uh_everywhere
+  eh2_ = u - uh_everywhere_
 
   uh_everywhere2 = interpolate_everywhere(uh_everywhere,U)
   uh_everywhere2_ = interpolate_everywhere!(uh_everywhere,free_values,dirichlet_values,U)
@@ -115,9 +118,11 @@ function main(parts,das)
   dΩ = Measure(Ω,3)
   cont  = ∫( abs2(eh) )dΩ
   cont2  = ∫( abs2(eh2) )dΩ
+  cont2_  = ∫( abs2(eh2_) )dΩ
   cont3  = ∫( abs2(eh3) )dΩ
   @test sqrt(sum(cont)) < 1.0e-9
   @test sqrt(sum(cont2)) < 1.0e-9
+  @test sqrt(sum(cont2_)) < 1.0e-9
   @test sqrt(sum(cont3)) < 1.0e-9
 
   writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
@@ -146,6 +151,19 @@ function main(parts,das)
   V = TestFESpace(Γ,reffe,dirichlet_tags="boundary")
   U = TrialFESpace(u,V)
   assemble_tests(das,dΓ,dΓass,U,V)
+
+  u2((x,y)) = 2*(x+y)
+  TrialFESpace!(U,u2)
+  u2h = interpolate(u2,U)
+  e2h = u2 - u2h
+  cont  = ∫( abs2(e2h) )dΩ
+  @test sqrt(sum(cont)) < 1.0e-9
+
+  U0 = HomogeneousTrialFESpace(U)
+  u0h = interpolate(0.0,U0)
+  cont  = ∫( abs2(u0h) )dΩ
+  @test sqrt(sum(cont)) < 1.0e-14
+
 end
 
 end # module
