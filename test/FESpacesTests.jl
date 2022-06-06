@@ -125,6 +125,8 @@ function main(parts,das)
   @test sqrt(sum(cont2_)) < 1.0e-9
   @test sqrt(sum(cont3)) < 1.0e-9
 
+
+
   writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
            celldata=["err"=>cont[Ω]],
            cellfields=["uh"=>uh,"zh"=>zh,"eh"=>eh])
@@ -135,6 +137,19 @@ function main(parts,das)
   Ωass  = Triangulation(das,model)
   dΩass = Measure(Ωass,3)
   assemble_tests(das,dΩ,dΩass,U,V)
+
+  u2((x,y)) = 2*(x+y)
+  TrialFESpace!(U,u2)
+  u2h = interpolate(u2,U)
+  e2h = u2 - u2h
+  cont  = ∫( abs2(e2h) )dΩ
+  @test sqrt(sum(cont)) < 1.0e-9
+
+  U0 = HomogeneousTrialFESpace(U)
+  u0h = interpolate(0.0,U0)
+  cont  = ∫( abs2(u0h) )dΩ
+  @test sqrt(sum(cont)) < 1.0e-14
+
 
   # I need to use the square [0,2]² in the sequel so that
   # when integrating over the interior facets, the entries
@@ -151,18 +166,6 @@ function main(parts,das)
   V = TestFESpace(Γ,reffe,dirichlet_tags="boundary")
   U = TrialFESpace(u,V)
   assemble_tests(das,dΓ,dΓass,U,V)
-
-  u2((x,y)) = 2*(x+y)
-  TrialFESpace!(U,u2)
-  u2h = interpolate(u2,U)
-  e2h = u2 - u2h
-  cont  = ∫( abs2(e2h) )dΩ
-  @test sqrt(sum(cont)) < 1.0e-9
-
-  U0 = HomogeneousTrialFESpace(U)
-  u0h = interpolate(0.0,U0)
-  cont  = ∫( abs2(u0h) )dΩ
-  @test sqrt(sum(cont)) < 1.0e-14
 
 end
 
