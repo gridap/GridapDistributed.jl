@@ -77,12 +77,14 @@ end
 """
 struct DistributedDiscreteModel{Dc,Dp,A,B} <: GridapType
   models::A
-  gids::B
+  face_gids::B
   function DistributedDiscreteModel(
     models::AbstractPData{<:DiscreteModel{Dc,Dp}}, gids::PRange) where {Dc,Dp}
     A = typeof(models)
-    B = typeof(gids)
-    new{Dc,Dp,A,B}(models,gids)
+    face_gids=Vector{PRange}(undef,Dc+1)
+    face_gids[Dc+1]=gids
+    B = typeof(face_gids)
+    new{Dc,Dp,A,B}(models,face_gids)
   end
 end
 
@@ -93,8 +95,37 @@ Geometry.num_cell_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} 
 Geometry.num_point_dims(::DistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dp
 Geometry.num_point_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dp
 
-function Geometry.num_cells(model::DistributedDiscreteModel)
- num_gids(model.gids)
+function Geometry.num_cells(model::DistributedDiscreteModel{Dc}) where Dc
+ num_gids(model.face_gids[Dc+1])
+end
+
+function Geometry.num_facets(model::DistributedDiscreteModel{Dc}) where Dc
+  _setup_face_gids!(model,Dc-1)
+  num_gids(model.face_gids[Dc])
+end
+
+function Geometry.num_edges(model::DistributedDiscreteModel{Dc}) where Dc
+  _setup_face_gids!(model,1)
+  num_gids(model.face_gids[2])
+end
+
+function Geometry.num_vertices(model::DistributedDiscreteModel{Dc}) where Dc
+  _setup_face_gids!(model,0)
+  num_gids(model.face_gids[1])
+end
+
+function Geometry.num_faces(model::DistributedDiscreteModel{Dc},dim::Integer) where Dc
+  _setup_face_gids!(model,dim)
+  num_gids(model.face_gids[dim+1])
+end
+
+function Geometry.num_faces(model::DistributedDiscreteModel{Dc}) where Dc
+  num_faces=0
+  for dim=0:Dc
+    _setup_face_gids!(model,dim)
+    num_faces+=num_gids(model.face_gids[dim+1])
+  end
+  num_faces
 end
 
 function Geometry.get_grid(model::DistributedDiscreteModel)
@@ -107,6 +138,15 @@ end
 
 function Geometry.get_face_labeling(model::DistributedDiscreteModel)
   DistributedFaceLabeling(map_parts(get_face_labeling,model.models))
+end
+
+function get_cell_gids(model::DistributedDiscreteModel{Dc}) where Dc
+  model.face_gids[Dc+1]
+end
+
+function get_face_gids(model::DistributedDiscreteModel,dim::Integer)
+  _setup_face_gids!(model,dim)
+  model.face_gids[dim+1]
 end
 
 # CartesianDiscreteModel
@@ -302,7 +342,8 @@ end
 
 function Geometry.Triangulation(
   model::DistributedDiscreteModel;kwargs...)
-  Triangulation(no_ghost,model;kwargs...)
+  D=num_cell_dims(model)
+  Triangulation(no_ghost,ReferenceFE{D},model;kwargs...)
 end
 
 function Geometry.BoundaryTriangulation(
@@ -316,31 +357,33 @@ function Geometry.SkeletonTriangulation(
 end
 
 function Geometry.Triangulation(
-  portion,model::DistributedDiscreteModel;kwargs...)
-  trians = map_parts(model.models,model.gids.partition) do model,gids
-    Triangulation(portion,gids,model;kwargs...)
+  portion,::Type{ReferenceFE{Dt}},model::DistributedDiscreteModel{Dm};kwargs...) where {Dt,Dm}
+  # Generate global ordering for the faces of dimension Dt (if needed)
+  gids=get_face_gids(model,Dt)
+  trians = map_parts(model.models,gids.partition) do model, gids
+    Triangulation(portion,gids,ReferenceFE{Dt},model;kwargs...)
   end
-  DistributedTriangulation(trians,model)
+  dtrian=DistributedTriangulation(trians,model)
 end
 
 function Geometry.BoundaryTriangulation(
-  portion,model::DistributedDiscreteModel;kwargs...)
-  trians = map_parts(model.models,model.gids.partition) do model,gids
+  portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
+  trians = map_parts(model.models,model.face_gids[Dc+1].partition) do model,gids
     BoundaryTriangulation(portion,gids,model;kwargs...)
   end
   DistributedTriangulation(trians,model)
 end
 
 function Geometry.SkeletonTriangulation(
-  portion,model::DistributedDiscreteModel;kwargs...)
-  trians = map_parts(model.models,model.gids.partition) do model,gids
+  portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
+  trians = map_parts(model.models,model.face_gids[Dc+1].partition) do model,gids
     SkeletonTriangulation(portion,gids,model;kwargs...)
   end
   DistributedTriangulation(trians,model)
 end
 
 function Geometry.Triangulation(
-  portion,gids::AbstractIndexSet,args...;kwargs...)
+  portion,gids::AbstractIndexSet, args...;kwargs...) where D
   trian = Triangulation(args...;kwargs...)
   filter_cells_when_needed(portion,gids,trian)
 end
@@ -367,6 +410,17 @@ function Geometry.InterfaceTriangulation(a::DistributedTriangulation,b::Distribu
   trians = map_parts(InterfaceTriangulation,a.trians,b.trians)
   @assert a.model === b.model
   DistributedTriangulation(trians,a.model)
+end
+
+function Geometry.Triangulation(
+  portion, model::DistributedDiscreteModel;kwargs...)
+  D=num_cell_dims(model)
+  Triangulation(portion,ReferenceFE{D},model;kwargs...)
+end
+
+function Geometry.Triangulation(
+  ::Type{ReferenceFE{D}}, model::DistributedDiscreteModel;kwargs...) where D
+  Triangulation(no_ghost, ReferenceFE{D}, model; kwargs...)
 end
 
 function filter_cells_when_needed(
@@ -401,17 +455,17 @@ function filter_cells_when_needed(
   remove_ghost_cells(trian,cell_gids)
 end
 
-# For the moment remove_ghost_cells
-# refers to the triangulation faces
-# pointing into the ghost cells
-# in the underlying background discrete
-# model. This might change when solving
-# multi-field PDEs with one of the fields
-# defined on the boundary (e.g. a Lagrange multiplier)
-function remove_ghost_cells(trian,gids)
+function remove_ghost_cells(trian::Triangulation,gids)
   model = get_background_model(trian)
-  D = num_cell_dims(model)
-  glue = get_glue(trian,Val(D))
+  Dt    = num_cell_dims(trian)
+  glue = get_glue(trian,Val(Dt))
+  remove_ghost_cells(glue,trian,gids)
+end
+
+function remove_ghost_cells(trian::Union{SkeletonTriangulation,BoundaryTriangulation},gids)
+  model = get_background_model(trian)
+  Dm    = num_cell_dims(model)
+  glue = get_glue(trian,Val(Dm))
   remove_ghost_cells(glue,trian,gids)
 end
 
@@ -458,75 +512,118 @@ end
 
 function add_ghost_cells(dtrian::DistributedTriangulation)
   dmodel = dtrian.model
-  gids = dmodel.gids
-  mcell_intrian = map_parts(dmodel.models,dtrian.trians) do model, trian
-    @notimplementedif num_cell_dims(model) != num_cell_dims(trian)
-    D = num_cell_dims(model)
-    glue = get_glue(trian,Val(D))
+  add_ghost_cells(dmodel,dtrian)
+end
+
+function _covers_all_faces(dmodel::DistributedDiscreteModel{Dm},
+                           dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
+  covers_all_faces=map_parts(dmodel.models,dtrian.trians) do model, trian
+    glue = get_glue(trian,Val(Dt))
     @assert isa(glue,FaceToFaceGlue)
-    nmcells = num_cells(model)
-    mcell_intrian = fill(false,nmcells)
-    tcell_to_mcell = glue.tface_to_mface
-    mcell_intrian[tcell_to_mcell] .= true
-    mcell_intrian
+    isa(glue.tface_to_mface,IdentityVector)
   end
-  exchange!(mcell_intrian,gids.exchanger)
-  trians = map_parts(Triangulation,dmodel.models,mcell_intrian)
-  DistributedTriangulation(trians,dmodel)
+  reduce(&,covers_all_faces,init=true)
+end
+
+function add_ghost_cells(dmodel::DistributedDiscreteModel{Dm},
+                         dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
+  covers_all_faces=_covers_all_faces(dmodel,dtrian)
+  if (covers_all_faces)
+    trians = map_parts(dmodel.models) do model
+      Triangulation(ReferenceFE{Dt},model)
+    end
+    DistributedTriangulation(trians,dmodel)
+  else
+    mcell_intrian = map_parts(dmodel.models,dtrian.trians) do model, trian
+      glue = get_glue(trian,Val(Dt))
+      @assert isa(glue,FaceToFaceGlue)
+      nmcells = num_faces(model,Dt)
+      mcell_intrian = fill(false,nmcells)
+      tcell_to_mcell = glue.tface_to_mface
+      mcell_intrian[tcell_to_mcell] .= true
+      mcell_intrian
+    end
+    gids = get_face_gids(dmodel,Dt)
+    exchange!(mcell_intrian,gids.exchanger)
+    dreffes=map_parts(dmodel.models) do model
+      ReferenceFE{Dt}
+    end
+    trians = map_parts(Triangulation,dreffes,dmodel.models,mcell_intrian)
+    DistributedTriangulation(trians,dmodel)
+  end
 end
 
 function generate_cell_gids(dtrian::DistributedTriangulation)
-
   dmodel = dtrian.model
-  mgids = dmodel.gids
-
-  # count number owned cells
-  notcells, tcell_to_mcell = map_parts(
-    dmodel.models,dtrian.trians,mgids.partition) do model,trian,partition
-    @notimplementedif num_cell_dims(model) != num_cell_dims(trian)
-    D = num_cell_dims(model)
-    glue = get_glue(trian,Val(D))
-    @assert isa(glue,FaceToFaceGlue)
-    tcell_to_mcell = glue.tface_to_mface
-    notcells = count(tcell_to_mcell) do mcell
-      partition.lid_to_part[mcell] == partition.part
-    end
-    notcells, tcell_to_mcell
-  end
-
-  # Find the global range of owned dofs
-  first_gtcell, ngtcellsplus1 = xscan(+,reduce,notcells,init=1)
-  ngtcells = ngtcellsplus1 - 1
-
-  # Assign global cell ids to owned cells
-  mcell_to_gtcell = map_parts(
-    first_gtcell,tcell_to_mcell,mgids.partition) do first_gtcell,tcell_to_mcell,partition
-    mcell_to_gtcell = zeros(Int,length(partition.lid_to_part))
-    gtcell = first_gtcell
-    for mcell in tcell_to_mcell
-      if partition.lid_to_part[mcell] == partition.part
-        mcell_to_gtcell[mcell] = gtcell
-        gtcell += 1
-      end
-    end
-    mcell_to_gtcell
-  end
-
-  # Assign global cell ids to ghost cells
-  exchange!(mcell_to_gtcell,mgids.exchanger)
-
-  # Prepare new partition
-  partition = map_parts(mcell_to_gtcell,tcell_to_mcell,mgids.partition) do mcell_to_gtcell,tcell_to_mcell,partition
-    tcell_to_gtcell = mcell_to_gtcell[tcell_to_mcell]
-    tcell_to_part = partition.lid_to_part[tcell_to_mcell]
-    IndexSet(partition.part,tcell_to_gtcell,tcell_to_part)
-  end
-
-  # Prepare the PRange
-  neighbors = mgids.exchanger.parts_snd
-  exchanger = Exchanger(partition,neighbors)
-  gids = PRange(ngtcells,partition,exchanger)
-
-  gids
+  generate_cell_gids(dmodel,dtrian)
 end
 
+function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
+                            dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
+
+  covers_all_faces=_covers_all_faces(dmodel,dtrian)
+  if (covers_all_faces)
+    get_face_gids(dmodel,Dt)
+  else
+    mgids = get_face_gids(dmodel,Dt)
+    # count number owned cells
+    notcells, tcell_to_mcell = map_parts(
+      dmodel.models,dtrian.trians,mgids.partition) do model,trian,partition
+      glue = get_glue(trian,Val(Dt))
+      @assert isa(glue,FaceToFaceGlue)
+      tcell_to_mcell = glue.tface_to_mface
+      notcells = count(tcell_to_mcell) do mcell
+        partition.lid_to_part[mcell] == partition.part
+      end
+      notcells, tcell_to_mcell
+    end
+
+    # Find the global range of owned dofs
+    first_gtcell, ngtcellsplus1 = xscan(+,reduce,notcells,init=1)
+    ngtcells = ngtcellsplus1 - 1
+
+    # Assign global cell ids to owned cells
+    mcell_to_gtcell = map_parts(
+      first_gtcell,tcell_to_mcell,mgids.partition) do first_gtcell,tcell_to_mcell,partition
+      mcell_to_gtcell = zeros(Int,length(partition.lid_to_part))
+      gtcell = first_gtcell
+      for mcell in tcell_to_mcell
+        if partition.lid_to_part[mcell] == partition.part
+          mcell_to_gtcell[mcell] = gtcell
+          gtcell += 1
+        end
+      end
+      mcell_to_gtcell
+    end
+    exchange!(mcell_to_gtcell,mgids.exchanger)
+
+    # Prepare new partition
+    partition = map_parts(mcell_to_gtcell,tcell_to_mcell,mgids.partition) do mcell_to_gtcell,tcell_to_mcell,partition
+      tcell_to_gtcell = mcell_to_gtcell[tcell_to_mcell]
+      tcell_to_part = partition.lid_to_part[tcell_to_mcell]
+      IndexSet(partition.part,tcell_to_gtcell,tcell_to_part)
+    end
+
+    # Prepare the PRange
+    neighbors = mgids.exchanger.parts_snd
+    exchanger = Exchanger(partition,neighbors)
+    gids = PRange(ngtcells,partition,exchanger)
+    gids
+  end
+end
+
+function _setup_face_gids!(dmodel::DistributedDiscreteModel{Dc},dim) where {Dc}
+  Gridap.Helpers.@check 0 <= dim <= Dc
+  if !isassigned(dmodel.face_gids,dim+1)
+    mgids = dmodel.face_gids[Dc+1]
+    nlfaces=map_parts(dmodel.models) do model
+      num_faces(model,dim)
+    end
+    cell_lfaces=map_parts(dmodel.models) do model
+      topo=get_grid_topology(model)
+      faces=get_faces(topo, Dc, dim)
+    end
+    dmodel.face_gids[dim+1]=generate_gids(mgids,cell_lfaces,nlfaces)
+  end
+  return
+end

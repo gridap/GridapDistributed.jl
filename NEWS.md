@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased 
+
+### Added
+- Support for parallel ODE solvers (GridapDistributed+GridapODEs). Since PR [#81](https://github.com/gridap/GridapDistributed.jl/pull/81)
+- Support for parallel interface (surface) coupled problems. Since PR [#84](https://github.com/gridap/GridapDistributed.jl/pull/84)
+- Added the missing zero_dirichlet_values used in Multifield.jl. Since PR [#87](https://github.com/gridap/GridapDistributed.jl/pull/87)
+- Model now handles gids of all faces (not only cells) and support for FESpaces on lower-dim trians. Since PR [#86](https://github.com/gridap/GridapDistributed.jl/pull/86)
+
+### Fixed
+- Minor bug in the definition of the jacobian of the PLaplacian problem.  Since PR [#88](https://github.com/gridap/GridapDistributed.jl/pull/88)
+
 ## [0.2.5] - 2022-02-14
 
 ### Added

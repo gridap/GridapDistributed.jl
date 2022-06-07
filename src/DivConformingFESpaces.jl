@@ -35,9 +35,10 @@ end
 
 
 function _generate_sign_flips(model,cell_reffes)
-  sign_flips=map_parts(model.models,model.gids.partition,cell_reffes) do m, p, cell_reffe
+  cell_gids=get_cell_gids(model)
+  sign_flips=map_parts(model.models,cell_gids.partition,cell_reffes) do m, p, cell_reffe
+    D = num_cell_dims(model)
 
-    D = num_cell_dims(m)
     gtopo = get_grid_topology(m)
 
     # Extract composition among cells and facets
@@ -89,6 +90,6 @@ function _generate_sign_flips(model,cell_reffes)
     end
     PArrays.Table(data,ptrs)
   end
-  exchange!(sign_flips,model.gids.exchanger)
+  exchange!(sign_flips,cell_gids.exchanger)
   sign_flips
 end

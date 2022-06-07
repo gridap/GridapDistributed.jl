@@ -22,6 +22,7 @@ function main(parts)
   writevtk(model,joinpath(output,"model"))
 
   @test num_cells(model)==prod(cells)
+  @test num_vertices(model)==prod(cells .+ 1)
   @test num_cell_dims(model) == length(cells)
   @test num_point_dims(model) == length(cells)
 
@@ -45,7 +46,8 @@ function main(parts)
     writevtk(dmodel,joinpath(output,"dmodel"))
   end
 
-  map_parts(model.models,model.gids.partition) do lmodel,gids
+  cell_gids=get_cell_gids(model)
+  map_parts(model.models,cell_gids.partition) do lmodel,gids
     @test test_local_part_face_labelings_consistency(lmodel,gids,gmodel)
   end
 
@@ -87,7 +89,8 @@ function main(parts)
     add_tag!(labels,"fluid",[fluid])
     cell_to_entity
   end
-  exchange!(cell_to_entity,model.gids.exchanger) # Make tags consistent
+  cell_gids=get_cell_gids(model)
+  exchange!(cell_to_entity,cell_gids.exchanger) # Make tags consistent
 
   Ωs = Interior(model,tags="solid")
   Ωf = Interior(model,tags="fluid")

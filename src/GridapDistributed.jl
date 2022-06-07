@@ -30,6 +30,9 @@ import Gridap.ODEs.ODETools: ∂t, ∂tt
 export FullyAssembledRows
 export SubAssembledRows
 
+export get_cell_gids
+export get_face_gids
+
 include("Algebra.jl")
 
 include("Geometry.jl")

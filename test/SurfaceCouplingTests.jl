@@ -49,7 +49,8 @@ function main(parts)
     add_tag_from_tags!(labels,"neumann",[6,7,8])
     cell_to_entity
   end
-  exchange!(cell_to_entity,model.gids.exchanger) # Make tags consistent
+  cell_gids=get_cell_gids(model)
+  exchange!(cell_to_entity,cell_gids.exchanger) # Make tags consistent
 
   # Domains and measures
   Ω = Interior(model)
