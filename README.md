@@ -17,9 +17,23 @@ At present, `GridapDistributed.jl` provides scalable parallel data structures fo
 
 `GridapDistributed.jl` and `Gridap.jl` share almost the same high-level API. We refer to the documentation of `Gridap.jl` for more details about the API. In the example below, we show the minor differences among the APIs of `Gridap.jl` and `GridapDistributed.jl`. We also refer to the following [tutorial](https://gridap.github.io/Tutorials/dev/pages/t016_poisson_distributed/) and the [`GridapDistributed.jl`](https://gridap.github.io/GridapDistributed.jl/dev) documentation for additional examples and rationale.
 
-## Execution modes
+## Execution modes and how to execute the program in each mode
 
 `GridapDistributed.jl` driver programs can be either run in sequential execution mode (very useful for developing/debugging parallel programs, see `test/sequential/` folder for examples) or in message-passing (MPI) execution mode (when you want to deploy the code in the actual parallel computer and perform a fast simulation, see `test/mpi/` folder for examples). In any case, even if you do no have access to a parallel machine, you should be able to run in both modes in your local desktop/laptop. 
+
+A `GridapDistributed.jl` driver program written in sequential execution mode as, e.g., the one available at `test/sequential/PoissonTests.jl`, is executed from the terminal just as any other Julia script:
+
+```bash
+julia test/sequential/PoissonTests.jl
+```
+
+On the other hand, a driver program written in MPI execution mode, such as the one shown in the snippet in the next section, involves an invocation of the `mpiexecjl` script (see [below](https://github.com/gridap/GridapDistributed.jl/edit/master/README.md#mpi-parallel-julia-script-execution-instructions](https://github.com/gridap/GridapDistributed.jl#mpi-parallel-julia-script-execution-instructions))):
+
+```
+mpiexecjl -n 4 julia gridap_distributed_mpi_mode_example.jl
+```
+
+with the appropriate number of MPI tasks, `-n 4` in this particular example.
 
 ## Simple example (MPI-parallel execution mode)
 
