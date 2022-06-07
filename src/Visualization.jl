@@ -31,8 +31,9 @@ function Visualization.visualization_data(
 
   parts = get_part_ids(model.models)
   nparts = length(parts)
+  cell_gids=get_cell_gids(model)
   vd = map_parts(
-    parts,model.models,model.gids.partition,labels.labels) do part,model,gids,labels
+    parts,model.models,cell_gids.partition,labels.labels) do part,model,gids,labels
 
     vd = visualization_data(model,filebase;labels=labels)
     vd_cells = vd[end]
