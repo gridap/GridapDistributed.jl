@@ -135,13 +135,17 @@ A warning when executing MPI-parallel drivers: Data race conditions in the gener
 In order to give credit to the `Gridap` and `GridapDistributed` contributors, we simply ask you to cite the `Gridap` main project as indicated [here](https://github.com/gridap/Gridap.jl#how-to-cite-gridap) and the sub-packages you use as indicated in the corresponding repositories. Please, use the reference below in any publication in which you have made use of `GridapDistributed`:
 
 ```
-@misc{Martin_GridapDistributed_2021,
-author = {Martin, Alberto F. and Verdugo, Francesc and Badia, Santiago},
-doi = {10.5281/zenodo.5772591},
-month = {12},
-title = {{GridapDistributed}},
-url = {https://github.com/gridap/GridapDistributed.jl},
-year = {2021}
+@article{Badia2022,
+  doi = {10.21105/joss.04157},
+  url = {https://doi.org/10.21105/joss.04157},
+  year = {2022},
+  publisher = {The Open Journal},
+  volume = {7},
+  number = {74},
+  pages = {4157},
+  author = {Santiago Badia and Alberto F. Martín and Francesc Verdugo},
+  title = {GridapDistributed: a massively parallel finite element toolbox in Julia},
+  journal = {Journal of Open Source Software}
 }
 ```
 
