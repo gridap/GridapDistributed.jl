@@ -81,6 +81,22 @@ function Arrays.evaluate!(
   DistributedCellField(fields)
 end
 
+function Arrays.evaluate!(
+  cache,k::Operation,a::DistributedCellField,b::DistributedCellField,c::DistributedCellField)
+  fields = map_parts(a.fields,b.fields,c.fields) do f,g,h
+    evaluate!(nothing,k,f,g,h)
+  end
+  DistributedCellField(fields)
+end
+
+function Arrays.evaluate!(
+  cache,k::Operation,a::DistributedCellField,b::DistributedCellField,c::DistributedCellField,d::DistributedCellField)
+  fields = map_parts(a.fields,b.fields,c.fields,d.fields) do f,g,h,j
+    evaluate!(nothing,k,f,g,h,j)
+  end
+  DistributedCellField(fields)
+end
+
 function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField,b::Number)
   fields = map_parts(a.fields) do f
     evaluate!(nothing,k,f,b)
