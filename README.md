@@ -4,6 +4,7 @@
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://gridap.github.io/GridapDistributed.jl/dev)
 ![CI](https://github.com/Gridap/GridapDistributed.jl/workflows/CI/badge.svg)
 [![DOI](https://zenodo.org/badge/258832236.svg)](https://zenodo.org/badge/latestdoi/258832236)
+[![DOI](https://joss.theoj.org/papers/10.21105/joss.02520/status.svg)](https://joss.theoj.org/papers/10.21105/joss.04157)
 
 Parallel distributed-memory version of `Gridap.jl`.
 
