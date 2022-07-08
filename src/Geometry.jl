@@ -374,6 +374,21 @@ function Geometry.BoundaryTriangulation(
   DistributedTriangulation(trians,model)
 end
 
+function Geometry.SkeletonTriangulation(trian::DistributedTriangulation)
+  SkeletonTriangulation(no_ghost,trian)
+end
+
+function Geometry.SkeletonTriangulation(
+  portion,trian::DistributedTriangulation)
+  trians = map_parts(SkeletonTriangulation,trian.trians)
+  Dc = num_cell_dims(trian.model)
+  gids = trian.model.face_gids[Dc+1]
+  trians2 = map_parts(trians,gids.partition) do trian,gids
+     filter_cells_when_needed(portion,gids,trian)
+  end
+  DistributedTriangulation(trians2,trian.model)
+end
+
 function Geometry.SkeletonTriangulation(
   portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
   trians = map_parts(model.models,model.face_gids[Dc+1].partition) do model,gids
