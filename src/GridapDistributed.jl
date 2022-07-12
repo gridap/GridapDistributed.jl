@@ -32,7 +32,7 @@ export SubAssembledRows
 
 export get_cell_gids
 export get_face_gids
-
+export DistributedTriangulation
 include("Algebra.jl")
 
 include("Geometry.jl")

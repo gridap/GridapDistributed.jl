@@ -81,6 +81,41 @@ function Arrays.evaluate!(
   DistributedCellField(fields)
 end
 
+function Arrays.evaluate!(
+  cache,k::Operation,a::DistributedCellField,b::DistributedCellField,c::DistributedCellField)
+  fields = map_parts(a.fields,b.fields,c.fields) do f,g,h
+    evaluate!(nothing,k,f,g,h)
+  end
+  DistributedCellField(fields)
+end
+
+function Arrays.evaluate!(
+  cache,k::Operation,a::DistributedCellField,b::DistributedCellField,c::DistributedCellField,d::DistributedCellField)
+  fields = map_parts(a.fields,b.fields,c.fields,d.fields) do f,g,h,j
+    evaluate!(nothing,k,f,g,h,j)
+  end
+  DistributedCellField(fields)
+end
+
+
+function Arrays.evaluate!(
+  cache,k::Operation,n1::Number, n2::Number, a::DistributedCellField,b::DistributedCellField,c::DistributedCellField)
+  fields = map_parts(a.fields,b.fields,c.fields) do f,g,h
+    evaluate!(nothing,k,f,g,h,n1,n2)
+  end
+  DistributedCellField(fields)
+end
+
+function Arrays.evaluate!(
+  cache,k::Operation, n1::Number, n2::Number, a::DistributedCellField,b::DistributedCellField,c::DistributedCellField,d::DistributedCellField)
+  fields = map_parts(a.fields,b.fields,c.fields,d.fields) do f,g,h,j
+    evaluate!(nothing,k,f,g,h,j,n1,n2)
+  end
+  DistributedCellField(fields)
+end
+
+
+
 function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField,b::Number)
   fields = map_parts(a.fields) do f
     evaluate!(nothing,k,f,b)
@@ -320,3 +355,14 @@ end
 CellData.jump(a::DistributedCellField) = DistributedCellField(map_parts(jump,a.fields))
 CellData.jump(a::SkeletonPair{<:DistributedCellField}) = a.⁺ + a.⁻
 CellData.mean(a::DistributedCellField) = DistributedCellField(map_parts(mean,a.fields))
+
+
+#Custom Operation
+function get_node_model(a::GridapDistributed.DistributedDiscreteModel)
+  DistributedCellPoint(map_parts(get_node_model,a.models))
+end
+
+function get_node_model(model)
+  node_model = Gridap.ReferenceFEs.get_node_coordinates(model)
+  return node_model
+end
