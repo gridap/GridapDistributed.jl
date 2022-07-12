@@ -355,3 +355,14 @@ end
 CellData.jump(a::DistributedCellField) = DistributedCellField(map_parts(jump,a.fields))
 CellData.jump(a::SkeletonPair{<:DistributedCellField}) = a.⁺ + a.⁻
 CellData.mean(a::DistributedCellField) = DistributedCellField(map_parts(mean,a.fields))
+
+
+#Custom Operation
+function get_node_model(a::GridapDistributed.DistributedDiscreteModel)
+  DistributedCellPoint(map_parts(get_node_model,a.models))
+end
+
+function get_node_model(model)
+  node_model = Gridap.ReferenceFEs.get_node_coordinates(model)
+  return node_model
+end
