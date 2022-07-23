@@ -492,6 +492,8 @@ function remove_ghost_cells(glue::FaceToFaceGlue,trian,gids)
   view(trian, findall(tcell_to_mask))
 end
 
+remove_ghost_cells(glue::Nothing,trian,gids) = trian
+
 function remove_ghost_cells(glue::SkeletonPair,trian::SkeletonTriangulation,gids)
   ofacets = _find_owned_skeleton_facets(glue,gids)
   plus = view(trian.plus,ofacets)
