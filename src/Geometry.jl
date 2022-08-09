@@ -366,6 +366,21 @@ function Geometry.Triangulation(
   dtrian=DistributedTriangulation(trians,model)
 end
 
+function Geometry.BoundaryTriangulation(trian::DistributedTriangulation)
+  BoundaryTriangulation(no_ghost,trian)
+end
+
+function Geometry.BoundaryTriangulation(
+  portion,trian::DistributedTriangulation)
+  trians = map_parts(BoundaryTriangulation,trian.trians)
+  Dc = num_cell_dims(trian.model)
+  gids = trian.model.face_gids[Dc+1]
+  trians2 = map_parts(trians,gids.partition) do trian,gids
+     filter_cells_when_needed(portion,gids,trian)
+  end
+  DistributedTriangulation(trians2,trian.model)
+end
+
 function Geometry.BoundaryTriangulation(
   portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
   trians = map_parts(model.models,model.face_gids[Dc+1].partition) do model,gids
@@ -472,17 +487,17 @@ end
 
 function remove_ghost_cells(trian::Triangulation,gids)
   model = get_background_model(trian)
-  Dt    = num_cell_dims(trian)
+  Dt    = num_cell_dims(model)
   glue = get_glue(trian,Val(Dt))
   remove_ghost_cells(glue,trian,gids)
 end
 
-function remove_ghost_cells(trian::Union{SkeletonTriangulation,BoundaryTriangulation},gids)
-  model = get_background_model(trian)
-  Dm    = num_cell_dims(model)
-  glue = get_glue(trian,Val(Dm))
-  remove_ghost_cells(glue,trian,gids)
-end
+#function remove_ghost_cells(trian::Union{SkeletonTriangulation,BoundaryTriangulation},gids)
+#  model = get_background_model(trian)
+#  Dm    = num_cell_dims(model)
+#  glue = get_glue(trian,Val(Dm))
+#  remove_ghost_cells(glue,trian,gids)
+#end
 
 function remove_ghost_cells(glue::FaceToFaceGlue,trian,gids)
   tcell_to_mcell = glue.tface_to_mface
