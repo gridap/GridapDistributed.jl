@@ -83,8 +83,9 @@ function Algebra.allocate_vector(::Type{<:PVector{T,A}},ids::PRange) where {T,A}
   PVector(values,ids)
 end
 
-struct FullyAssembledRows end
-struct SubAssembledRows end
+abstract type DistributedAssemblyStrategy end
+struct FullyAssembledRows <: DistributedAssemblyStrategy end
+struct SubAssembledRows <: DistributedAssemblyStrategy end
 
 # For the moment we use COO format even though
 # it is quite memory consuming.

@@ -315,15 +315,18 @@ end
 # This object cannot implement the Triangulation interface in a strict sense
 """
 """
-struct DistributedTriangulation{Dc,Dp,A,B} <: GridapType
+struct DistributedTriangulation{Dc,Dp,A,B,C} <: GridapType
   trians::A
   model::B
+  strategy::C
   function DistributedTriangulation(
     trians::AbstractPData{<:Triangulation{Dc,Dp}},
-    model::DistributedDiscreteModel) where {Dc,Dp}
+    model::DistributedDiscreteModel,
+    strategy::DistributedAssemblyStrategy) where {Dc,Dp}
     A = typeof(trians)
     B = typeof(model)
-    new{Dc,Dp,A,B}(trians,model)
+    C = typeof(strategy)
+    new{Dc,Dp,A,B,C}(trians,model,strategy)
   end
 end
 
@@ -339,6 +342,14 @@ function Geometry.get_background_model(a::DistributedTriangulation)
 end
 
 # Triangulation constructors
+
+function DistributedTriangulation(trians,model,::PartitionedArrays.NoGhost)
+  DistributedTriangulation(trians,model,SubAssembledRows())
+end
+
+function DistributedTriangulation(trians,model,::PartitionedArrays.WithGhost)
+  DistributedTriangulation(trians,model,FullyAssembledRows())
+end
 
 function Geometry.Triangulation(
   model::DistributedDiscreteModel;kwargs...)
@@ -363,7 +374,7 @@ function Geometry.Triangulation(
   trians = map_parts(model.models,gids.partition) do model, gids
     Triangulation(portion,gids,ReferenceFE{Dt},model;kwargs...)
   end
-  dtrian=DistributedTriangulation(trians,model)
+  DistributedTriangulation(trians,model,portion)
 end
 
 function Geometry.BoundaryTriangulation(
@@ -371,7 +382,7 @@ function Geometry.BoundaryTriangulation(
   trians = map_parts(model.models,model.face_gids[Dc+1].partition) do model,gids
     BoundaryTriangulation(portion,gids,model;kwargs...)
   end
-  DistributedTriangulation(trians,model)
+  DistributedTriangulation(trians,model,portion)
 end
 
 function Geometry.SkeletonTriangulation(
@@ -379,7 +390,7 @@ function Geometry.SkeletonTriangulation(
   trians = map_parts(model.models,model.face_gids[Dc+1].partition) do model,gids
     SkeletonTriangulation(portion,gids,model;kwargs...)
   end
-  DistributedTriangulation(trians,model)
+  DistributedTriangulation(trians,model,portion)
 end
 
 function Geometry.Triangulation(
@@ -409,7 +420,7 @@ end
 function Geometry.InterfaceTriangulation(a::DistributedTriangulation,b::DistributedTriangulation)
   trians = map_parts(InterfaceTriangulation,a.trians,b.trians)
   @assert a.model === b.model
-  DistributedTriangulation(trians,a.model)
+  DistributedTriangulation(trians,a.model,a.strategy)
 end
 
 function Geometry.Triangulation(
@@ -532,7 +543,7 @@ function add_ghost_cells(dmodel::DistributedDiscreteModel{Dm},
     trians = map_parts(dmodel.models) do model
       Triangulation(ReferenceFE{Dt},model)
     end
-    DistributedTriangulation(trians,dmodel)
+    DistributedTriangulation(trians,dmodel,FullyAssembledRows())
   else
     mcell_intrian = map_parts(dmodel.models,dtrian.trians) do model, trian
       glue = get_glue(trian,Val(Dt))
@@ -549,7 +560,7 @@ function add_ghost_cells(dmodel::DistributedDiscreteModel{Dm},
       ReferenceFE{Dt}
     end
     trians = map_parts(Triangulation,dreffes,dmodel.models,mcell_intrian)
-    DistributedTriangulation(trians,dmodel)
+    DistributedTriangulation(trians,dmodel,FullyAssembledRows())
   end
 end
 
