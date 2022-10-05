@@ -71,11 +71,13 @@ function Geometry.add_tag_from_tags!(labels::DistributedFaceLabeling, name, tags
   end
 end
 
+abstract type AbstractDistributedDiscreteModel{Dc,Dp} <: GridapType end
+
 # We do not inherit from DiscreteModel on purpose.
 # This object cannot implement the DiscreteModel interface in a strict sense
 """
 """
-struct DistributedDiscreteModel{Dc,Dp,A,B} <: GridapType
+struct DistributedDiscreteModel{Dc,Dp,A,B} <: AbstractDistributedDiscreteModel{Dc,Dp}
   models::A
   face_gids::B
   function DistributedDiscreteModel(
