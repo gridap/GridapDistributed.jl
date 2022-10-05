@@ -41,6 +41,14 @@ function Base.zero(f::DistributedFESpace)
   FEFunction(f,free_values,isconsistent)
 end
 
+function FESpaces.gather_free_values!(free_vals,f::DistributedFESpace,cell_vals)
+  map_parts(gather_free_values!,local_views(free_vals), local_views(f), local_views(cell_vals))
+end
+
+function FESpaces.gather_free_and_dirichlet_values!(free_vals,dir_vals,f::DistributedFESpace,cell_vals)
+  map_parts(gather_free_and_dirichlet_values!,local_views(free_vals), local_views(dir_vals), local_views(f), local_views(cell_vals))
+end
+
 function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_prange)
   map_parts(cell_wise_vector,
           dof_wise_vector,
@@ -332,6 +340,11 @@ end
 function FESpaces.get_trial_fe_basis(f::DistributedSingleFieldFESpace)
   fields = map_parts(get_trial_fe_basis,f.spaces)
   DistributedCellField(fields)
+end
+
+function FESpaces.get_fe_dof_basis(f::DistributedSingleFieldFESpace)
+  dofs = map_parts(get_fe_dof_basis,local_views(f))
+  DistributedCellDof(dofs)
 end
 
 function FESpaces.TrialFESpace(f::DistributedSingleFieldFESpace)
