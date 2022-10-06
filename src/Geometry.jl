@@ -71,7 +71,16 @@ function Geometry.add_tag_from_tags!(labels::DistributedFaceLabeling, name, tags
   end
 end
 
+# Discrete models
+
+"""
+"""
 abstract type AbstractDistributedDiscreteModel{Dc,Dp} <: GridapType end
+
+Geometry.num_cell_dims(::AbstractDistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dc
+Geometry.num_cell_dims(::Type{<:AbstractDistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dc
+Geometry.num_point_dims(::AbstractDistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dp
+Geometry.num_point_dims(::Type{<:AbstractDistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dp
 
 # We do not inherit from DiscreteModel on purpose.
 # This object cannot implement the DiscreteModel interface in a strict sense
@@ -91,11 +100,6 @@ struct DistributedDiscreteModel{Dc,Dp,A,B} <: AbstractDistributedDiscreteModel{D
 end
 
 local_views(a::DistributedDiscreteModel) = a.models
-
-Geometry.num_cell_dims(::DistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dc
-Geometry.num_cell_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dc
-Geometry.num_point_dims(::DistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dp
-Geometry.num_point_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dp
 
 function Geometry.num_cells(model::DistributedDiscreteModel{Dc}) where Dc
  num_gids(model.face_gids[Dc+1])
