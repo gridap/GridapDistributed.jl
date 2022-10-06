@@ -45,10 +45,6 @@ function FESpaces.gather_free_values!(free_values,f::DistributedFESpace,cell_val
   map_parts(gather_free_values!, local_views(free_values), local_views(f), local_views(cell_vals))
 end
 
-function FESpaces.gather_dirichlet_values!(dirichlet_values,f::SingleFieldFESpace,cell_vals)
-  map_parts(gather_dirichlet_values!, local_views(dirichlet_values), local_views(f), local_views(cell_vals))
-end
-
 function FESpaces.gather_free_and_dirichlet_values!(free_values,dirichlet_values,f::DistributedFESpace,cell_vals)
   map_parts(gather_free_and_dirichlet_values!, local_views(free_values), local_views(dirichlet_values), local_views(f), local_views(cell_vals))
 end

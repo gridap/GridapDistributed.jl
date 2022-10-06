@@ -68,22 +68,6 @@ function assemble_tests(das,dΩ,dΩass,U,V)
   b2=allocate_vector(assem,vecdata)
   assemble_vector!(b2,assem,vecdata)
   @test abs(sum(b2)-length(b2)) < 1.0e-12
-
-  free_vals = PVector(1.0,V.gids)
-  dir_vals  = get_dirichlet_dof_values(U)
-  uh        = FEFunction(U,free_vals)
-  dofs      = get_fe_dof_basis(U)
-  cell_vals = dofs(uh)
-
-  free_vals_bis = zero_free_values(U)
-  dir_vals_bis  = zero_dirichlet_values(U)
-  gather_free_values!(free_vals_bis,U,cell_vals)
-  gather_dirichlet_values!(dir_vals_bis,U,cell_vals)
-  @test free_vals_bis ≈ free_vals
-  @test dir_vals_bis  ≈ dir_vals
-  gather_free_and_dirichlet_values!(free_vals_bis,dir_vals_bis,U,cell_vals)
-  @test free_vals_bis ≈ free_vals
-  @test dir_vals_bis  ≈ dir_vals
 end
 
 
@@ -131,16 +115,24 @@ function main(parts,das)
   uh_everywhere2_ = interpolate_everywhere!(uh_everywhere,free_values,dirichlet_values,U)
   eh3 = u - uh_everywhere2
 
-  dΩ = Measure(Ω,3)
-  cont  = ∫( abs2(eh) )dΩ
-  cont2  = ∫( abs2(eh2) )dΩ
-  cont2_  = ∫( abs2(eh2_) )dΩ
-  cont3  = ∫( abs2(eh3) )dΩ
-  @test sqrt(sum(cont)) < 1.0e-9
-  @test sqrt(sum(cont2)) < 1.0e-9
-  @test sqrt(sum(cont2_)) < 1.0e-9
-  @test sqrt(sum(cont3)) < 1.0e-9
+  dofs      = get_fe_dof_basis(U)
+  cell_vals = dofs(uh)
+  gather_free_values!(free_values,U,cell_vals)
+  gather_free_and_dirichlet_values!(free_values,dirichlet_values,U,cell_vals)
+  uh4 = FEFunction(U,free_values,dirichlet_values)
+  eh4 = u - uh4
 
+  dΩ = Measure(Ω,3)
+  cont   = ∫( abs2(eh) )dΩ
+  cont2  = ∫( abs2(eh2) )dΩ
+  cont2_ = ∫( abs2(eh2_) )dΩ
+  cont3  = ∫( abs2(eh3) )dΩ
+  cont4  = ∫( abs2(eh4) )dΩ
+  @test sqrt(sum(cont))   < 1.0e-9
+  @test sqrt(sum(cont2))  < 1.0e-9
+  @test sqrt(sum(cont2_)) < 1.0e-9
+  @test sqrt(sum(cont3))  < 1.0e-9
+  @test sqrt(sum(cont4))  < 1.0e-9
 
 
   writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
