@@ -324,13 +324,11 @@ CellData.mean(a::DistributedCellField) = DistributedCellField(map_parts(mean,a.f
 
 # DistributedCellDof
 
-struct DistributedCellDof{A,B} <: DistributedCellDatum
+struct DistributedCellDof{A} <: DistributedCellDatum
   dofs::A
-  metadata::B
-  function DistributedCellDof(dofs::AbstractPData{<:CellDof},metadata=nothing)
+  function DistributedCellDof(dofs::AbstractPData{<:CellDof})
       A = typeof(dofs)
-      B = typeof(metadata)
-      new{A,B}(dofs,metadata)
+      new{A}(dofs)
   end
 end
 
