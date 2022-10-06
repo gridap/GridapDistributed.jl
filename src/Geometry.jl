@@ -315,6 +315,66 @@ function Geometry.DiscreteModel(
   DistributedDiscreteModel(models,gids)
 end
 
+# RedistributeGlue : Redistributing discrete models
+
+"""
+  RedistributeGlue
+
+  Glue linking two distributions of the same mesh.
+
+  - `exchanger`: Send/Receive exchanger information between old and new mesh.
+  - `old2new`  : Mapping of local IDs from the old to the new mesh.
+  - `new2old`  : Mapping of local IDs from the new to the old mesh.
+"""
+struct RedistributeGlue
+  exchanger ::PArrays.Exchanger
+  old2new   ::AbstractPData{<:AbstractVector{<:Integer}}
+  new2old   ::AbstractPData{<:AbstractVector{<:Integer}}
+end
+
+function RedistributeGlue(
+    parts_rcv::AbstractPData{<:AbstractVector{<:Integer}},
+    parts_snd::AbstractPData{<:AbstractVector{<:Integer}},
+    lids_rcv::AbstractPData{<:PArrays.Table{<:Integer}},
+    lids_snd::AbstractPData{<:PArrays.Table{<:Integer}},
+    old2new::AbstractPData{<:AbstractVector{<:Integer}},
+    new2old::AbstractPData{<:AbstractVector{<:Integer}})
+  ex = PArrays.Exchanger(parts_rcv,parts_snd,lids_rcv,lids_snd)
+  return RedistributeGlue(ex,old2new,new2old)
+end
+
+# Bridge properties from Exchanger to ResdistributeGlue
+function Base.getproperty(x::RedistributeGlue, sym::Symbol)
+  if sym === :parts_rcv
+    x.exchanger.parts_rcv
+  elseif sym === :parts_snd
+    x.exchanger.parts_snd
+  elseif sym === :lids_rcv
+    x.exchanger.lids_rcv
+  elseif sym === :lids_snd
+    x.exchanger.lids_snd
+  else
+    getfield(x, sym)
+  end
+end
+
+function Base.propertynames(x::RedistributeGlue, private::Bool=false)
+  (fieldnames(typeof(x))...,fieldnames(typeof(x.exchanger))...)
+end
+
+allocate_rcv_buffer(t::Type{T},g::RedistributeGlue) where T = allocate_rcv_buffer(t,g.exchanger)
+allocate_snd_buffer(t::Type{T},g::RedistributeGlue) where T = allocate_snd_buffer(t,g.exchanger)
+# TODO: Should we also wrap all/some of the `async_exchange()` routines? 
+
+"""
+  Redistributes an AbstractDistributedDiscreteModel to optimaly 
+  rebalance the loads between the processors. 
+  Returns the a rebalanced model and a RedistributeGlue instance. 
+"""
+function redistribute(::AbstractDistributedDiscreteModel)
+  @abstractmethod
+end
+
 # Triangulation
 
 # We do not inherit from Triangulation on purpose.
