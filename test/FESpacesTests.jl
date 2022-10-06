@@ -68,6 +68,22 @@ function assemble_tests(das,dΩ,dΩass,U,V)
   b2=allocate_vector(assem,vecdata)
   assemble_vector!(b2,assem,vecdata)
   @test abs(sum(b2)-length(b2)) < 1.0e-12
+
+  free_vals = PVector(1.0,V.gids)
+  dir_vals  = get_dirichlet_dof_values(U)
+  uh        = FEFunction(U,free_vals)
+  dofs      = get_fe_dof_basis(U)
+  cell_vals = dofs(uh)
+
+  free_vals_bis = zero_free_values(U)
+  dir_vals_bis  = zero_dirichlet_values(U)
+  gather_free_values!(free_vals_bis,U,cell_vals)
+  gather_dirichlet_values!(dir_vals_bis,U,cell_vals)
+  @test free_vals_bis ≈ free_vals
+  @test dir_vals_bis  ≈ dir_vals
+  gather_free_and_dirichlet_values!(free_vals_bis,dir_vals_bis,U,cell_vals)
+  @test free_vals_bis ≈ free_vals
+  @test dir_vals_bis  ≈ dir_vals
 end
 
 
