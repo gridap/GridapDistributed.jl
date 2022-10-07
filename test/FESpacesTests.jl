@@ -115,16 +115,24 @@ function main(parts,das)
   uh_everywhere2_ = interpolate_everywhere!(uh_everywhere,free_values,dirichlet_values,U)
   eh3 = u - uh_everywhere2
 
-  dΩ = Measure(Ω,3)
-  cont  = ∫( abs2(eh) )dΩ
-  cont2  = ∫( abs2(eh2) )dΩ
-  cont2_  = ∫( abs2(eh2_) )dΩ
-  cont3  = ∫( abs2(eh3) )dΩ
-  @test sqrt(sum(cont)) < 1.0e-9
-  @test sqrt(sum(cont2)) < 1.0e-9
-  @test sqrt(sum(cont2_)) < 1.0e-9
-  @test sqrt(sum(cont3)) < 1.0e-9
+  dofs      = get_fe_dof_basis(U)
+  cell_vals = dofs(uh)
+  gather_free_values!(free_values,U,cell_vals)
+  gather_free_and_dirichlet_values!(free_values,dirichlet_values,U,cell_vals)
+  uh4 = FEFunction(U,free_values,dirichlet_values)
+  eh4 = u - uh4
 
+  dΩ = Measure(Ω,3)
+  cont   = ∫( abs2(eh) )dΩ
+  cont2  = ∫( abs2(eh2) )dΩ
+  cont2_ = ∫( abs2(eh2_) )dΩ
+  cont3  = ∫( abs2(eh3) )dΩ
+  cont4  = ∫( abs2(eh4) )dΩ
+  @test sqrt(sum(cont))   < 1.0e-9
+  @test sqrt(sum(cont2))  < 1.0e-9
+  @test sqrt(sum(cont2_)) < 1.0e-9
+  @test sqrt(sum(cont3))  < 1.0e-9
+  @test sqrt(sum(cont4))  < 1.0e-9
 
 
   writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
