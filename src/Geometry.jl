@@ -333,12 +333,12 @@ struct RedistributeGlue
 end
 
 function RedistributeGlue(
-    parts_rcv::AbstractPData{<:AbstractVector{<:Integer}},
-    parts_snd::AbstractPData{<:AbstractVector{<:Integer}},
-    lids_rcv::AbstractPData{<:PArrays.Table{<:Integer}},
-    lids_snd::AbstractPData{<:PArrays.Table{<:Integer}},
-    old2new::AbstractPData{<:AbstractVector{<:Integer}},
-    new2old::AbstractPData{<:AbstractVector{<:Integer}})
+    parts_rcv ::AbstractPData{<:AbstractVector{<:Integer}},
+    parts_snd ::AbstractPData{<:AbstractVector{<:Integer}},
+    lids_rcv  ::AbstractPData{<:PArrays.Table{<:Integer}},
+    lids_snd  ::AbstractPData{<:PArrays.Table{<:Integer}},
+    old2new   ::AbstractPData{<:AbstractVector{<:Integer}},
+    new2old   ::AbstractPData{<:AbstractVector{<:Integer}})
   ex = PArrays.Exchanger(parts_rcv,parts_snd,lids_rcv,lids_snd)
   return RedistributeGlue(ex,old2new,new2old)
 end
@@ -369,7 +369,7 @@ allocate_snd_buffer(t::Type{T},g::RedistributeGlue) where T = allocate_snd_buffe
 """
   Redistributes an AbstractDistributedDiscreteModel to optimaly 
   rebalance the loads between the processors. 
-  Returns the a rebalanced model and a RedistributeGlue instance. 
+  Returns the rebalanced model and a RedistributeGlue instance. 
 """
 function redistribute(::AbstractDistributedDiscreteModel)
   @abstractmethod
