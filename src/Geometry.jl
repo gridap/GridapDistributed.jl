@@ -415,42 +415,44 @@ end
 # Triangulation constructors
 
 function Geometry.Triangulation(
-  model::DistributedDiscreteModel;kwargs...)
+  model::AbstractDistributedDiscreteModel;kwargs...)
   D=num_cell_dims(model)
   Triangulation(no_ghost,ReferenceFE{D},model;kwargs...)
 end
 
 function Geometry.BoundaryTriangulation(
-  model::DistributedDiscreteModel;kwargs...)
+  model::AbstractDistributedDiscreteModel;kwargs...)
   BoundaryTriangulation(no_ghost,model;kwargs...)
 end
 
 function Geometry.SkeletonTriangulation(
-  model::DistributedDiscreteModel;kwargs...)
+  model::AbstractDistributedDiscreteModel;kwargs...)
   SkeletonTriangulation(no_ghost,model;kwargs...)
 end
 
 function Geometry.Triangulation(
-  portion,::Type{ReferenceFE{Dt}},model::DistributedDiscreteModel{Dm};kwargs...) where {Dt,Dm}
+  portion,::Type{ReferenceFE{Dt}},model::AbstractDistributedDiscreteModel{Dm};kwargs...) where {Dt,Dm}
   # Generate global ordering for the faces of dimension Dt (if needed)
-  gids=get_face_gids(model,Dt)
-  trians = map_parts(model.models,gids.partition) do model, gids
+  gids   = get_face_gids(model,Dt)
+  trians = map_parts(local_views(model),gids.partition) do model, gids
     Triangulation(portion,gids,ReferenceFE{Dt},model;kwargs...)
   end
-  dtrian=DistributedTriangulation(trians,model)
+  DistributedTriangulation(trians,model)
 end
 
 function Geometry.BoundaryTriangulation(
-  portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
-  trians = map_parts(model.models,model.face_gids[Dc+1].partition) do model,gids
+  portion,model::AbstractDistributedDiscreteModel{Dc};kwargs...) where Dc
+  gids   = get_face_gids(model,Dc)
+  trians = map_parts(local_views(model),gids.partition) do model, gids
     BoundaryTriangulation(portion,gids,model;kwargs...)
   end
   DistributedTriangulation(trians,model)
 end
 
 function Geometry.SkeletonTriangulation(
-  portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
-  trians = map_parts(model.models,model.face_gids[Dc+1].partition) do model,gids
+  portion,model::AbstractDistributedDiscreteModel{Dc};kwargs...) where Dc
+  gids   = get_face_gids(model,Dc)
+  trians = map_parts(local_views(model),gids.partition) do model, gids
     SkeletonTriangulation(portion,gids,model;kwargs...)
   end
   DistributedTriangulation(trians,model)
@@ -487,13 +489,13 @@ function Geometry.InterfaceTriangulation(a::DistributedTriangulation,b::Distribu
 end
 
 function Geometry.Triangulation(
-  portion, model::DistributedDiscreteModel;kwargs...)
+  portion, model::AbstractDistributedDiscreteModel;kwargs...)
   D=num_cell_dims(model)
   Triangulation(portion,ReferenceFE{D},model;kwargs...)
 end
 
 function Geometry.Triangulation(
-  ::Type{ReferenceFE{D}}, model::DistributedDiscreteModel;kwargs...) where D
+  ::Type{ReferenceFE{D}}, model::AbstractDistributedDiscreteModel;kwargs...) where D
   Triangulation(no_ghost, ReferenceFE{D}, model; kwargs...)
 end
 
