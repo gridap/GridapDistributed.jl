@@ -454,7 +454,7 @@ end
 # Factories
 
 function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
-  spaces = map_parts(model.models) do m
+  spaces = map_parts(local_views(model)) do m
     FESpace(m,reffe;kwargs...)
   end
   gids =  generate_gids(model,spaces)
