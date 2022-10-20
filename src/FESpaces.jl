@@ -453,7 +453,7 @@ end
 
 # Factories
 
-function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
+function FESpaces.FESpace(model::AbstractDistributedDiscreteModel,reffe;kwargs...)
   spaces = map_parts(local_views(model)) do m
     FESpace(m,reffe;kwargs...)
   end

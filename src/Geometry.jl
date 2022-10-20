@@ -82,6 +82,14 @@ Geometry.num_cell_dims(::Type{<:AbstractDistributedDiscreteModel{Dc,Dp}}) where 
 Geometry.num_point_dims(::AbstractDistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dp
 Geometry.num_point_dims(::Type{<:AbstractDistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dp
 
+function local_views(::AbstractDistributedDiscreteModel)
+  @abstractmethod
+end
+
+function generate_gids(::AbstractDistributedDiscreteModel)
+  @abstractmethod
+end
+
 # We do not inherit from DiscreteModel on purpose.
 # This object cannot implement the DiscreteModel interface in a strict sense
 """
