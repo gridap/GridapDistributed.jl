@@ -394,7 +394,7 @@ struct DistributedTriangulation{Dc,Dp,A,B} <: GridapType
   model::B
   function DistributedTriangulation(
     trians::AbstractPData{<:Triangulation{Dc,Dp}},
-    model::DistributedDiscreteModel) where {Dc,Dp}
+    model::AbstractDistributedDiscreteModel) where {Dc,Dp}
     A = typeof(trians)
     B = typeof(model)
     new{Dc,Dp,A,B}(trians,model)
