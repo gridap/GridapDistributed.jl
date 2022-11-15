@@ -186,7 +186,7 @@ end
 # Integration related
 """
 """
-struct DistributedMeasure{A<:AbstractPData{Union{<:Measure},<:Gridap.Adaptivity.CompositeMeasure}} <: GridapType
+struct DistributedMeasure{A<:AbstractPData{Union{<:Measure,<:Gridap.Adaptivity.CompositeMeasure}}} <: GridapType
   measures::A
 end
 
