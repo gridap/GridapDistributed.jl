@@ -320,3 +320,33 @@ end
 CellData.jump(a::DistributedCellField) = DistributedCellField(map_parts(jump,a.fields))
 CellData.jump(a::SkeletonPair{<:DistributedCellField}) = a.⁺ + a.⁻
 CellData.mean(a::DistributedCellField) = DistributedCellField(map_parts(mean,a.fields))
+
+
+# DistributedCellDof
+
+struct DistributedCellDof{A} <: DistributedCellDatum
+  dofs::A
+  function DistributedCellDof(dofs::AbstractPData{<:CellDof})
+      A = typeof(dofs)
+      new{A}(dofs)
+  end
+end
+
+local_views(s::DistributedCellDof) = s.dofs
+
+(a::DistributedCellDof)(f) = evaluate(a,f)
+
+function Gridap.Arrays.evaluate!(cache,s::DistributedCellDof,f::DistributedCellField)
+  map_parts(local_views(s),local_views(f)) do s, f
+      evaluate!(nothing,s,f)
+  end
+end
+
+function Gridap.Arrays.evaluate!(cache, ::DistributedCellField, ::DistributedCellDof)
+@unreachable """\n
+CellField (f) objects cannot be evaluated at CellDof (s) objects.
+However, CellDofs objects can be evaluated at CellField objects.
+Did you mean evaluate(f,s) instead of evaluate(s,f), i.e.
+f(s) instead of s(f)?
+"""
+end
