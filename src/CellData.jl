@@ -275,6 +275,13 @@ function CellData.get_normal_vector(a::DistributedTriangulation)
   DistributedCellField(fields)
 end
 
+function CellData.change_domain(a::DistributedCellField,target_trian::DistributedTriangulation)
+  fields = map_parts(a.fields,target_trian.trians) do a,trian
+    CellData.change_domain(a,trian,DomainStyle(a))
+  end
+  DistributedCellField(fields)
+end
+
 # Skeleton related
 
 function DistributedCellField(a::AbstractPData{<:SkeletonPair})
