@@ -487,18 +487,18 @@ end
 
 function remove_ghost_cells(trian::Triangulation,gids)
   model = get_background_model(trian)
-  # Dt    = num_cell_dims(model)
-  Dt    = num_cell_dims(trian)
+   Dt    = num_cell_dims(model)
+  #Dt    = num_cell_dims(trian)
   glue = get_glue(trian,Val(Dt))
   remove_ghost_cells(glue,trian,gids)
 end
 
-function remove_ghost_cells(trian::Union{SkeletonTriangulation,BoundaryTriangulation},gids)
- model = get_background_model(trian)
- Dm    = num_cell_dims(model)
- glue = get_glue(trian,Val(Dm))
- remove_ghost_cells(glue,trian,gids)
-end
+#function remove_ghost_cells(trian::Union{SkeletonTriangulation,BoundaryTriangulation},gids)
+# model = get_background_model(trian)
+# Dm    = num_cell_dims(model)
+# glue = get_glue(trian,Val(Dm))
+# remove_ghost_cells(glue,trian,gids)
+#end
 
 function remove_ghost_cells(glue::FaceToFaceGlue,trian,gids)
   tcell_to_mcell = glue.tface_to_mface
