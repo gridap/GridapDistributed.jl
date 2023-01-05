@@ -2,6 +2,7 @@ module GridapDistributed
 
 using Gridap
 using Gridap.Helpers
+using Gridap.Adaptivity
 using Gridap.Algebra
 using Gridap.Arrays
 using Gridap.Fields

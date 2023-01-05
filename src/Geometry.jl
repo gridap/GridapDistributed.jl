@@ -319,6 +319,23 @@ function Geometry.DiscreteModel(
   DistributedDiscreteModel(models,gids)
 end
 
+# DistributedAdaptedDiscreteModels
+
+const DistributedAdaptedDiscreteModel{Dc,Dp} = DistributedDiscreteModel{Dc,Dp,<:AbstractPData{<:AdaptedDiscreteModel{Dc,Dp}}}
+
+function DistributedAdaptedDiscreteModel(model  ::AbstractDistributedDiscreteModel,
+                                         parent ::AbstractDistributedDiscreteModel,
+                                         glue   ::AbstractPData{<:AdaptivityGlue})
+  models = map_parts(local_views(model),local_views(parent),glue) do model, parent, glue
+    AdaptedDiscreteModel(model,parent,glue)
+  end
+  return DistributedDiscreteModel(models,get_cell_gids(model))
+end
+
+function Adaptivity.get_adaptivity_glue(model::DistributedAdaptedDiscreteModel)
+  return map_parts(Adaptivity.get_adaptivity_glue,local_views(model))
+end
+
 # RedistributeGlue : Redistributing discrete models
 
 """
