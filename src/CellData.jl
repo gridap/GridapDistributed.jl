@@ -199,9 +199,17 @@ function CellData.Measure(t::DistributedTriangulation,args...)
   DistributedMeasure(measures)
 end
 
+function CellData.Measure(tt::DistributedTriangulation{Dc,Dp},it::DistributedTriangulation{Dc,Dp},args...) where {Dc,Dp}
+  measures = map_parts(local_views(tt),local_views(it)) do ttrian, itrian
+    Measure(ttrian,itrian,args...)
+  end
+  return DistributedMeasure(measures)
+end
+
 function CellData.get_cell_points(a::DistributedMeasure)
   DistributedCellPoint(map_parts(get_cell_points,a.measures))
 end
+
 """
 """
 struct DistributedDomainContribution{A<:AbstractPData{<:DomainContribution}} <: DistributedGridapType
