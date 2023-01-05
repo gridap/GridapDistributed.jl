@@ -40,7 +40,7 @@ struct DistributedGridTopology{Dc,Dp,A} <: GridapType
   end
 end
 
-local_views(a::DistributedGridTopology) = a.topo
+local_views(a::DistributedGridTopology) = a.topos
 
 function Geometry.OrientationStyle(
   ::Type{<:DistributedGridTopology{Dc,Dp,A}}) where {Dc,Dp,A}
