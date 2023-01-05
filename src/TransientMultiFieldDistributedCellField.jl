@@ -5,6 +5,8 @@ struct TransientMultiFieldDistributedCellField{A} <: TransientDistributedCellFie
   transient_single_fields::Vector{<:TransientDistributedCellField} # used to iterate
 end
 
+local_views(f::TransientMultiFieldDistributedCellField) = local_views(f.cellfield)
+
 # Constructors
 function TransientFETools.TransientCellField(multi_field::DistributedMultiFieldFEFunction,derivatives::Tuple)
   transient_single_fields = _to_transient_single_distributed_fields(multi_field,derivatives)

@@ -3,7 +3,7 @@
 # This object cannot implement the Grid interface in a strict sense
 """
 """
-struct DistributedGrid{Dc,Dp,A} <: GridapType
+struct DistributedGrid{Dc,Dp,A} <: DistributedGridapType
   grids::A
   function DistributedGrid(grids::AbstractPData{<:Grid{Dc,Dp}}) where {Dc,Dp}
     A = typeof(grids)
@@ -32,7 +32,7 @@ Geometry.num_point_dims(::Type{<:DistributedGrid{Dc,Dp}}) where {Dc,Dp} = Dp
 # This object cannot implement the GridTopology interface in a strict sense
 """
 """
-struct DistributedGridTopology{Dc,Dp,A} <: GridapType
+struct DistributedGridTopology{Dc,Dp,A} <: DistributedGridapType
   topos::A
   function DistributedGridTopology(topos::AbstractPData{<:GridTopology{Dc,Dp}}) where {Dc,Dp}
     A = typeof(topos)
@@ -75,16 +75,12 @@ end
 
 """
 """
-abstract type AbstractDistributedDiscreteModel{Dc,Dp} <: GridapType end
+abstract type AbstractDistributedDiscreteModel{Dc,Dp} <: DistributedGridapType end
 
 Geometry.num_cell_dims(::AbstractDistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dc
 Geometry.num_cell_dims(::Type{<:AbstractDistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dc
 Geometry.num_point_dims(::AbstractDistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dp
 Geometry.num_point_dims(::Type{<:AbstractDistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dp
-
-function local_views(::AbstractDistributedDiscreteModel)
-  @abstractmethod
-end
 
 function generate_gids(::AbstractDistributedDiscreteModel)
   @abstractmethod
@@ -370,9 +366,10 @@ function Base.propertynames(x::RedistributeGlue, private::Bool=false)
   (fieldnames(typeof(x))...,fieldnames(typeof(x.exchanger))...)
 end
 
+get_parts(g::RedistributeGlue) = PArrays.get_part_ids(g.old2new)
+
 allocate_rcv_buffer(t::Type{T},g::RedistributeGlue) where T = allocate_rcv_buffer(t,g.exchanger)
 allocate_snd_buffer(t::Type{T},g::RedistributeGlue) where T = allocate_snd_buffer(t,g.exchanger)
-# TODO: Should we also wrap all/some of the `async_exchange()` routines? 
 
 """
   Redistributes an AbstractDistributedDiscreteModel to optimaly 
@@ -389,7 +386,7 @@ end
 # This object cannot implement the Triangulation interface in a strict sense
 """
 """
-struct DistributedTriangulation{Dc,Dp,A,B} <: GridapType
+struct DistributedTriangulation{Dc,Dp,A,B} <: DistributedGridapType
   trians::A
   model::B
   function DistributedTriangulation(

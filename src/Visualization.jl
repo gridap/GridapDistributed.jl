@@ -4,6 +4,8 @@ struct DistributedVisualizationData{A<:AbstractPData}
   visdata::A
 end
 
+local_views(d::DistributedVisualizationData) = d.visdata
+
 function Base.getproperty(x::DistributedVisualizationData, sym::Symbol)
   if sym == :grid
     map_parts(i->i.grid,x.visdata)

@@ -1,5 +1,5 @@
 
-abstract type DistributedCellDatum <: GridapType end
+abstract type DistributedCellDatum <: DistributedGridapType end
 
 # DistributedCellPoint
 """
@@ -186,7 +186,7 @@ end
 # Integration related
 """
 """
-struct DistributedMeasure{A<:AbstractPData{<:Measure}} <: GridapType
+struct DistributedMeasure{A<:AbstractPData{<:Measure}} <: DistributedGridapType
   measures::A
 end
 
@@ -204,7 +204,7 @@ function CellData.get_cell_points(a::DistributedMeasure)
 end
 """
 """
-struct DistributedDomainContribution{A<:AbstractPData{<:DomainContribution}} <: GridapType
+struct DistributedDomainContribution{A<:AbstractPData{<:DomainContribution}} <: DistributedGridapType
   contribs::A
 end
 
