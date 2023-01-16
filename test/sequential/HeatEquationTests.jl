@@ -1,5 +1,5 @@
 module HeatEquationTestsSeq
 using PartitionedArrays
 include("../HeatEquationTests.jl")
-prun(HeatEquationTests.main,sequential,(2,2))
+with_backend(HeatEquationTests.main,SequentialBackend(),(2,2))
 end # module

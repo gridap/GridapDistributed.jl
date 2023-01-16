@@ -22,7 +22,7 @@ function main(parts)
   g(t) = x -> (∇⋅u(t))(x)
   h(t) = x -> ∇(u(t))(x)⋅VectorValue(0.0,1.0) - p(t)(x)*VectorValue(0.0,1.0)
 
-  parts = get_part_ids(sequential,(2,2))
+  parts = get_part_ids(SequentialBackend(),(2,2))
   domain = (0,1,0,1)
   partition = (4,4)
   model = CartesianDiscreteModel(parts,domain,partition)
