@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `DistributedCellDof`, a distributed wrapper for `Gridap.CellDof`. This new wrapper acts on `DistributedCellField` in the same way `Gridap.CellDof` acts on `CellField`. Added `get_fe_dof_basis` function, which extracts a `DistributedCellDof` from a `DistributedFESpace`. Since PR [#97](https://github.com/gridap/GridapDistributed.jl/pull/97).
 - Added `gather_free_and_dirichlet_values!` and `gather_free_values!` wrapper functions. Since PR [#97](https://github.com/gridap/GridapDistributed.jl/pull/97).
+- Added compatibility with MPI v0.20 and PartitionedArrays v0.2.13
 
 ## [0.2.6] - 2022-06-07
 
