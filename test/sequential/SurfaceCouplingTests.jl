@@ -1,6 +1,6 @@
 module SurfaceCouplingTestsSeq
 using PartitionedArrays
 include("../SurfaceCouplingTests.jl")
-prun(SurfaceCouplingTests.main,sequential,(2,2))
+with_backend(SurfaceCouplingTests.main,SequentialBackend(),(2,2))
 end # module
 

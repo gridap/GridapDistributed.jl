@@ -38,14 +38,14 @@ with the appropriate number of MPI tasks, `-n 4` in this particular example.
 
 ## Simple example (MPI-parallel execution mode)
 
-The following Julia code snippet solves a 2D Poisson problem in parallel on the unit square. The example follows the MPI-parallel execution mode (note the `mpi` argument to the `prun` function call) and thus it must be executed on 4 MPI tasks (note the mesh is partitioned into 4 parts) using the instructions [below](https://github.com/gridap/GridapDistributed.jl#mpi-parallel-julia-script-execution-instructions). If a user wants to use the sequential execution mode, one just replaces `mpi` by `sequential` in the call to `prun`. `GridapDistributed.jl` sequential execution mode scripts are executed as any other julia sequential script.
+The following Julia code snippet solves a 2D Poisson problem in parallel on the unit square. The example follows the MPI-parallel execution mode (note the `MPIBackend()` argument to the `with_backend` function call) and thus it must be executed on 4 MPI tasks (note the mesh is partitioned into 4 parts) using the instructions [below](https://github.com/gridap/GridapDistributed.jl#mpi-parallel-julia-script-execution-instructions). If a user wants to use the sequential execution mode, one just replaces `MPIBackend()` by `SequentialBackend()` in the call to `with_backend`. `GridapDistributed.jl` sequential execution mode scripts are executed as any other julia sequential script.
 
 ```julia
 using Gridap
 using GridapDistributed
 using PartitionedArrays
 partition = (2,2)
-prun(mpi,partition) do parts
+with_backend(MPIBackend(),partition) do parts
   domain = (0,1,0,1)
   mesh_partition = (4,4)
   model = CartesianDiscreteModel(parts,domain,mesh_partition)
@@ -64,7 +64,7 @@ prun(mpi,partition) do parts
   writevtk(Ω,"results",cellfields=["uh"=>uh,"grad_uh"=>∇(uh)])
 end
 ```
-The domain is discretized using the parallel Cartesian-like mesh generator built-in in `GridapDistributed`. The only minimal difference with respect to the sequential `Gridap` script is a call to the `prun` function of [`PartitionedArrays.jl`](https://github.com/fverdugo/PartitionedArrays.jl) right at the beginning of the program. With this function, the programer sets up the `PartitionedArrays.jl` communication backend (i.e., MPI in the example), specifies the number of parts and their layout (i.e., 2x2 partition in the example), and provides a function (using Julia do-block syntax for function arguments in the example) to be run on each part. The function body is equivalent to a sequential `Gridap` script, except for the `CartesianDiscreteModel` call, which in `GridapDistributed` also requires the `parts` argument passed back by the `prun` function.
+The domain is discretized using the parallel Cartesian-like mesh generator built-in in `GridapDistributed`. The only minimal difference with respect to the sequential `Gridap` script is a call to the `with_backend` function of [`PartitionedArrays.jl`](https://github.com/fverdugo/PartitionedArrays.jl) right at the beginning of the program. With this function, the programer sets up the `PartitionedArrays.jl` communication backend (i.e., MPI in the example), specifies the number of parts and their layout (i.e., 2x2 partition in the example), and provides a function (using Julia do-block syntax for function arguments in the example) to be run on each part. The function body is equivalent to a sequential `Gridap` script, except for the `CartesianDiscreteModel` call, which in `GridapDistributed` also requires the `parts` argument passed back by the `with_backend` function.
 
 ## Using parallel solvers
 
@@ -89,7 +89,7 @@ using GridapPETSc
 using GridapDistributed
 using PartitionedArrays
 n = 6
-prun(mpi,n) do parts
+with_backend(MPIBackend(),n) do parts
   options = "-ksp_type cg -pc_type gamg -ksp_monitor"
   GridapPETSc.with(args=split(options)) do
     model = GmshDiscreteModel(parts,"demo.msh")

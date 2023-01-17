@@ -21,7 +21,7 @@ g(x) = tr(∇u(x))
 function main(parts)
 
   # Mesh
-  parts = get_part_ids(sequential,(2,2))
+  parts = get_part_ids(SequentialBackend(),(2,2))
   cells = (10,10)
   domain = (0,1,0,1)
   model = CartesianDiscreteModel(parts,domain,cells)

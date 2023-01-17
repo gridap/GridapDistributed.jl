@@ -1,5 +1,5 @@
 module PoissonTestsSeq
 using PartitionedArrays
 include("../PoissonTests.jl")
-prun(PoissonTests.main,sequential,(2,2))
+with_backend(PoissonTests.main,SequentialBackend(),(2,2))
 end # module
