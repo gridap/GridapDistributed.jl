@@ -1,5 +1,5 @@
 module DivConformingTestsSeq
 using PartitionedArrays
 include("../DivConformingTests.jl")
-prun(DivConformingTests.main,sequential,2)
+with_backend(DivConformingTests.main,SequentialBackend(),2)
 end # module
