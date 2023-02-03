@@ -393,7 +393,7 @@ allocate_snd_buffer(t::Type{T},g::RedistributeGlue) where T = allocate_snd_buffe
   rebalance the loads between the processors. 
   Returns the rebalanced model and a RedistributeGlue instance. 
 """
-function redistribute(::AbstractDistributedDiscreteModel)
+function redistribute(::AbstractDistributedDiscreteModel,args...;kwargs...)
   @abstractmethod
 end
 
