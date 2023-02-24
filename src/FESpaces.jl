@@ -381,11 +381,12 @@ function FESpaces.HomogeneousTrialFESpace(f::DistributedSingleFieldFESpace)
 end
 
 function generate_gids(
-  model::DistributedDiscreteModel{Dc},
+  model::AbstractDistributedDiscreteModel{Dc},
   spaces::AbstractPData{<:SingleFieldFESpace}) where Dc
   cell_to_ldofs = map_parts(get_cell_dof_ids,spaces)
   nldofs = map_parts(num_free_dofs,spaces)
-  generate_gids(model.face_gids[Dc+1],cell_to_ldofs,nldofs)
+  cell_gids = get_cell_gids(model)
+  generate_gids(cell_gids,cell_to_ldofs,nldofs)
 end
 
 function FESpaces.interpolate(u,f::DistributedSingleFieldFESpace)

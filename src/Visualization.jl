@@ -27,15 +27,15 @@ end
 # Define how each object is visualized
 
 function Visualization.visualization_data(
-  model::DistributedDiscreteModel{Dc},
+  model::AbstractDistributedDiscreteModel{Dc},
   filebase::AbstractString;
   labels=get_face_labeling(model)) where Dc
 
-  parts = get_part_ids(model.models)
+  parts  = get_parts(model)
   nparts = length(parts)
-  cell_gids=get_cell_gids(model)
+  cell_gids = get_cell_gids(model)
   vd = map_parts(
-    parts,model.models,cell_gids.partition,labels.labels) do part,model,gids,labels
+    parts,local_views(model),cell_gids.partition,labels.labels) do part,model,gids,labels
 
     vd = visualization_data(model,filebase;labels=labels)
     vd_cells = vd[end]

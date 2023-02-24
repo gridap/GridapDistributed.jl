@@ -32,7 +32,7 @@ function main(parts)
     d = x[1]^2 + x[2]^2 - R^2
     d < 0
   end
-  cell_to_entity = map_parts(model.models) do model
+  cell_to_entity = map_parts(local_views(model)) do model
     grid = get_grid(model)
     cell_to_coords = get_cell_coordinates(grid)
     cell_to_is_solid = lazy_map(is_in,cell_to_coords)

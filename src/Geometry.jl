@@ -71,23 +71,67 @@ function Geometry.add_tag_from_tags!(labels::DistributedFaceLabeling, name, tags
   end
 end
 
-# Discrete models
+# Dsitributed Discrete models
+# We do not inherit from DiscreteModel on purpose.
+# This object cannot implement the DiscreteModel interface in a strict sense
 
 """
 """
 abstract type AbstractDistributedDiscreteModel{Dc,Dp} <: DistributedGridapType end
+
+function generate_gids(::AbstractDistributedDiscreteModel)
+  @abstractmethod
+end
+
+function get_cell_gids(model::AbstractDistributedDiscreteModel{Dc}) where Dc
+  @abstractmethod
+end
+
+function get_face_gids(model::AbstractDistributedDiscreteModel,dim::Integer)
+  @abstractmethod
+end
 
 Geometry.num_cell_dims(::AbstractDistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dc
 Geometry.num_cell_dims(::Type{<:AbstractDistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dc
 Geometry.num_point_dims(::AbstractDistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dp
 Geometry.num_point_dims(::Type{<:AbstractDistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dp
 
-function generate_gids(::AbstractDistributedDiscreteModel)
-  @abstractmethod
+function Geometry.num_cells(model::AbstractDistributedDiscreteModel{Dc}) where Dc
+  num_gids(get_cell_gids(model))
 end
 
-# We do not inherit from DiscreteModel on purpose.
-# This object cannot implement the DiscreteModel interface in a strict sense
+function Geometry.num_facets(model::AbstractDistributedDiscreteModel{Dc}) where Dc
+  num_gids(get_face_gids(model,Dc-1))
+end
+
+function Geometry.num_edges(model::AbstractDistributedDiscreteModel{Dc}) where Dc
+  num_gids(get_face_gids(model,1))
+end
+
+function Geometry.num_vertices(model::AbstractDistributedDiscreteModel{Dc}) where Dc
+  num_gids(get_face_gids(model,0))
+end
+
+function Geometry.num_faces(model::AbstractDistributedDiscreteModel{Dc},dim::Integer) where Dc
+  num_gids(get_face_gids(model,dim))
+end
+
+function Geometry.num_faces(model::AbstractDistributedDiscreteModel{Dc}) where Dc
+  sum(d->num_faces(model,d),0:Dc)
+end
+
+function Geometry.get_grid(model::AbstractDistributedDiscreteModel)
+  DistributedGrid(map_parts(get_grid,local_views(model)))
+end
+
+function Geometry.get_grid_topology(model::AbstractDistributedDiscreteModel)
+  DistributedGridTopology(map_parts(get_grid_topology,local_views(model)))
+end
+
+function Geometry.get_face_labeling(model::AbstractDistributedDiscreteModel)
+  DistributedFaceLabeling(map_parts(get_face_labeling,local_views(model)))
+end
+
 """
 """
 struct DistributedDiscreteModel{Dc,Dp,A,B} <: AbstractDistributedDiscreteModel{Dc,Dp}
@@ -105,51 +149,6 @@ end
 
 local_views(a::DistributedDiscreteModel) = a.models
 
-function Geometry.num_cells(model::DistributedDiscreteModel{Dc}) where Dc
- num_gids(model.face_gids[Dc+1])
-end
-
-function Geometry.num_facets(model::DistributedDiscreteModel{Dc}) where Dc
-  _setup_face_gids!(model,Dc-1)
-  num_gids(model.face_gids[Dc])
-end
-
-function Geometry.num_edges(model::DistributedDiscreteModel{Dc}) where Dc
-  _setup_face_gids!(model,1)
-  num_gids(model.face_gids[2])
-end
-
-function Geometry.num_vertices(model::DistributedDiscreteModel{Dc}) where Dc
-  _setup_face_gids!(model,0)
-  num_gids(model.face_gids[1])
-end
-
-function Geometry.num_faces(model::DistributedDiscreteModel{Dc},dim::Integer) where Dc
-  _setup_face_gids!(model,dim)
-  num_gids(model.face_gids[dim+1])
-end
-
-function Geometry.num_faces(model::DistributedDiscreteModel{Dc}) where Dc
-  num_faces=0
-  for dim=0:Dc
-    _setup_face_gids!(model,dim)
-    num_faces+=num_gids(model.face_gids[dim+1])
-  end
-  num_faces
-end
-
-function Geometry.get_grid(model::DistributedDiscreteModel)
-  DistributedGrid(map_parts(get_grid,model.models))
-end
-
-function Geometry.get_grid_topology(model::DistributedDiscreteModel)
-  DistributedGridTopology(map_parts(get_grid_topology,model.models))
-end
-
-function Geometry.get_face_labeling(model::DistributedDiscreteModel)
-  DistributedFaceLabeling(map_parts(get_face_labeling,model.models))
-end
-
 function get_cell_gids(model::DistributedDiscreteModel{Dc}) where Dc
   model.face_gids[Dc+1]
 end
@@ -157,6 +156,22 @@ end
 function get_face_gids(model::DistributedDiscreteModel,dim::Integer)
   _setup_face_gids!(model,dim)
   model.face_gids[dim+1]
+end
+
+function _setup_face_gids!(dmodel::DistributedDiscreteModel{Dc},dim) where {Dc}
+  Gridap.Helpers.@check 0 <= dim <= Dc
+  if !isassigned(dmodel.face_gids,dim+1)
+    mgids   = dmodel.face_gids[Dc+1]
+    nlfaces = map_parts(local_views(dmodel)) do model
+      num_faces(model,dim)
+    end
+    cell_lfaces = map_parts(local_views(dmodel)) do model
+      topo  = get_grid_topology(model)
+      faces = get_faces(topo, Dc, dim)
+    end
+    dmodel.face_gids[dim+1] = generate_gids(mgids,cell_lfaces,nlfaces)
+  end
+  return
 end
 
 # CartesianDiscreteModel
@@ -473,7 +488,7 @@ function Geometry.SkeletonTriangulation(
 end
 
 function Geometry.Triangulation(
-  portion,gids::AbstractIndexSet, args...;kwargs...) where D
+  portion,gids::AbstractIndexSet, args...;kwargs...)
   trian = Triangulation(args...;kwargs...)
   filter_cells_when_needed(portion,gids,trian)
 end
@@ -504,7 +519,7 @@ end
 
 function Geometry.Triangulation(
   portion, model::AbstractDistributedDiscreteModel;kwargs...)
-  D=num_cell_dims(model)
+  D = num_cell_dims(model)
   Triangulation(portion,ReferenceFE{D},model;kwargs...)
 end
 
@@ -548,29 +563,29 @@ end
 function remove_ghost_cells(trian::Triangulation,gids)
   model = get_background_model(trian)
   Dt    = num_cell_dims(trian)
-  glue = get_glue(trian,Val(Dt))
+  glue  = get_glue(trian,Val(Dt))
   remove_ghost_cells(glue,trian,gids)
 end
 
 function remove_ghost_cells(trian::Union{SkeletonTriangulation,BoundaryTriangulation},gids)
   model = get_background_model(trian)
   Dm    = num_cell_dims(model)
-  glue = get_glue(trian,Val(Dm))
+  glue  = get_glue(trian,Val(Dm))
   remove_ghost_cells(glue,trian,gids)
 end
 
 function remove_ghost_cells(glue::FaceToFaceGlue,trian,gids)
   tcell_to_mcell = glue.tface_to_mface
-  mcell_to_part = gids.lid_to_part
-  tcell_to_part = view(mcell_to_part,tcell_to_mcell)
-  tcell_to_mask = tcell_to_part .== gids.part
+  mcell_to_part  = gids.lid_to_part
+  tcell_to_part  = view(mcell_to_part,tcell_to_mcell)
+  tcell_to_mask  = tcell_to_part .== gids.part
   view(trian, findall(tcell_to_mask))
 end
 
 function remove_ghost_cells(glue::SkeletonPair,trian::SkeletonTriangulation,gids)
   ofacets = _find_owned_skeleton_facets(glue,gids)
-  plus = view(trian.plus,ofacets)
-  minus = view(trian.minus,ofacets)
+  plus    = view(trian.plus,ofacets)
+  minus   = view(trian.minus,ofacets)
   SkeletonTriangulation(plus,minus)
 end
 
@@ -605,9 +620,9 @@ function add_ghost_cells(dtrian::DistributedTriangulation)
   add_ghost_cells(dmodel,dtrian)
 end
 
-function _covers_all_faces(dmodel::DistributedDiscreteModel{Dm},
+function _covers_all_faces(dmodel::AbstractDistributedDiscreteModel{Dm},
                            dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
-  covers_all_faces=map_parts(dmodel.models,dtrian.trians) do model, trian
+  covers_all_faces=map_parts(local_views(dmodel),local_views(dtrian)) do model, trian
     glue = get_glue(trian,Val(Dt))
     @assert isa(glue,FaceToFaceGlue)
     isa(glue.tface_to_mface,IdentityVector)
@@ -615,16 +630,16 @@ function _covers_all_faces(dmodel::DistributedDiscreteModel{Dm},
   reduce(&,covers_all_faces,init=true)
 end
 
-function add_ghost_cells(dmodel::DistributedDiscreteModel{Dm},
+function add_ghost_cells(dmodel::AbstractDistributedDiscreteModel{Dm},
                          dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
   covers_all_faces=_covers_all_faces(dmodel,dtrian)
   if (covers_all_faces)
-    trians = map_parts(dmodel.models) do model
+    trians = map_parts(local_views(dmodel)) do model
       Triangulation(ReferenceFE{Dt},model)
     end
-    DistributedTriangulation(trians,dmodel)
+    return DistributedTriangulation(trians,dmodel)
   else
-    mcell_intrian = map_parts(dmodel.models,dtrian.trians) do model, trian
+    mcell_intrian = map_parts(local_views(dmodel),local_views(dtrian)) do model, trian
       glue = get_glue(trian,Val(Dt))
       @assert isa(glue,FaceToFaceGlue)
       nmcells = num_faces(model,Dt)
@@ -635,11 +650,11 @@ function add_ghost_cells(dmodel::DistributedDiscreteModel{Dm},
     end
     gids = get_face_gids(dmodel,Dt)
     exchange!(mcell_intrian,gids.exchanger)
-    dreffes=map_parts(dmodel.models) do model
+    dreffes=map_parts(local_views(dmodel)) do model
       ReferenceFE{Dt}
     end
-    trians = map_parts(Triangulation,dreffes,dmodel.models,mcell_intrian)
-    DistributedTriangulation(trians,dmodel)
+    trians = map_parts(Triangulation,dreffes,local_views(dmodel),mcell_intrian)
+    return DistributedTriangulation(trians,dmodel)
   end
 end
 
@@ -648,17 +663,17 @@ function generate_cell_gids(dtrian::DistributedTriangulation)
   generate_cell_gids(dmodel,dtrian)
 end
 
-function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
+function generate_cell_gids(dmodel::AbstractDistributedDiscreteModel{Dm},
                             dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
 
-  covers_all_faces=_covers_all_faces(dmodel,dtrian)
+  covers_all_faces = _covers_all_faces(dmodel,dtrian)
   if (covers_all_faces)
     get_face_gids(dmodel,Dt)
   else
     mgids = get_face_gids(dmodel,Dt)
     # count number owned cells
     notcells, tcell_to_mcell = map_parts(
-      dmodel.models,dtrian.trians,mgids.partition) do model,trian,partition
+      local_views(dmodel),local_views(dtrian),mgids.partition) do model,trian,partition
       glue = get_glue(trian,Val(Dt))
       @assert isa(glue,FaceToFaceGlue)
       tcell_to_mcell = glue.tface_to_mface
@@ -700,20 +715,4 @@ function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
     gids = PRange(ngtcells,partition,exchanger)
     gids
   end
-end
-
-function _setup_face_gids!(dmodel::DistributedDiscreteModel{Dc},dim) where {Dc}
-  Gridap.Helpers.@check 0 <= dim <= Dc
-  if !isassigned(dmodel.face_gids,dim+1)
-    mgids = dmodel.face_gids[Dc+1]
-    nlfaces=map_parts(dmodel.models) do model
-      num_faces(model,dim)
-    end
-    cell_lfaces=map_parts(dmodel.models) do model
-      topo=get_grid_topology(model)
-      faces=get_faces(topo, Dc, dim)
-    end
-    dmodel.face_gids[dim+1]=generate_gids(mgids,cell_lfaces,nlfaces)
-  end
-  return
 end
