@@ -27,7 +27,7 @@ end
 # Define how each object is visualized
 
 function Visualization.visualization_data(
-  model::AbstractDistributedDiscreteModel{Dc},
+  model::DistributedDiscreteModel{Dc},
   filebase::AbstractString;
   labels=get_face_labeling(model)) where Dc
 

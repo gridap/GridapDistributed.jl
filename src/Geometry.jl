@@ -77,67 +77,67 @@ end
 
 """
 """
-abstract type AbstractDistributedDiscreteModel{Dc,Dp} <: DistributedGridapType end
+abstract type DistributedDiscreteModel{Dc,Dp} <: DistributedGridapType end
 
-function generate_gids(::AbstractDistributedDiscreteModel)
+function generate_gids(::DistributedDiscreteModel)
   @abstractmethod
 end
 
-function get_cell_gids(model::AbstractDistributedDiscreteModel{Dc}) where Dc
+function get_cell_gids(model::DistributedDiscreteModel{Dc}) where Dc
   @abstractmethod
 end
 
-function get_face_gids(model::AbstractDistributedDiscreteModel,dim::Integer)
+function get_face_gids(model::DistributedDiscreteModel,dim::Integer)
   @abstractmethod
 end
 
-Geometry.num_cell_dims(::AbstractDistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dc
-Geometry.num_cell_dims(::Type{<:AbstractDistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dc
-Geometry.num_point_dims(::AbstractDistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dp
-Geometry.num_point_dims(::Type{<:AbstractDistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dp
+Geometry.num_cell_dims(::DistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dc
+Geometry.num_cell_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dc
+Geometry.num_point_dims(::DistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dp
+Geometry.num_point_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dp
 
-function Geometry.num_cells(model::AbstractDistributedDiscreteModel{Dc}) where Dc
+function Geometry.num_cells(model::DistributedDiscreteModel{Dc}) where Dc
   num_gids(get_cell_gids(model))
 end
 
-function Geometry.num_facets(model::AbstractDistributedDiscreteModel{Dc}) where Dc
+function Geometry.num_facets(model::DistributedDiscreteModel{Dc}) where Dc
   num_gids(get_face_gids(model,Dc-1))
 end
 
-function Geometry.num_edges(model::AbstractDistributedDiscreteModel{Dc}) where Dc
+function Geometry.num_edges(model::DistributedDiscreteModel{Dc}) where Dc
   num_gids(get_face_gids(model,1))
 end
 
-function Geometry.num_vertices(model::AbstractDistributedDiscreteModel{Dc}) where Dc
+function Geometry.num_vertices(model::DistributedDiscreteModel{Dc}) where Dc
   num_gids(get_face_gids(model,0))
 end
 
-function Geometry.num_faces(model::AbstractDistributedDiscreteModel{Dc},dim::Integer) where Dc
+function Geometry.num_faces(model::DistributedDiscreteModel{Dc},dim::Integer) where Dc
   num_gids(get_face_gids(model,dim))
 end
 
-function Geometry.num_faces(model::AbstractDistributedDiscreteModel{Dc}) where Dc
+function Geometry.num_faces(model::DistributedDiscreteModel{Dc}) where Dc
   sum(d->num_faces(model,d),0:Dc)
 end
 
-function Geometry.get_grid(model::AbstractDistributedDiscreteModel)
+function Geometry.get_grid(model::DistributedDiscreteModel)
   DistributedGrid(map_parts(get_grid,local_views(model)))
 end
 
-function Geometry.get_grid_topology(model::AbstractDistributedDiscreteModel)
+function Geometry.get_grid_topology(model::DistributedDiscreteModel)
   DistributedGridTopology(map_parts(get_grid_topology,local_views(model)))
 end
 
-function Geometry.get_face_labeling(model::AbstractDistributedDiscreteModel)
+function Geometry.get_face_labeling(model::DistributedDiscreteModel)
   DistributedFaceLabeling(map_parts(get_face_labeling,local_views(model)))
 end
 
 """
 """
-struct DistributedDiscreteModel{Dc,Dp,A,B} <: AbstractDistributedDiscreteModel{Dc,Dp}
+struct GenericDistributedDiscreteModel{Dc,Dp,A,B} <: DistributedDiscreteModel{Dc,Dp}
   models::A
   face_gids::B
-  function DistributedDiscreteModel(
+  function GenericDistributedDiscreteModel(
     models::AbstractPData{<:DiscreteModel{Dc,Dp}}, gids::PRange) where {Dc,Dp}
     A = typeof(models)
     face_gids=Vector{PRange}(undef,Dc+1)
@@ -147,18 +147,23 @@ struct DistributedDiscreteModel{Dc,Dp,A,B} <: AbstractDistributedDiscreteModel{D
   end
 end
 
-local_views(a::DistributedDiscreteModel) = a.models
+# This is to support old API
+function DistributedDiscreteModel(args...;kwargs...)
+  GenericDistributedDiscreteModel(args...;kwargs...)
+end
 
-function get_cell_gids(model::DistributedDiscreteModel{Dc}) where Dc
+local_views(a::GenericDistributedDiscreteModel) = a.models
+
+function get_cell_gids(model::GenericDistributedDiscreteModel{Dc}) where Dc
   model.face_gids[Dc+1]
 end
 
-function get_face_gids(model::DistributedDiscreteModel,dim::Integer)
+function get_face_gids(model::GenericDistributedDiscreteModel,dim::Integer)
   _setup_face_gids!(model,dim)
   model.face_gids[dim+1]
 end
 
-function _setup_face_gids!(dmodel::DistributedDiscreteModel{Dc},dim) where {Dc}
+function _setup_face_gids!(dmodel::GenericDistributedDiscreteModel{Dc},dim) where {Dc}
   Gridap.Helpers.@check 0 <= dim <= Dc
   if !isassigned(dmodel.face_gids,dim+1)
     mgids   = dmodel.face_gids[Dc+1]
@@ -197,7 +202,7 @@ function Geometry.CartesianDiscreteModel(
       CartesianDiscreteModel(desc,cmin,cmax)
     end
     gids = PRange(parts,nc,PArrays.with_ghost)
-    model = DistributedDiscreteModel(models,gids)
+    model = GenericDistributedDiscreteModel(models,gids)
   end
   model
 end
@@ -231,7 +236,7 @@ function _cartesian_model_with_periodic_bcs(parts,desc)
     CartesianDiscreteModel(_desc,cmin,cmax,remove_boundary)
   end
   gids = PRange(parts,desc.partition,PArrays.with_ghost,isperiodic_global)
-  model = DistributedDiscreteModel(models,gids)
+  model = GenericDistributedDiscreteModel(models,gids)
 end
 
 ## Helpers to partition a serial model
@@ -331,20 +336,20 @@ function Geometry.DiscreteModel(
     DiscreteModelPortion(model,lcell_to_cell)
   end
 
-  DistributedDiscreteModel(models,gids)
+  GenericDistributedDiscreteModel(models,gids)
 end
 
 # DistributedAdaptedDiscreteModels
 
-const DistributedAdaptedDiscreteModel{Dc,Dp} = DistributedDiscreteModel{Dc,Dp,<:AbstractPData{<:AdaptedDiscreteModel{Dc,Dp}}}
+const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractPData{<:AdaptedDiscreteModel{Dc,Dp}}}
 
-function DistributedAdaptedDiscreteModel(model  ::AbstractDistributedDiscreteModel,
-                                         parent ::AbstractDistributedDiscreteModel,
+function DistributedAdaptedDiscreteModel(model  ::DistributedDiscreteModel,
+                                         parent ::DistributedDiscreteModel,
                                          glue   ::AbstractPData{<:AdaptivityGlue})
   models = map_parts(local_views(model),local_views(parent),glue) do model, parent, glue
     AdaptedDiscreteModel(model,parent,glue)
   end
-  return DistributedDiscreteModel(models,get_cell_gids(model))
+  return GenericDistributedDiscreteModel(models,get_cell_gids(model))
 end
 
 function Adaptivity.get_adaptivity_glue(model::DistributedAdaptedDiscreteModel)
@@ -404,11 +409,11 @@ allocate_rcv_buffer(t::Type{T},g::RedistributeGlue) where T = allocate_rcv_buffe
 allocate_snd_buffer(t::Type{T},g::RedistributeGlue) where T = allocate_snd_buffer(t,g.exchanger)
 
 """
-  Redistributes an AbstractDistributedDiscreteModel to optimaly 
+  Redistributes an DistributedDiscreteModel to optimaly 
   rebalance the loads between the processors. 
   Returns the rebalanced model and a RedistributeGlue instance. 
 """
-function redistribute(::AbstractDistributedDiscreteModel,args...;kwargs...)
+function redistribute(::DistributedDiscreteModel,args...;kwargs...)
   @abstractmethod
 end
 
@@ -423,7 +428,7 @@ struct DistributedTriangulation{Dc,Dp,A,B} <: DistributedGridapType
   model::B
   function DistributedTriangulation(
     trians::AbstractPData{<:Triangulation{Dc,Dp}},
-    model::AbstractDistributedDiscreteModel) where {Dc,Dp}
+    model::DistributedDiscreteModel) where {Dc,Dp}
     A = typeof(trians)
     B = typeof(model)
     new{Dc,Dp,A,B}(trians,model)
@@ -444,23 +449,23 @@ end
 # Triangulation constructors
 
 function Geometry.Triangulation(
-  model::AbstractDistributedDiscreteModel;kwargs...)
+  model::DistributedDiscreteModel;kwargs...)
   D=num_cell_dims(model)
   Triangulation(no_ghost,ReferenceFE{D},model;kwargs...)
 end
 
 function Geometry.BoundaryTriangulation(
-  model::AbstractDistributedDiscreteModel;kwargs...)
+  model::DistributedDiscreteModel;kwargs...)
   BoundaryTriangulation(no_ghost,model;kwargs...)
 end
 
 function Geometry.SkeletonTriangulation(
-  model::AbstractDistributedDiscreteModel;kwargs...)
+  model::DistributedDiscreteModel;kwargs...)
   SkeletonTriangulation(no_ghost,model;kwargs...)
 end
 
 function Geometry.Triangulation(
-  portion,::Type{ReferenceFE{Dt}},model::AbstractDistributedDiscreteModel{Dm};kwargs...) where {Dt,Dm}
+  portion,::Type{ReferenceFE{Dt}},model::DistributedDiscreteModel{Dm};kwargs...) where {Dt,Dm}
   # Generate global ordering for the faces of dimension Dt (if needed)
   gids   = get_face_gids(model,Dt)
   trians = map_parts(local_views(model),gids.partition) do model, gids
@@ -470,7 +475,7 @@ function Geometry.Triangulation(
 end
 
 function Geometry.BoundaryTriangulation(
-  portion,model::AbstractDistributedDiscreteModel{Dc};kwargs...) where Dc
+  portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
   gids   = get_face_gids(model,Dc)
   trians = map_parts(local_views(model),gids.partition) do model, gids
     BoundaryTriangulation(portion,gids,model;kwargs...)
@@ -479,7 +484,7 @@ function Geometry.BoundaryTriangulation(
 end
 
 function Geometry.SkeletonTriangulation(
-  portion,model::AbstractDistributedDiscreteModel{Dc};kwargs...) where Dc
+  portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
   gids   = get_face_gids(model,Dc)
   trians = map_parts(local_views(model),gids.partition) do model, gids
     SkeletonTriangulation(portion,gids,model;kwargs...)
@@ -518,13 +523,13 @@ function Geometry.InterfaceTriangulation(a::DistributedTriangulation,b::Distribu
 end
 
 function Geometry.Triangulation(
-  portion, model::AbstractDistributedDiscreteModel;kwargs...)
+  portion, model::DistributedDiscreteModel;kwargs...)
   D = num_cell_dims(model)
   Triangulation(portion,ReferenceFE{D},model;kwargs...)
 end
 
 function Geometry.Triangulation(
-  ::Type{ReferenceFE{D}}, model::AbstractDistributedDiscreteModel;kwargs...) where D
+  ::Type{ReferenceFE{D}}, model::DistributedDiscreteModel;kwargs...) where D
   Triangulation(no_ghost, ReferenceFE{D}, model; kwargs...)
 end
 
@@ -620,7 +625,7 @@ function add_ghost_cells(dtrian::DistributedTriangulation)
   add_ghost_cells(dmodel,dtrian)
 end
 
-function _covers_all_faces(dmodel::AbstractDistributedDiscreteModel{Dm},
+function _covers_all_faces(dmodel::DistributedDiscreteModel{Dm},
                            dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
   covers_all_faces=map_parts(local_views(dmodel),local_views(dtrian)) do model, trian
     glue = get_glue(trian,Val(Dt))
@@ -630,7 +635,7 @@ function _covers_all_faces(dmodel::AbstractDistributedDiscreteModel{Dm},
   reduce(&,covers_all_faces,init=true)
 end
 
-function add_ghost_cells(dmodel::AbstractDistributedDiscreteModel{Dm},
+function add_ghost_cells(dmodel::DistributedDiscreteModel{Dm},
                          dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
   covers_all_faces=_covers_all_faces(dmodel,dtrian)
   if (covers_all_faces)
@@ -663,7 +668,7 @@ function generate_cell_gids(dtrian::DistributedTriangulation)
   generate_cell_gids(dmodel,dtrian)
 end
 
-function generate_cell_gids(dmodel::AbstractDistributedDiscreteModel{Dm},
+function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
                             dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
 
   covers_all_faces = _covers_all_faces(dmodel,dtrian)

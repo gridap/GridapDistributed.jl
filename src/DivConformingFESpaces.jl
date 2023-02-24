@@ -1,6 +1,6 @@
 """
 """
-function FESpaces.FESpace(model::AbstractDistributedDiscreteModel,
+function FESpaces.FESpace(model::DistributedDiscreteModel,
                           reffe::Tuple{RaviartThomas,Any,Any};
                           conformity=nothing,kwargs...)
 
@@ -11,7 +11,7 @@ function FESpaces.FESpace(model::AbstractDistributedDiscreteModel,
   _common_fe_space_constructor(model,cell_reffes;conformity,kwargs...)
 end
 
-function FESpace(model::AbstractDistributedDiscreteModel,
+function FESpace(model::DistributedDiscreteModel,
                  reffe::GenericRefFE{RaviartThomas};
                  conformity=nothing, kwargs...)
   cell_reffes = map_parts(local_views(model)) do m

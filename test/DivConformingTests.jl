@@ -114,7 +114,7 @@ function main(parts)
       hid_to_gid,
       hid_to_part)
 
-    model = GridapDistributed.DistributedDiscreteModel(models,gids)
+    model = GridapDistributed.GenericDistributedDiscreteModel(models,gids)
 
     reffe=ReferenceFE(raviart_thomas,Float64,0)
     f(model,reffe)

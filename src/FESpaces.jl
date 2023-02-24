@@ -381,7 +381,7 @@ function FESpaces.HomogeneousTrialFESpace(f::DistributedSingleFieldFESpace)
 end
 
 function generate_gids(
-  model::AbstractDistributedDiscreteModel{Dc},
+  model::DistributedDiscreteModel{Dc},
   spaces::AbstractPData{<:SingleFieldFESpace}) where Dc
   cell_to_ldofs = map_parts(get_cell_dof_ids,spaces)
   nldofs = map_parts(num_free_dofs,spaces)
@@ -454,7 +454,7 @@ end
 
 # Factories
 
-function FESpaces.FESpace(model::AbstractDistributedDiscreteModel,reffe;kwargs...)
+function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
   spaces = map_parts(local_views(model)) do m
     FESpace(m,reffe;kwargs...)
   end
