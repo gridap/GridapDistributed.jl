@@ -4,6 +4,8 @@ struct DistributedVisualizationData{A<:AbstractPData}
   visdata::A
 end
 
+local_views(d::DistributedVisualizationData) = d.visdata
+
 function Base.getproperty(x::DistributedVisualizationData, sym::Symbol)
   if sym == :grid
     map_parts(i->i.grid,x.visdata)
@@ -29,11 +31,11 @@ function Visualization.visualization_data(
   filebase::AbstractString;
   labels=get_face_labeling(model)) where Dc
 
-  parts = get_part_ids(model.models)
+  parts  = get_parts(model)
   nparts = length(parts)
-  cell_gids=get_cell_gids(model)
+  cell_gids = get_cell_gids(model)
   vd = map_parts(
-    parts,model.models,cell_gids.partition,labels.labels) do part,model,gids,labels
+    parts,local_views(model),cell_gids.partition,labels.labels) do part,model,gids,labels
 
     vd = visualization_data(model,filebase;labels=labels)
     vd_cells = vd[end]

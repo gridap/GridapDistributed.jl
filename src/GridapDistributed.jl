@@ -2,6 +2,7 @@ module GridapDistributed
 
 using Gridap
 using Gridap.Helpers
+using Gridap.Adaptivity
 using Gridap.Algebra
 using Gridap.Arrays
 using Gridap.Fields
@@ -23,7 +24,7 @@ using FillArrays
 
 import Gridap.TensorValues: inner, outer, double_contraction, symmetric_part
 import LinearAlgebra: det, tr, cross, dot, ⋅
-import Base: inv, abs, abs2, *, +, -, /, adjoint, transpose, real, imag, conj
+import Base: inv, abs, abs2, *, +, -, /, adjoint, transpose, real, imag, conj, getproperty, propertynames
 import Gridap.Fields: grad2curl
 import Gridap.ODEs.ODETools: ∂t, ∂tt
 
@@ -32,6 +33,10 @@ export SubAssembledRows
 
 export get_cell_gids
 export get_face_gids
+
+export local_views, get_parts
+
+include("Interface.jl")
 
 include("Algebra.jl")
 

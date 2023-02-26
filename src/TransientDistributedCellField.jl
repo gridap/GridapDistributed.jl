@@ -7,6 +7,8 @@ struct TransientSingleFieldDistributedCellField{A} <: TransientDistributedCellFi
   derivatives::Tuple
 end
 
+local_views(f::TransientSingleFieldDistributedCellField) = local_views(f.cellfield)
+
 # Constructors
 function TransientFETools.TransientCellField(single_field::DistributedSingleFieldFEFunction,derivatives::Tuple)
   TransientSingleFieldDistributedCellField(single_field,derivatives)

@@ -4,7 +4,7 @@ function FESpaces.FESpace(model::DistributedDiscreteModel,
                           reffe::Tuple{RaviartThomas,Any,Any};
                           conformity=nothing,kwargs...)
 
-  cell_reffes = map_parts(model.models) do m
+  cell_reffes = map_parts(local_views(model)) do m
     basis,reffe_args,reffe_kwargs = reffe
     cell_reffe = ReferenceFE(m,basis,reffe_args...;reffe_kwargs...)
   end
@@ -14,7 +14,7 @@ end
 function FESpace(model::DistributedDiscreteModel,
                  reffe::GenericRefFE{RaviartThomas};
                  conformity=nothing, kwargs...)
-  cell_reffes = map_parts(model.models) do m
+  cell_reffes = map_parts(local_views(model)) do m
     Fill(reffe,num_cells(m))
   end
   _common_fe_space_constructor(model,cell_reffes;conformity,kwargs...)
@@ -22,12 +22,12 @@ end
 
 function _common_fe_space_constructor(model,cell_reffes;conformity,kwargs...)
   sign_flips=_generate_sign_flips(model,cell_reffes)
-  spaces = map_parts(model.models,sign_flips,cell_reffes) do m,sign_flip,cell_reffe
+  spaces = map_parts(local_views(model),sign_flips,cell_reffes) do m,sign_flip,cell_reffe
      conf = Conformity(testitem(cell_reffe),conformity)
      cell_fe = CellFE(m,cell_reffe,conf,sign_flip)
      FESpace(m, cell_fe; kwargs...)
   end
-  gids =  generate_gids(model,spaces)
+  gids = generate_gids(model,spaces)
   vector_type = _find_vector_type(spaces,gids)
   DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
@@ -35,8 +35,8 @@ end
 
 
 function _generate_sign_flips(model,cell_reffes)
-  cell_gids=get_cell_gids(model)
-  sign_flips=map_parts(model.models,cell_gids.partition,cell_reffes) do m, p, cell_reffe
+  cell_gids  = get_cell_gids(model)
+  sign_flips = map_parts(local_views(model),cell_gids.partition,cell_reffes) do m, p, cell_reffe
     D = num_cell_dims(model)
 
     gtopo = get_grid_topology(m)
@@ -62,10 +62,10 @@ function _generate_sign_flips(model,cell_reffes)
 
     for cell in p.oid_to_lid
       sign_flip = view(data,ptrs[cell]:ptrs[cell+1]-1)
-      reffe=cell_reffe[cell]
+      reffe = cell_reffe[cell]
       D = num_dims(reffe)
-      face_own_dofs = get_face_own_dofs(reffe)
-      facet_lid = get_offsets(get_polytope(reffe))[D] + 1
+      face_own_dofs   = get_face_own_dofs(reffe)
+      facet_lid       = get_offsets(get_polytope(reffe))[D] + 1
       cell_facets_ids = getindex!(cache_cell_wise_facets_ids,
                                   cell_wise_facets_ids,
                                   cell)
