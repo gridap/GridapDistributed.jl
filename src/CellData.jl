@@ -4,7 +4,7 @@ abstract type DistributedCellDatum <: DistributedGridapType end
 # DistributedCellPoint
 """
 """
-struct DistributedCellPoint{A<:AbstractPData{<:CellPoint}} <: DistributedCellDatum
+struct DistributedCellPoint{A<:AbstractArray{<:CellPoint}} <: DistributedCellDatum
   points::A
 end
 
@@ -17,7 +17,7 @@ struct DistributedCellField{A,B} <: DistributedCellDatum
   fields::A
   metadata::B
   function DistributedCellField(
-    fields::AbstractPData{<:CellField},
+    fields::AbstractArray{<:CellField},
     metadata=nothing)
 
     A = typeof(fields)
@@ -45,7 +45,7 @@ function CellData.CellField(f::Number,trian::DistributedTriangulation)
 end
 
 function CellData.CellField(
-  f::AbstractPData{<:AbstractArray{<:Number}},trian::DistributedTriangulation)
+  f::AbstractArray{<:AbstractArray{<:Number}},trian::DistributedTriangulation)
   fields = map_parts(f,trian.trians) do f,t
     CellField(f,t)
   end
@@ -186,7 +186,7 @@ end
 # Integration related
 """
 """
-struct DistributedMeasure{A<:AbstractPData{<:Measure}} <: DistributedGridapType
+struct DistributedMeasure{A<:AbstractArray{<:Measure}} <: DistributedGridapType
   measures::A
 end
 
@@ -212,7 +212,7 @@ end
 
 """
 """
-struct DistributedDomainContribution{A<:AbstractPData{<:DomainContribution}} <: DistributedGridapType
+struct DistributedDomainContribution{A<:AbstractArray{<:DomainContribution}} <: DistributedGridapType
   contribs::A
 end
 
@@ -285,7 +285,7 @@ end
 
 # Skeleton related
 
-function DistributedCellField(a::AbstractPData{<:SkeletonPair})
+function DistributedCellField(a::AbstractArray{<:SkeletonPair})
   plus, minus = map_parts(s->(s.plus,s.minus),a)
   dplus = DistributedCellField(plus)
   dminus = DistributedCellField(minus)
@@ -334,7 +334,7 @@ CellData.mean(a::DistributedCellField) = DistributedCellField(map_parts(mean,a.f
 
 struct DistributedCellDof{A} <: DistributedCellDatum
   dofs::A
-  function DistributedCellDof(dofs::AbstractPData{<:CellDof})
+  function DistributedCellDof(dofs::AbstractArray{<:CellDof})
       A = typeof(dofs)
       new{A}(dofs)
   end

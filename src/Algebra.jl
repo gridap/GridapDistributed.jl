@@ -29,7 +29,7 @@ function consistent_local_views(a,ids,isconsistent)
   @abstractmethod
 end
 
-function local_views(a::AbstractPData)
+function local_views(a::AbstractArray)
   a
 end
 
@@ -111,7 +111,7 @@ struct DistributedCounterCOO{A,B,C,D} <: DistributedGridapType
   cols::D
   function DistributedCounterCOO(
     par_strategy,
-    counters::AbstractPData{<:Algebra.CounterCOO},
+    counters::AbstractArray{<:Algebra.CounterCOO},
     rows::PRange,
     cols::PRange)
     A = typeof(par_strategy)
@@ -144,7 +144,7 @@ struct DistributedAllocationCOO{A,B,C,D} <:DistributedGridapType
   cols::D
   function DistributedAllocationCOO(
     par_strategy,
-    allocs::AbstractPData{<:Algebra.AllocationCOO},
+    allocs::AbstractArray{<:Algebra.AllocationCOO},
     rows::PRange,
     cols::PRange)
     A = typeof(par_strategy)

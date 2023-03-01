@@ -1,6 +1,6 @@
 """
 """
-struct DistributedVisualizationData{A<:AbstractPData}
+struct DistributedVisualizationData{A<:AbstractArray}
   visdata::A
 end
 
@@ -118,7 +118,7 @@ end
 
 function _prepare_fdata(trians,a)
   _fdata(v::DistributedCellField,trians) = v.fields
-  _fdata(v::AbstractPData,trians) = v
+  _fdata(v::AbstractArray,trians) = v
   _fdata(v,trians) = map_parts(ti->v,trians)
   if length(a) == 0
     return map_parts(trians) do t
@@ -143,13 +143,13 @@ end
 # Vtk related
 
 function Visualization.write_vtk_file(
-  grid::AbstractPData{<:Grid}, filebase; celldata, nodaldata)
+  grid::AbstractArray{<:Grid}, filebase; celldata, nodaldata)
   pvtk = Visualization.create_vtk_file(grid,filebase;celldata=celldata,nodaldata=nodaldata)
   map_parts(vtk_save,pvtk)
 end
 
 function Visualization.create_vtk_file(
-  grid::AbstractPData{<:Grid}, filebase; celldata, nodaldata)
+  grid::AbstractArray{<:Grid}, filebase; celldata, nodaldata)
   parts = get_part_ids(grid)
   nparts = length(parts)
   map_parts(parts,grid,celldata,nodaldata) do part,g,c,n
@@ -160,18 +160,18 @@ function Visualization.create_vtk_file(
   end
 end
 
-struct DistributedPvd{T<:AbstractPData}
+struct DistributedPvd{T<:AbstractArray}
   pvds::T
 end
 
-function Visualization.createpvd(parts::AbstractPData,args...;kwargs...)
+function Visualization.createpvd(parts::AbstractArray,args...;kwargs...)
   pvds = map_main(parts) do part
     paraview_collection(args...;kwargs...)
   end
   DistributedPvd(pvds)
 end
 
-function Visualization.createpvd(f,parts::AbstractPData,args...;kwargs...)
+function Visualization.createpvd(f,parts::AbstractArray,args...;kwargs...)
   pvd = createpvd(parts,args...;kwargs...)
   try
     f(pvd)
@@ -186,7 +186,7 @@ function Visualization.savepvd(pvd::DistributedPvd)
   end
 end
 
-function Base.setindex!(pvd::DistributedPvd,pvtk::AbstractPData,time::Real)
+function Base.setindex!(pvd::DistributedPvd,pvtk::AbstractArray,time::Real)
   map_parts(vtk_save,pvtk)
   map_main(pvtk,pvd.pvds) do pvtk,pvd
     pvd[time] = pvtk

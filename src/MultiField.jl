@@ -5,7 +5,7 @@ struct DistributedMultiFieldFEFunction{A,B,C} <: DistributedGridapType
   free_values::C
   function DistributedMultiFieldFEFunction(
     field_fe_fun::AbstractVector{<:DistributedSingleFieldFEFunction},
-    part_fe_fun::AbstractPData{<:MultiFieldFEFunction},
+    part_fe_fun::AbstractArray{<:MultiFieldFEFunction},
     free_values::AbstractVector)
     A = typeof(field_fe_fun)
     B = typeof(part_fe_fun)
@@ -36,7 +36,7 @@ struct DistributedMultiFieldFESpace{A,B,C,D} <: DistributedFESpace
   vector_type::Type{D}
   function DistributedMultiFieldFESpace(
     field_fe_space::AbstractVector{<:DistributedSingleFieldFESpace},
-    part_fe_space::AbstractPData{<:MultiFieldFESpace},
+    part_fe_space::AbstractArray{<:MultiFieldFESpace},
     gids::PRange,
     vector_type::Type{D}) where D
     A = typeof(field_fe_space)
@@ -141,7 +141,7 @@ end
 
 function FESpaces.interpolate_everywhere!(
   objects,free_values::AbstractVector,
-  dirichlet_values::Vector{AbstractPData{<:AbstractVector}},
+  dirichlet_values::Vector{AbstractArray{<:AbstractVector}},
   fe::DistributedMultiFieldFESpace)
   local_vals = consistent_local_views(free_values,fe.gids,true)
   part_fe_fun = map_parts(local_vals,local_views(fe)) do x,f
@@ -185,7 +185,7 @@ struct DistributedMultiFieldFEBasis{A,B} <: DistributedGridapType
   part_fe_basis::B
   function DistributedMultiFieldFEBasis(
     field_fe_basis::AbstractVector{<:DistributedCellField},
-    part_fe_basis::AbstractPData{<:MultiFieldCellField})
+    part_fe_basis::AbstractArray{<:MultiFieldCellField})
     A = typeof(field_fe_basis)
     B = typeof(part_fe_basis)
     new{A,B}(field_fe_basis,part_fe_basis)
@@ -251,7 +251,7 @@ end
 
 function generate_multi_field_gids(
   f_dspace::Vector{<:DistributedSingleFieldFESpace},
-  p_mspace::AbstractPData{<:MultiFieldFESpace})
+  p_mspace::AbstractArray{<:MultiFieldFESpace})
 
   p_lids = map_parts(mspace->collect(get_free_dof_ids(mspace)),p_mspace)
   p_1lid_lid = map_parts(p_mspace,p_lids) do mspace, lids
@@ -269,7 +269,7 @@ function generate_multi_field_gids(
 end
 
 function generate_multi_field_gids(
-  f_p_flid_lid::AbstractVector{<:AbstractPData{<:AbstractVector}},
+  f_p_flid_lid::AbstractVector{<:AbstractArray{<:AbstractVector}},
   f_frange::AbstractVector{<:PRange})
 
   f_p_fiset = map(local_views,f_frange)

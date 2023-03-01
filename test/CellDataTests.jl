@@ -31,7 +31,7 @@ function main(parts)
   @test isfile(joinpath(output,"Ω_pvd")*".pvd")
 
   x_Γ = get_cell_points(Γ)
-  @test isa(f(x_Γ),AbstractPData)
+  @test isa(f(x_Γ),AbstractArray)
 
   h = 4*f
   h = f*g
@@ -48,7 +48,7 @@ function main(parts)
   @test sum( ∫(g)dΓ ) ≈ 4.5*16.0
 
   x_Γ = get_cell_points(dΓ)
-  @test isa(f(x_Γ),AbstractPData)
+  @test isa(f(x_Γ),AbstractArray)
 
 end
 

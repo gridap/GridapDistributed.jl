@@ -88,7 +88,7 @@ function _generate_sign_flips(model,cell_reffes)
           facet_lid = facet_lid + 1
       end
     end
-    PArrays.Table(data,ptrs)
+    JaggedArray(data,ptrs)
   end
   exchange!(sign_flips,cell_gids.exchanger)
   sign_flips

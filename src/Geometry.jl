@@ -1,11 +1,15 @@
 
+struct WithGhost end
+
+struct NoGhost end
+
 # We do not inherit from Grid on purpose.
 # This object cannot implement the Grid interface in a strict sense
 """
 """
 struct DistributedGrid{Dc,Dp,A} <: DistributedGridapType
   grids::A
-  function DistributedGrid(grids::AbstractPData{<:Grid{Dc,Dp}}) where {Dc,Dp}
+  function DistributedGrid(grids::AbstractArray{<:Grid{Dc,Dp}}) where {Dc,Dp}
     A = typeof(grids)
     new{Dc,Dp,A}(grids)
   end
@@ -34,7 +38,7 @@ Geometry.num_point_dims(::Type{<:DistributedGrid{Dc,Dp}}) where {Dc,Dp} = Dp
 """
 struct DistributedGridTopology{Dc,Dp,A} <: DistributedGridapType
   topos::A
-  function DistributedGridTopology(topos::AbstractPData{<:GridTopology{Dc,Dp}}) where {Dc,Dp}
+  function DistributedGridTopology(topos::AbstractArray{<:GridTopology{Dc,Dp}}) where {Dc,Dp}
     A = typeof(topos)
     new{Dc,Dp,A}(topos)
   end
@@ -59,7 +63,7 @@ Geometry.num_point_dims(::Type{<:DistributedGridTopology{Dc,Dp}}) where {Dc,Dp} 
 
 """
 """
-struct DistributedFaceLabeling{A<:AbstractPData{<:FaceLabeling}}
+struct DistributedFaceLabeling{A<:AbstractArray{<:FaceLabeling}}
   labels::A
 end
 
@@ -138,7 +142,7 @@ struct GenericDistributedDiscreteModel{Dc,Dp,A,B} <: DistributedDiscreteModel{Dc
   models::A
   face_gids::B
   function GenericDistributedDiscreteModel(
-    models::AbstractPData{<:DiscreteModel{Dc,Dp}}, gids::PRange) where {Dc,Dp}
+    models::AbstractArray{<:DiscreteModel{Dc,Dp}}, gids::PRange) where {Dc,Dp}
     A = typeof(models)
     face_gids=Vector{PRange}(undef,Dc+1)
     face_gids[Dc+1]=gids
@@ -182,7 +186,7 @@ end
 # CartesianDiscreteModel
 
 function Geometry.CartesianDiscreteModel(
-  parts::AbstractPData{<:Integer},args...;isperiodic=map(i->false,size(parts)),kwargs...)
+  parts::AbstractArray{<:Integer},args...;isperiodic=map(i->false,size(parts)),kwargs...)
 
   desc = CartesianDescriptor(args...;isperiodic=isperiodic,kwargs...)
   nc = desc.partition
@@ -297,7 +301,7 @@ function _cell_graph(cell_to_dfaces,dface_to_cells)
 end
 
 function Geometry.DiscreteModel(
-  parts::AbstractPData,
+  parts::AbstractArray,
   model::DiscreteModel,
   cell_to_part::AbstractArray,
   cell_graph::SparseMatrixCSC = compute_cell_graph(model))
@@ -341,11 +345,11 @@ end
 
 # DistributedAdaptedDiscreteModels
 
-const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractPData{<:AdaptedDiscreteModel{Dc,Dp}}}
+const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:AdaptedDiscreteModel{Dc,Dp}}}
 
 function DistributedAdaptedDiscreteModel(model  ::DistributedDiscreteModel,
                                          parent ::DistributedDiscreteModel,
-                                         glue   ::AbstractPData{<:AdaptivityGlue})
+                                         glue   ::AbstractArray{<:AdaptivityGlue})
   models = map_parts(local_views(model),local_views(parent),glue) do model, parent, glue
     AdaptedDiscreteModel(model,parent,glue)
   end
@@ -368,18 +372,18 @@ end
   - `new2old`  : Mapping of local IDs from the new to the old mesh.
 """
 struct RedistributeGlue
-  exchanger ::PArrays.Exchanger
-  old2new   ::AbstractPData{<:AbstractVector{<:Integer}}
-  new2old   ::AbstractPData{<:AbstractVector{<:Integer}}
+  exchanger# ::PArrays.Exchanger
+  old2new   ::AbstractArray{<:AbstractVector{<:Integer}}
+  new2old   ::AbstractArray{<:AbstractVector{<:Integer}}
 end
 
 function RedistributeGlue(
-    parts_rcv ::AbstractPData{<:AbstractVector{<:Integer}},
-    parts_snd ::AbstractPData{<:AbstractVector{<:Integer}},
-    lids_rcv  ::AbstractPData{<:PArrays.Table{<:Integer}},
-    lids_snd  ::AbstractPData{<:PArrays.Table{<:Integer}},
-    old2new   ::AbstractPData{<:AbstractVector{<:Integer}},
-    new2old   ::AbstractPData{<:AbstractVector{<:Integer}})
+    parts_rcv ::AbstractArray{<:AbstractVector{<:Integer}},
+    parts_snd ::AbstractArray{<:AbstractVector{<:Integer}},
+    lids_rcv  ::AbstractArray{<:JaggedArray{<:Integer}},
+    lids_snd  ::AbstractArray{<:JaggedArray{<:Integer}},
+    old2new   ::AbstractArray{<:AbstractVector{<:Integer}},
+    new2old   ::AbstractArray{<:AbstractVector{<:Integer}})
   ex = PArrays.Exchanger(parts_rcv,parts_snd,lids_rcv,lids_snd)
   return RedistributeGlue(ex,old2new,new2old)
 end
@@ -427,7 +431,7 @@ struct DistributedTriangulation{Dc,Dp,A,B} <: DistributedGridapType
   trians::A
   model::B
   function DistributedTriangulation(
-    trians::AbstractPData{<:Triangulation{Dc,Dp}},
+    trians::AbstractArray{<:Triangulation{Dc,Dp}},
     model::DistributedDiscreteModel) where {Dc,Dp}
     A = typeof(trians)
     B = typeof(model)
@@ -493,25 +497,25 @@ function Geometry.SkeletonTriangulation(
 end
 
 function Geometry.Triangulation(
-  portion,gids::AbstractIndexSet, args...;kwargs...)
+  portion,gids::AbstractLocalIndices, args...;kwargs...)
   trian = Triangulation(args...;kwargs...)
   filter_cells_when_needed(portion,gids,trian)
 end
 
 function Geometry.BoundaryTriangulation(
-  portion,gids::AbstractIndexSet,args...;kwargs...)
+  portion,gids::AbstractLocalIndices,args...;kwargs...)
   trian = BoundaryTriangulation(args...;kwargs...)
   filter_cells_when_needed(portion,gids,trian)
 end
 
 function Geometry.SkeletonTriangulation(
-  portion,gids::AbstractIndexSet,args...;kwargs...)
+  portion,gids::AbstractLocalIndices,args...;kwargs...)
   trian = SkeletonTriangulation(args...;kwargs...)
   filter_cells_when_needed(portion,gids,trian)
 end
 
 function Geometry.InterfaceTriangulation(
-  portion,gids::AbstractIndexSet,args...;kwargs...)
+  portion,gids::AbstractLocalIndices,args...;kwargs...)
   trian = InterfaceTriangulation(args...;kwargs...)
   filter_cells_when_needed(portion,gids,trian)
 end
@@ -534,16 +538,16 @@ function Geometry.Triangulation(
 end
 
 function filter_cells_when_needed(
-  portion::PArrays.WithGhost,
-  cell_gids::AbstractIndexSet,
+  portion::WithGhost,
+  cell_gids::AbstractLocalIndices,
   trian::Triangulation)
 
   trian
 end
 
 function filter_cells_when_needed(
-  portion::PArrays.NoGhost,
-  cell_gids::AbstractIndexSet,
+  portion::NoGhost,
+  cell_gids::AbstractLocalIndices,
   trian::Triangulation)
 
   remove_ghost_cells(trian,cell_gids)
@@ -551,7 +555,7 @@ end
 
 function filter_cells_when_needed(
   portion::FullyAssembledRows,
-  cell_gids::AbstractIndexSet,
+  cell_gids::AbstractLocalIndices,
   trian::Triangulation)
 
   trian
@@ -559,7 +563,7 @@ end
 
 function filter_cells_when_needed(
   portion::SubAssembledRows,
-  cell_gids::AbstractIndexSet,
+  cell_gids::AbstractLocalIndices,
   trian::Triangulation)
 
   remove_ghost_cells(trian,cell_gids)

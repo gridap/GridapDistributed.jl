@@ -105,7 +105,7 @@ function dof_wise_to_cell_wise(dof_wise_vector,cell_to_ldofs,cell_prange)
       ndata = ptrs[end]-1
       data = Vector{Int}(undef,ndata)
       gdof = 0
-      PArrays.Table(data,ptrs)
+      JaggedArray(data,ptrs)
     end
     dof_wise_to_cell_wise!(cwv,dof_wise_vector,cell_to_ldofs,cell_prange)
     cwv
@@ -114,8 +114,8 @@ end
 
 function generate_gids(
   cell_range::PRange,
-  cell_to_ldofs::AbstractPData{<:AbstractArray},
-  nldofs::AbstractPData{<:Integer})
+  cell_to_ldofs::AbstractArray{<:AbstractArray},
+  nldofs::AbstractArray{<:Integer})
 
   neighbors = cell_range.exchanger.parts_snd
   ngcells = length(cell_range)
@@ -266,7 +266,7 @@ struct DistributedSingleFieldFESpace{A,B,C} <: DistributedFESpace
   gids::B
   vector_type::Type{C}
   function DistributedSingleFieldFESpace(
-    spaces::AbstractPData{<:SingleFieldFESpace},
+    spaces::AbstractArray{<:SingleFieldFESpace},
     gids::PRange,
     vector_type::Type{C}) where C
     A = typeof(spaces)
@@ -300,7 +300,7 @@ end
 
 function FESpaces.FEFunction(
   f::DistributedSingleFieldFESpace,free_values::AbstractVector,
-  dirichlet_values::AbstractPData{<:AbstractVector},isconsistent=false)
+  dirichlet_values::AbstractArray{<:AbstractVector},isconsistent=false)
   _EvaluationFunction(FEFunction,f,free_values,dirichlet_values,isconsistent)
 end
 
@@ -311,7 +311,7 @@ end
 
 function FESpaces.EvaluationFunction(
   f::DistributedSingleFieldFESpace,free_values::AbstractVector,
-  dirichlet_values::AbstractPData{<:AbstractVector},isconsistent=false)
+  dirichlet_values::AbstractArray{<:AbstractVector},isconsistent=false)
   _EvaluationFunction(EvaluationFunction,f,free_values,dirichlet_values,isconsistent)
 end
 
@@ -325,7 +325,7 @@ end
 
 function _EvaluationFunction(func,
   f::DistributedSingleFieldFESpace,free_values::AbstractVector,
-  dirichlet_values::AbstractPData{<:AbstractVector},isconsistent=false)
+  dirichlet_values::AbstractArray{<:AbstractVector},isconsistent=false)
   local_vals = consistent_local_views(free_values,f.gids,isconsistent)
   fields = map_parts(func,f.spaces,local_vals,dirichlet_values)
   metadata = DistributedFEFunctionData(free_values)
@@ -382,7 +382,7 @@ end
 
 function generate_gids(
   model::DistributedDiscreteModel{Dc},
-  spaces::AbstractPData{<:SingleFieldFESpace}) where Dc
+  spaces::AbstractArray{<:SingleFieldFESpace}) where Dc
   cell_to_ldofs = map_parts(get_cell_dof_ids,spaces)
   nldofs = map_parts(num_free_dofs,spaces)
   cell_gids = get_cell_gids(model)
@@ -418,7 +418,7 @@ end
 
 function FESpaces.interpolate_dirichlet!(
   u, free_values::AbstractVector,
-  dirichlet_values::AbstractPData{<:AbstractVector},
+  dirichlet_values::AbstractArray{<:AbstractVector},
   f::DistributedSingleFieldFESpace)
   map_parts(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
     interpolate_dirichlet!(u,fvec,dvec,V)
@@ -434,7 +434,7 @@ end
 
 function FESpaces.interpolate_everywhere!(
   u, free_values::AbstractVector,
-  dirichlet_values::AbstractPData{<:AbstractVector},
+  dirichlet_values::AbstractArray{<:AbstractVector},
   f::DistributedSingleFieldFESpace)
   map_parts(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
     interpolate_everywhere!(u,fvec,dvec,V)
@@ -444,7 +444,7 @@ end
 
 function FESpaces.interpolate_everywhere!(
   u::DistributedCellField, free_values::AbstractVector,
-  dirichlet_values::AbstractPData{<:AbstractVector},
+  dirichlet_values::AbstractArray{<:AbstractVector},
   f::DistributedSingleFieldFESpace)
   map_parts(local_views(u),f.spaces,local_views(free_values),dirichlet_values) do ui,V,fvec,dvec
     interpolate_everywhere!(ui,fvec,dvec,V)
