@@ -47,7 +47,7 @@ function main(parts)
   end
 
   cell_gids = get_cell_gids(model)
-  map_parts(local_views(model),cell_gids.partition) do lmodel,gids
+  map(local_views(model),cell_gids.partition) do lmodel,gids
     @test test_local_part_face_labelings_consistency(lmodel,gids,gmodel)
   end
 
@@ -74,7 +74,7 @@ function main(parts)
     d < 0
   end
 
-  cell_to_entity = map_parts(local_views(model)) do model
+  cell_to_entity = map(local_views(model)) do model
     grid = get_grid(model)
     cell_to_coords = get_cell_coordinates(grid)
     cell_to_is_solid = lazy_map(is_in,cell_to_coords)

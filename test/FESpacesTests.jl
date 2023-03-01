@@ -26,7 +26,7 @@ function assemble_tests(das,dΩ,dΩass,U,V)
   eh1 = u - uh1
   @test sqrt(sum(∫( abs2(eh1) )dΩ)) < 1.0e-9
 
-  map_parts(A1.values, A1.rows.partition, A1.cols.partition) do mat, rows, cols
+  map(A1.values, A1.rows.partition, A1.cols.partition) do mat, rows, cols
      @test size(mat) == (num_lids(rows),num_lids(cols))
   end
 

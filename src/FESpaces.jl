@@ -42,15 +42,15 @@ function Base.zero(f::DistributedFESpace)
 end
 
 function FESpaces.gather_free_values!(free_values,f::DistributedFESpace,cell_vals)
-  map_parts(gather_free_values!, local_views(free_values), local_views(f), local_views(cell_vals))
+  map(gather_free_values!, local_views(free_values), local_views(f), local_views(cell_vals))
 end
 
 function FESpaces.gather_free_and_dirichlet_values!(free_values,dirichlet_values,f::DistributedFESpace,cell_vals)
-  map_parts(gather_free_and_dirichlet_values!, local_views(free_values), local_views(dirichlet_values), local_views(f), local_views(cell_vals))
+  map(gather_free_and_dirichlet_values!, local_views(free_values), local_views(dirichlet_values), local_views(f), local_views(cell_vals))
 end
 
 function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_prange)
-  map_parts(cell_wise_vector,
+  map(cell_wise_vector,
           dof_wise_vector,
           cell_to_ldofs,
           cell_prange.partition) do cwv,dwv,cell_to_ldofs,partition
@@ -72,7 +72,7 @@ function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,c
 end
 
 function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_range)
-  map_parts(dof_wise_vector,
+  map(dof_wise_vector,
             cell_wise_vector,
             cell_to_ldofs,
             cell_range.partition) do dwv,cwv,cell_to_ldofs,partition
@@ -93,7 +93,7 @@ end
 
 
 function dof_wise_to_cell_wise(dof_wise_vector,cell_to_ldofs,cell_prange)
-    cwv=map_parts(dof_wise_vector,cell_to_ldofs,cell_prange.partition) do dwv,cell_to_ldofs,partition
+    cwv=map(dof_wise_vector,cell_to_ldofs,cell_prange.partition) do dwv,cell_to_ldofs,partition
       cache = array_cache(cell_to_ldofs)
       ncells = length(cell_to_ldofs)
       ptrs = Vector{Int32}(undef,ncells+1)
@@ -121,7 +121,7 @@ function generate_gids(
   ngcells = length(cell_range)
 
   # Find and count number owned dofs
-  ldof_to_part, nodofs = map_parts(
+  ldof_to_part, nodofs = map(
     cell_range.partition,cell_to_ldofs,nldofs) do partition,cell_to_ldofs,nldofs
 
     ldof_to_part = fill(Int32(0),nldofs)
@@ -159,7 +159,7 @@ function generate_gids(
 
   # Distribute gdofs to owned ones
   parts = get_part_ids(nodofs)
-  ldof_to_gdof = map_parts(
+  ldof_to_gdof = map(
     parts,first_gdof,ldof_to_part) do part,first_gdof,ldof_to_part
 
     offset = first_gdof-1
@@ -192,7 +192,7 @@ function generate_gids(
 
 
   # Distribute global dof ids also to ghost
-  map_parts(
+  map(
     parts,
     cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_part,cell_range.partition) do part,
     cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_part,partition
@@ -220,11 +220,11 @@ function generate_gids(
                           cell_range)
 
   # Setup dof partition
-  dof_partition = map_parts(parts,ldof_to_gdof,ldof_to_part) do part,ldof_to_gdof,ldof_to_part
+  dof_partition = map(parts,ldof_to_gdof,ldof_to_part) do part,ldof_to_gdof,ldof_to_part
     IndexSet(part,ldof_to_gdof,ldof_to_part)
   end
 
-  # map_parts(parts,dof_partition,cell_to_ldofs,cell_to_gdofs,cell_range.partition) do part, partition, cell_to_ldofs,cell_to_gdofs, cell_range
+  # map(parts,dof_partition,cell_to_ldofs,cell_to_gdofs,cell_range.partition) do part, partition, cell_to_ldofs,cell_to_gdofs, cell_range
   #   if (part==3)
   #     println("XXXX $(part)")
   #     println(partition)
@@ -286,11 +286,11 @@ function FESpaces.get_free_dof_ids(fs::DistributedSingleFieldFESpace)
 end
 
 function FESpaces.get_dirichlet_dof_values(U::DistributedSingleFieldFESpace)
-  map_parts(get_dirichlet_dof_values,U.spaces)
+  map(get_dirichlet_dof_values,U.spaces)
 end
 
 function FESpaces.zero_dirichlet_values(U::DistributedSingleFieldFESpace)
-  map_parts(zero_dirichlet_values,U.spaces)
+  map(zero_dirichlet_values,U.spaces)
 end
 
 function FESpaces.FEFunction(
@@ -318,7 +318,7 @@ end
 function _EvaluationFunction(func,
   f::DistributedSingleFieldFESpace,free_values::AbstractVector,isconsistent=false)
   local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  fields = map_parts(func,f.spaces,local_vals)
+  fields = map(func,f.spaces,local_vals)
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
 end
@@ -327,54 +327,54 @@ function _EvaluationFunction(func,
   f::DistributedSingleFieldFESpace,free_values::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},isconsistent=false)
   local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  fields = map_parts(func,f.spaces,local_vals,dirichlet_values)
+  fields = map(func,f.spaces,local_vals,dirichlet_values)
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
 end
 
 function FESpaces.get_fe_basis(f::DistributedSingleFieldFESpace)
-  fields = map_parts(get_fe_basis,f.spaces)
+  fields = map(get_fe_basis,f.spaces)
   DistributedCellField(fields)
 end
 
 function FESpaces.get_trial_fe_basis(f::DistributedSingleFieldFESpace)
-  fields = map_parts(get_trial_fe_basis,f.spaces)
+  fields = map(get_trial_fe_basis,f.spaces)
   DistributedCellField(fields)
 end
 
 function FESpaces.get_fe_dof_basis(f::DistributedSingleFieldFESpace)
-  dofs = map_parts(get_fe_dof_basis,local_views(f))
+  dofs = map(get_fe_dof_basis,local_views(f))
   DistributedCellDof(dofs)
 end
 
 function FESpaces.TrialFESpace(f::DistributedSingleFieldFESpace)
-  spaces = map_parts(TrialFESpace,f.spaces)
+  spaces = map(TrialFESpace,f.spaces)
   DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
 end
 
 function FESpaces.TrialFESpace(f::DistributedSingleFieldFESpace,fun)
-  spaces = map_parts(f.spaces) do s
+  spaces = map(f.spaces) do s
     TrialFESpace(s,fun)
   end
   DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
 end
 
 function FESpaces.TrialFESpace(fun,f::DistributedSingleFieldFESpace)
-  spaces = map_parts(f.spaces) do s
+  spaces = map(f.spaces) do s
     TrialFESpace(fun,s)
   end
   DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
 end
 
 function FESpaces.TrialFESpace!(f::DistributedSingleFieldFESpace,fun)
-  spaces = map_parts(f.spaces) do s
+  spaces = map(f.spaces) do s
     TrialFESpace!(s,fun)
   end
   DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
 end
 
 function FESpaces.HomogeneousTrialFESpace(f::DistributedSingleFieldFESpace)
-  spaces = map_parts(f.spaces) do s
+  spaces = map(f.spaces) do s
     HomogeneousTrialFESpace(s)
   end
   DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
@@ -383,8 +383,8 @@ end
 function generate_gids(
   model::DistributedDiscreteModel{Dc},
   spaces::AbstractArray{<:SingleFieldFESpace}) where Dc
-  cell_to_ldofs = map_parts(get_cell_dof_ids,spaces)
-  nldofs = map_parts(num_free_dofs,spaces)
+  cell_to_ldofs = map(get_cell_dof_ids,spaces)
+  nldofs = map(num_free_dofs,spaces)
   cell_gids = get_cell_gids(model)
   generate_gids(cell_gids,cell_to_ldofs,nldofs)
 end
@@ -396,7 +396,7 @@ end
 
 function FESpaces.interpolate!(
   u,free_values::AbstractVector,f::DistributedSingleFieldFESpace)
-  map_parts(f.spaces,local_views(free_values)) do V,vec
+  map(f.spaces,local_views(free_values)) do V,vec
     interpolate!(u,vec,V)
   end
   FEFunction(f,free_values)
@@ -404,7 +404,7 @@ end
 
 function FESpaces.interpolate!(
   u::DistributedCellField,free_values::AbstractVector,f::DistributedSingleFieldFESpace)
-  map_parts(local_views(u),f.spaces,local_views(free_values)) do ui,V,vec
+  map(local_views(u),f.spaces,local_views(free_values)) do ui,V,vec
     interpolate!(ui,vec,V)
   end
   FEFunction(f,free_values)
@@ -420,7 +420,7 @@ function FESpaces.interpolate_dirichlet!(
   u, free_values::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},
   f::DistributedSingleFieldFESpace)
-  map_parts(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
+  map(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
     interpolate_dirichlet!(u,fvec,dvec,V)
   end
   FEFunction(f,free_values,dirichlet_values)
@@ -436,7 +436,7 @@ function FESpaces.interpolate_everywhere!(
   u, free_values::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},
   f::DistributedSingleFieldFESpace)
-  map_parts(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
+  map(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
     interpolate_everywhere!(u,fvec,dvec,V)
   end
   FEFunction(f,free_values,dirichlet_values)
@@ -446,7 +446,7 @@ function FESpaces.interpolate_everywhere!(
   u::DistributedCellField, free_values::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},
   f::DistributedSingleFieldFESpace)
-  map_parts(local_views(u),f.spaces,local_views(free_values),dirichlet_values) do ui,V,fvec,dvec
+  map(local_views(u),f.spaces,local_views(free_values),dirichlet_values) do ui,V,fvec,dvec
     interpolate_everywhere!(ui,fvec,dvec,V)
   end
   FEFunction(f,free_values,dirichlet_values)
@@ -455,7 +455,7 @@ end
 # Factories
 
 function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
-  spaces = map_parts(local_views(model)) do m
+  spaces = map(local_views(model)) do m
     FESpace(m,reffe;kwargs...)
   end
   gids =  generate_gids(model,spaces)
@@ -466,11 +466,11 @@ end
 function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;kwargs...)
   trian = add_ghost_cells(_trian)
   trian_gids = generate_cell_gids(trian)
-  spaces = map_parts(trian.trians) do t
+  spaces = map(trian.trians) do t
     FESpace(t,reffe;kwargs...)
   end
-  cell_to_ldofs = map_parts(get_cell_dof_ids,spaces)
-  nldofs = map_parts(num_free_dofs,spaces)
+  cell_to_ldofs = map(get_cell_dof_ids,spaces)
+  nldofs = map(num_free_dofs,spaces)
   gids = generate_gids(trian_gids,cell_to_ldofs,nldofs)
   vector_type = _find_vector_type(spaces,gids)
   DistributedSingleFieldFESpace(spaces,gids,vector_type)
@@ -482,7 +482,7 @@ function _find_vector_type(spaces,gids)
   # we use PVector for the moment
   local_vector_type = get_vector_type(get_part(spaces))
   T = eltype(local_vector_type)
-  A = typeof(map_parts(i->local_vector_type(undef,0),gids.partition))
+  A = typeof(map(i->local_vector_type(undef,0),gids.partition))
   B = typeof(gids)
   vector_type = PVector{T,A,B}
 end
@@ -493,7 +493,7 @@ function FESpaces.collect_cell_matrix(
   trial::DistributedFESpace,
   test::DistributedFESpace,
   a::DistributedDomainContribution)
-  map_parts(
+  map(
     collect_cell_matrix,
     local_views(trial),
     local_views(test),
@@ -502,7 +502,7 @@ end
 
 function FESpaces.collect_cell_vector(
   test::DistributedFESpace, a::DistributedDomainContribution)
-  map_parts(
+  map(
     collect_cell_vector,local_views(test),local_views(a))
 end
 
@@ -511,7 +511,7 @@ function FESpaces.collect_cell_matrix_and_vector(
   test::DistributedFESpace,
   biform::DistributedDomainContribution,
   liform::DistributedDomainContribution)
-  map_parts(collect_cell_matrix_and_vector,
+  map(collect_cell_matrix_and_vector,
     local_views(trial),
     local_views(test),
     local_views(biform),
@@ -524,7 +524,7 @@ function FESpaces.collect_cell_matrix_and_vector(
   biform::DistributedDomainContribution,
   liform::DistributedDomainContribution,
   uhd)
-  map_parts(collect_cell_matrix_and_vector,
+  map(collect_cell_matrix_and_vector,
     local_views(trial),
     local_views(test),
     local_views(biform),
@@ -534,7 +534,7 @@ end
 
 function FESpaces.collect_cell_vector(
   test::DistributedFESpace,l::Number)
-  map_parts(local_views(test)) do s
+  map(local_views(test)) do s
     collect_cell_vector(s,l)
   end
 end
@@ -544,7 +544,7 @@ function FESpaces.collect_cell_matrix_and_vector(
   test::DistributedFESpace,
   mat::DistributedDomainContribution,
   l::Number)
-  map_parts(
+  map(
     local_views(trial),local_views(test),local_views(mat)) do u,v,m
     collect_cell_matrix_and_vector(u,v,m,l)
   end
@@ -556,7 +556,7 @@ function FESpaces.collect_cell_matrix_and_vector(
   mat::DistributedDomainContribution,
   l::Number,
   uhd)
-  map_parts(
+  map(
     local_views(trial),local_views(test),local_views(mat),local_views(uhd)) do u,v,m,f
     collect_cell_matrix_and_vector(u,v,m,l,f)
   end
@@ -581,27 +581,27 @@ FESpaces.get_vector_builder(a::DistributedSparseMatrixAssembler) = a.vector_buil
 FESpaces.get_assembly_strategy(a::DistributedSparseMatrixAssembler) = a.strategy
 
 function FESpaces.symbolic_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
-  map_parts(symbolic_loop_matrix!,local_views(A,a.rows,a.cols),a.assems,matdata)
+  map(symbolic_loop_matrix!,local_views(A,a.rows,a.cols),a.assems,matdata)
 end
 
 function FESpaces.numeric_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
-  map_parts(numeric_loop_matrix!,local_views(A,a.rows,a.cols),a.assems,matdata)
+  map(numeric_loop_matrix!,local_views(A,a.rows,a.cols),a.assems,matdata)
 end
 
 function FESpaces.symbolic_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
-  map_parts(symbolic_loop_vector!,local_views(b,a.rows),a.assems,vecdata)
+  map(symbolic_loop_vector!,local_views(b,a.rows),a.assems,vecdata)
 end
 
 function FESpaces.numeric_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
-  map_parts(numeric_loop_vector!,local_views(b,a.rows),a.assems,vecdata)
+  map(numeric_loop_vector!,local_views(b,a.rows),a.assems,vecdata)
 end
 
 function FESpaces.symbolic_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
-  map_parts(symbolic_loop_matrix_and_vector!,local_views(A,a.rows,a.cols),local_views(b,a.rows),a.assems,data)
+  map(symbolic_loop_matrix_and_vector!,local_views(A,a.rows,a.cols),local_views(b,a.rows),a.assems,data)
 end
 
 function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
-  map_parts(numeric_loop_matrix_and_vector!,local_views(A,a.rows,a.cols),local_views(b,a.rows),a.assems,data)
+  map(numeric_loop_matrix_and_vector!,local_views(A,a.rows,a.cols),local_views(b,a.rows),a.assems,data)
 end
 
 # Parallel Assembly strategies
@@ -634,7 +634,7 @@ function FESpaces.SparseMatrixAssembler(
   Tm = local_mat_type
   cols = trial.gids.partition
   rows = test.gids.partition
-  assems = map_parts(local_views(test),local_views(trial),rows,cols) do v,u,rows,cols
+  assems = map(local_views(test),local_views(trial),rows,cols) do v,u,rows,cols
     local_strategy = local_assembly_strategy(par_strategy,rows,cols)
     SparseMatrixAssembler(Tm,Tv,u,v,local_strategy)
   end

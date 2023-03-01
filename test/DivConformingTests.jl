@@ -90,7 +90,7 @@ end
 function main(parts)
     @assert isa(parts,SequentialData)
 
-    models=map_parts(parts) do part
+    models=map(parts) do part
       if (part==1)
         setup_p1_model()
       else
@@ -98,7 +98,7 @@ function main(parts)
       end
     end
 
-    noids,firstgid,hid_to_gid,hid_to_part=map_parts(parts) do part
+    noids,firstgid,hid_to_gid,hid_to_part=map(parts) do part
       if (part==1)
         1,1,[2],Int32[2]
       else

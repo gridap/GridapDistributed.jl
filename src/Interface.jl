@@ -6,5 +6,5 @@ function local_views(::DistributedGridapType)
 end
 
 function get_parts(x::DistributedGridapType)
-  return PArrays.get_part_ids(local_views(x))
+  return linear_indices(local_views(x))
 end

@@ -72,7 +72,7 @@ function consistent_local_views(a::PVector,ids_fespace::PRange,isconsistent)
 end
 
 function Algebra.allocate_vector(::Type{<:PVector{T,A}},ids::PRange) where {T,A}
-  values = map_parts(ids.partition) do ids
+  values = map(ids.partition) do ids
     Tv = eltype(A)
     Tv(undef,num_lids(ids))
   end
@@ -95,7 +95,7 @@ end
 function Algebra.nz_counter(
   builder::PSparseMatrixBuilderCOO{A}, axs::Tuple{<:PRange,<:PRange}) where A
   rows, cols = axs
-  counters = map_parts(rows.partition,cols.partition) do r,c
+  counters = map(rows.partition,cols.partition) do r,c
     axs = (Base.OneTo(num_lids(r)),Base.OneTo(num_lids(c)))
     Algebra.CounterCOO{A}(axs)
   end
@@ -133,7 +133,7 @@ function local_views(a::DistributedCounterCOO,rows,cols)
 end
 
 function Algebra.nz_allocation(a::DistributedCounterCOO)
-  allocs = map_parts(nz_allocation,a.counters)
+  allocs = map(nz_allocation,a.counters)
   DistributedAllocationCOO(a.par_strategy,allocs,a.rows,a.cols)
 end
 
@@ -157,10 +157,10 @@ end
 
 function change_axes(a::DistributedAllocationCOO{A,B,<:PRange,<:PRange},
                      axes::Tuple{<:PRange,<:PRange}) where {A,B}
-  local_axes=map_parts(axes[1].partition,axes[2].partition) do rows,cols
+  local_axes=map(axes[1].partition,axes[2].partition) do rows,cols
     (Base.OneTo(num_lids(rows)), Base.OneTo(num_lids(cols)))
   end
-  allocs=map_parts(change_axes,a.allocs,local_axes)
+  allocs=map(change_axes,a.allocs,local_axes)
   DistributedAllocationCOO(a.par_strategy,allocs,axes[1],axes[2])
 end
 
@@ -201,7 +201,7 @@ end
 function _fa_create_from_nz_with_callback(callback,a)
 
   # Recover some data
-  I,J,C = map_parts(a.allocs) do alloc
+  I,J,C = map(a.allocs) do alloc
     alloc.I, alloc.J, alloc.V
   end
   parts = get_part_ids(a.allocs)
@@ -209,10 +209,10 @@ function _fa_create_from_nz_with_callback(callback,a)
   cdofs = a.cols # dof ids of the trial space
   ngrdofs = length(rdofs)
   ngcdofs = length(cdofs)
-  nordofs = map_parts(num_oids,rdofs.partition)
-  nocdofs = map_parts(num_oids,cdofs.partition)
-  first_grdof = map_parts(first_gdof_from_ids,rdofs.partition)
-  first_gcdof = map_parts(first_gdof_from_ids,cdofs.partition)
+  nordofs = map(num_oids,rdofs.partition)
+  nocdofs = map(num_oids,cdofs.partition)
+  first_grdof = map(first_gdof_from_ids,rdofs.partition)
+  first_gcdof = map(first_gdof_from_ids,cdofs.partition)
   cneigs_snd = cdofs.exchanger.parts_snd
   cneigs_rcv = cdofs.exchanger.parts_rcv
 
@@ -231,7 +231,7 @@ function _fa_create_from_nz_with_callback(callback,a)
 
   # Find the ghost cols
   hcol_to_hcdof = touched_hids(cdofs,J)
-  hcol_to_gid, hcol_to_part = map_parts(
+  hcol_to_gid, hcol_to_part = map(
     find_gid_and_part,hcol_to_hcdof,cdofs.partition)
 
   # Create the range for cols
@@ -253,7 +253,7 @@ function _fa_create_from_nz_with_callback(callback,a)
   b=change_axes(a,(rows,cols))
 
   # Compress local portions
-  values = map_parts(create_from_nz,b.allocs)
+  values = map(create_from_nz,b.allocs)
 
   # Build the matrix exchanger. This can be empty since no ghost rows
   exchanger = empty_exchanger(parts)
@@ -273,7 +273,7 @@ end
 function _sa_create_from_nz_with_callback(callback,async_callback,a)
 
   # Recover some data
-  I,J,C = map_parts(a.allocs) do alloc
+  I,J,C = map(a.allocs) do alloc
     alloc.I, alloc.J, alloc.V
   end
   parts = get_part_ids(a.allocs)
@@ -281,10 +281,10 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   cdofs = a.cols # dof ids of the trial space
   ngrdofs = length(rdofs)
   ngcdofs = length(cdofs)
-  nordofs = map_parts(num_oids,rdofs.partition)
-  nocdofs = map_parts(num_oids,cdofs.partition)
-  first_grdof = map_parts(first_gdof_from_ids,rdofs.partition)
-  first_gcdof = map_parts(first_gdof_from_ids,cdofs.partition)
+  nordofs = map(num_oids,rdofs.partition)
+  nocdofs = map(num_oids,cdofs.partition)
+  first_grdof = map(first_gdof_from_ids,rdofs.partition)
+  first_gcdof = map(first_gdof_from_ids,cdofs.partition)
   rneigs_snd = rdofs.exchanger.parts_snd
   rneigs_rcv = rdofs.exchanger.parts_rcv
   cneigs_snd = cdofs.exchanger.parts_snd
@@ -296,7 +296,7 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
 
   # Find the ghost rows
   hrow_to_hrdof = touched_hids(rdofs,I)
-  hrow_to_gid, hrow_to_part = map_parts(
+  hrow_to_gid, hrow_to_part = map(
     find_gid_and_part,hrow_to_hrdof,rdofs.partition)
 
   # Create the range for rows
@@ -320,12 +320,12 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   callback_output = callback(rows)
 
   # Wait the transfer to finish
-  map_parts(schedule,t)
-  map_parts(wait,t)
+  map(schedule,t)
+  map(wait,t)
 
   # Find the ghost cols
   hcol_to_hcdof = touched_hids(cdofs,J)
-  hcol_to_gid, hcol_to_part = map_parts(
+  hcol_to_gid, hcol_to_part = map(
     find_gid_and_part,hcol_to_hcdof,cdofs.partition)
 
   # Create the range for cols
@@ -350,12 +350,12 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   b=change_axes(a,(rows,cols))
 
   # Compress the local matrices
-  values = map_parts(create_from_nz,b.allocs)
+  values = map(create_from_nz,b.allocs)
 
   # Wait the transfer to finish
   if t2 !== nothing
-    map_parts(schedule,t2)
-    map_parts(wait,t2)
+    map(schedule,t2)
+    map(wait,t2)
   end
 
   # Finally build the matrix
@@ -379,7 +379,7 @@ end
 function Algebra.nz_counter(builder::PVectorBuilder,axs::Tuple{<:PRange})
   T = builder.local_vector_type
   rows, = axs
-  counters = map_parts(rows.partition) do rows
+  counters = map(rows.partition) do rows
     axs = (Base.OneTo(num_lids(rows)),)
     nz_counter(ArrayBuilder(T),axs)
   end
@@ -405,7 +405,7 @@ end
 
 function Arrays.nz_allocation(a::PVectorCounter{<:FullyAssembledRows})
   dofs = a.rows
-  values = map_parts(nz_allocation,a.counters)
+  values = map(nz_allocation,a.counters)
   PVectorAllocationTrackOnlyValues(a.par_strategy,values,dofs)
 end
 
@@ -428,8 +428,8 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues{<:FullyAssem
   # Create PRange for the rows of the linear system
   parts = get_part_ids(a.values)
   ngdofs = length(a.rows)
-  nodofs = map_parts(num_oids,a.rows.partition)
-  first_grdof = map_parts(first_gdof_from_ids,a.rows.partition)
+  nodofs = map(num_oids,a.rows.partition)
+  first_grdof = map(first_gdof_from_ids,a.rows.partition)
 
   # This one has no ghost rows
   rows = PRange(parts,ngdofs,nodofs,first_grdof)
@@ -463,7 +463,7 @@ function _rhs_callback(c_fespace,rows)
       b[lid] = b_fespace[lid_fespace]
     end
   end
-  map_parts(
+  map(
     transfer_ghost,
     b.values,
     b_fespace.values,
@@ -562,18 +562,18 @@ function Arrays.nz_allocation(a::DistributedCounterCOO{<:SubAssembledRows},
                               b::PVectorCounter{<:SubAssembledRows})
   A = nz_allocation(a)
   dofs = b.rows
-  values = map_parts(nz_allocation,b.counters)
+  values = map(nz_allocation,b.counters)
   B=PVectorAllocationTrackOnlyValues(b.par_strategy,values,dofs)
   A,B
 end
 
 function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
   dofs = a.rows
-  values = map_parts(nz_allocation,a.counters)
-  touched = map_parts(values) do values
+  values = map(nz_allocation,a.counters)
+  touched = map(values) do values
      fill!(Vector{Bool}(undef,length(values)),false)
   end
-  allocations=map_parts(values,touched) do values,touched
+  allocations=map(values,touched) do values,touched
     ArrayAllocationTrackTouchedAndValues(touched,values)
   end
   PVectorAllocationTrackTouchedAndValues(allocations,values,dofs)
@@ -587,13 +587,13 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
    parts = get_part_ids(a.values)
    rdofs = a.rows # dof ids of the test space
    ngrdofs = length(rdofs)
-   nordofs = map_parts(num_oids,rdofs.partition)
-   first_grdof = map_parts(first_gdof_from_ids,rdofs.partition)
+   nordofs = map(num_oids,rdofs.partition)
+   first_grdof = map(first_gdof_from_ids,rdofs.partition)
    rneigs_snd = rdofs.exchanger.parts_snd
    rneigs_rcv = rdofs.exchanger.parts_rcv
 
    # Find the ghost rows
-   hrow_to_hrdof=map_parts(local_views(a.allocations),rdofs.partition) do allocation, indices
+   hrow_to_hrdof=map(local_views(a.allocations),rdofs.partition) do allocation, indices
     lids_touched=findall(allocation.touched)
     nhlids = count((x)->indices.lid_to_ohid[x]<0,lids_touched)
     hlids = Vector{Int32}(undef,nhlids)
@@ -607,7 +607,7 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
     end
     hlids
    end
-   hrow_to_gid, hrow_to_part = map_parts(
+   hrow_to_gid, hrow_to_part = map(
        find_gid_and_part,hrow_to_hrdof,rdofs.partition)
 
    # Create the range for rows
@@ -626,8 +626,8 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
 
    # Wait the transfer to finish
    if t2 !== nothing
-     map_parts(schedule,t2)
-     map_parts(wait,t2)
+     map(schedule,t2)
+     map(wait,t2)
    end
    b
 end
