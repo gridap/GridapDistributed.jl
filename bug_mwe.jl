@@ -9,10 +9,10 @@ ranks   = (1,2)
 parts   = get_part_ids(backend,ranks)
 
 domain    = (0.0,1.0,0.0,1.0)
-partition = (4,4)
+partition = (3,4)
 model     = CartesianDiscreteModel(parts,domain,partition)
 
-order = 1
+order = 0
 reffe = ReferenceFE(raviart_thomas,Float64,order)
 V = TestFESpace(model,reffe,conformity=:HDiv)
 U = TrialFESpace(V)
