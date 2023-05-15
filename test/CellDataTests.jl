@@ -50,6 +50,12 @@ function main(parts)
   x_Γ = get_cell_points(dΓ)
   @test isa(f(x_Γ),AbstractPData)
 
+  _my_op(u,v,h) = u + v - h
+  u1 = CellField(0.0,Ω)
+  u2 = CellField(1.0,Ω)
+  u3 = CellField(2.0,Ω)
+  u = _my_op∘(u1,u2,u3)
+
 end
 
 end # module

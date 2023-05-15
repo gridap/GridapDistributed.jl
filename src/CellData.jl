@@ -110,7 +110,7 @@ function Arrays.evaluate!(cache,k::Operation,b::Function,a::DistributedCellField
 end
 
 function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField...)
-  fields = map_parts(map(i->i.fields,a)) do f...
+  fields = map_parts(map(i->i.fields,a)...) do f...
     evaluate!(nothing,k,f...)
   end
   DistributedCellField(fields)
