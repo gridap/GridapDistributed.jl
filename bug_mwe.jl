@@ -25,5 +25,7 @@ dΩ  = Measure(Ω,qdegree)
 dΛ  = Measure(Λ,qdegree)
 n_Λ = get_normal_vector(Λ)
 
-biform(u,v) = ∫(u⋅v)*dΩ - ∫(jump(v⊗n_Λ)⊙(mean(∇(u))))dΛ
+#biform(u,v) = ∫(u⋅v)*dΩ - ∫(jump(v⊗n_Λ)⊙(mean(∇(u))))dΛ
+
+biform(u,v) = ∫((v.minus ⋅ n_Λ.minus) ⋅ (u.plus⋅n_Λ.plus))dΛ
 A = assemble_matrix(biform,U,V)
