@@ -239,11 +239,11 @@ end
 # Factory
 
 function MultiField.MultiFieldFESpace(
-  f_dspace::Vector{<:DistributedSingleFieldFESpace})
+  f_dspace::Vector{<:DistributedSingleFieldFESpace};kwargs...)
   f_p_space = map(local_views,f_dspace)
   v(x...) = collect(x)
   p_f_space = map_parts(v,f_p_space...)
-  p_mspace = map_parts(MultiFieldFESpace,p_f_space)
+  p_mspace = map_parts(f->MultiFieldFESpace(f;kwargs...),p_f_space)
   gids = generate_multi_field_gids(f_dspace,p_mspace)
   vector_type = _find_vector_type(p_mspace,gids)
   DistributedMultiFieldFESpace(f_dspace,p_mspace,gids,vector_type)
