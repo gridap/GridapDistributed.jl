@@ -1,4 +1,4 @@
-using Test, LinearAlgebra
+using Test, LinearAlgebra, BlockArrays
 
 using Gridap
 using Gridap.FESpaces, Gridap.ReferenceFEs, Gridap.MultiField
@@ -10,11 +10,11 @@ parts = get_part_ids(SequentialBackend(),(2,2))
 
 sol(x) = sum(x)
 
-model = CartesianDiscreteModel(parts,(0.0,1.0,0.0,1.0),(10,10))
+model = CartesianDiscreteModel(parts,(0.0,1.0,0.0,1.0),(6,6))
 Ω = Triangulation(model)
 
 reffe = LagrangianRefFE(Float64,QUAD,1)
-V = FESpace(Ω, reffe; dirichlet_tags="boundary")
+V = FESpace(Ω, reffe)
 U = TrialFESpace(sol,V)
 
 dΩ = Measure(Ω, 2)
@@ -54,3 +54,4 @@ bmatdata = collect_cell_matrix(Xb,Yb,biform(ub,vb))
 bvecdata = collect_cell_vector(Yb,liform(vb))
 
 assem_blocks = SparseMatrixAssembler(Xb,Yb)
+A_blocks = assemble_matrix(assem_blocks,bmatdata)

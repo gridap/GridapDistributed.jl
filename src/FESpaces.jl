@@ -481,10 +481,21 @@ function _find_vector_type(spaces,gids)
   # new kw-arg global_vector_type ?
   # we use PVector for the moment
   local_vector_type = get_vector_type(get_part(spaces))
-  T = eltype(local_vector_type)
-  A = typeof(map_parts(i->local_vector_type(undef,0),gids.partition))
-  B = typeof(gids)
-  vector_type = PVector{T,A,B}
+
+  if local_vector_type <: BlockVector
+    T = eltype(local_vector_type)
+    A = typeof(map_parts(i->Vector{T}(undef,0),gids.partition))
+    B = typeof(gids)
+    block_type  = PVector{T,A,B}
+    vector_type = BlockVector{T,Vector{block_type}}
+  else
+    T = eltype(local_vector_type)
+    A = typeof(map_parts(i->local_vector_type(undef,0),gids.partition))
+    B = typeof(gids)
+    vector_type = PVector{T,A,B}
+  end
+
+  return vector_type
 end
 
 # Assembly

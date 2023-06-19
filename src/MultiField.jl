@@ -29,20 +29,21 @@ local_views(a::Vector{<:DistributedCellField}) = [ai.fields for ai in a]
 
 """
 """
-struct DistributedMultiFieldFESpace{A,B,C,D} <: DistributedFESpace
+struct DistributedMultiFieldFESpace{MS,A,B,C,D} <: DistributedFESpace
+  multi_field_style::MS
   field_fe_space::A
   part_fe_space::B
   gids::C
   vector_type::Type{D}
   function DistributedMultiFieldFESpace(
     field_fe_space::AbstractVector{<:DistributedSingleFieldFESpace},
-    part_fe_space::AbstractPData{<:MultiFieldFESpace},
+    part_fe_space::AbstractPData{<:MultiFieldFESpace{MS}},
     gids::PRange,
-    vector_type::Type{D}) where D
+    vector_type::Type{D}) where {D,MS}
     A = typeof(field_fe_space)
     B = typeof(part_fe_space)
     C = typeof(gids)
-    new{A,B,C,D}(field_fe_space,part_fe_space,gids,vector_type)
+    new{MS,A,B,C,D}(MS(),field_fe_space,part_fe_space,gids,vector_type)
   end
 end
 
@@ -68,6 +69,10 @@ function MultiField.restrict_to_field(
   end
   gids = f.field_fe_space[field].gids
   PVector(values,gids)
+end
+
+function FESpaces.zero_free_values(f::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle})
+  return mortar(map(zero_free_values,f.field_fe_space))
 end
 
 function FESpaces.FEFunction(
@@ -374,5 +379,42 @@ function propagate_to_ghost_multifield!(
         lid_gid[lid] = flid_gid[flid]
       end
     end
+  end
+end
+
+
+# BlockMatrixAssemblers
+
+function FESpaces.SparseMatrixAssembler(
+  local_mat_type,
+  local_vec_type,
+  trial::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
+  test::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
+  par_strategy=SubAssembledRows())
+
+  block_idx = CartesianIndices((length(test),length(trial)))
+  block_assemblers = map(block_idx) do idx
+    Yi = test[idx[1]]; Xj = trial[idx[2]]
+    return SparseMatrixAssembler(local_mat_type,local_vec_type,Xj,Yi,par_strategy)
+  end
+
+  return BlockMatrixAssembler(block_assemblers)
+end
+
+function MultiField.select_block_matdata(matdata::AbstractPData,i::Integer,j::Integer)
+  map_parts(matdata) do matdata
+    MultiField.select_block_matdata(matdata,i,j)
+  end
+end
+
+function MultiField.select_block_vecdata(vecdata::AbstractPData,j::Integer)
+  map_parts(vecdata) do vecdata
+    MultiField.select_block_vecdata(vecdata,j)
+  end
+end
+
+function MultiField.select_block_matvecdata(matvecdata::AbstractPData,i::Integer,j::Integer)
+  map_parts(matvecdata) do matvecdata
+    MultiField.select_block_matvecdata(matvecdata,i,j)
   end
 end
