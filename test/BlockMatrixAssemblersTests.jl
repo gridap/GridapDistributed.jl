@@ -18,8 +18,8 @@ V = FESpace(Ω, reffe)
 U = TrialFESpace(sol,V)
 
 dΩ = Measure(Ω, 2)
-biform((u1,u2),(v1,v2)) = ∫(∇(u1)⋅∇(v1) + u2⋅v2 - u1⋅v2)*dΩ
-liform((v1,v2)) = ∫(v1 - v2)*dΩ
+biform((u1,u2),(v1,v2)) = ∫(∇(u1)⋅∇(v1) + u2⋅v2 + u1⋅v2)*dΩ
+liform((v1,v2)) = ∫(v1 + v2)*dΩ
 
 ############################################################################################
 # Normal assembly 
@@ -53,5 +53,76 @@ bdata = collect_cell_matrix_and_vector(Xb,Yb,biform(ub,vb),liform(vb))
 bmatdata = collect_cell_matrix(Xb,Yb,biform(ub,vb))
 bvecdata = collect_cell_vector(Yb,liform(vb))
 
+############################################################################################
+# Block Assembly
+
+function same_vector(v1::PVector,v2::BlockVector,X)
+  v1i = map(i->restrict_to_field(X,v1,i),1:2)
+  for i in 1:length(v1i)
+    map_parts(v1i[i].owned_values,v2[Block(i)].owned_values) do v1,v2
+      @test (norm(v1 - v2) < 1.e-10)
+    end
+  end
+  return true
+end
+
+function LinearAlgebra.mul!(y::BlockVector,A::BlockMatrix,x::BlockVector)
+  o = one(eltype(A))
+  for i in blockaxes(A,1)
+    fill!(y[i],0.0)
+    for j in blockaxes(A,2)
+      mul!(y[i],A[i,j],x[j],o,o)
+    end
+  end
+end
+
 assem_blocks = SparseMatrixAssembler(Xb,Yb)
-A_blocks = assemble_matrix(assem_blocks,bmatdata)
+
+A1_blocks = assemble_matrix(assem_blocks,bmatdata);
+b1_blocks = assemble_vector(assem_blocks,bvecdata);
+
+y1_blocks = mortar(map(Aii->PVector(0.0,Aii.cols),A1_blocks.blocks[1,:]));
+x1_blocks = mortar(map(Aii->PVector(1.0,Aii.cols),A1_blocks.blocks[1,:]));
+
+mul!(y1_blocks,A1_blocks,x1_blocks)
+
+y1 = PVector(0.0,A1.cols)
+x1 = PVector(1.0,A1.cols)
+mul!(y1,A1,x1)
+
+@test same_vector(y1,y1_blocks,X)
+@test same_vector(b1,b1_blocks,Y)
+
+
+tests = []
+for i in blockaxes(A1_blocks,1)
+  for j in blockaxes(A1_blocks,2)
+    push!(tests,(oids_are_equal(y1_blocks[i].rows,A1_blocks[i,j].rows),
+    oids_are_equal(A1_blocks[i,j].cols,x1_blocks[j].rows),
+    hids_are_equal(A1_blocks[i,j].cols,x1_blocks[j].rows)))
+  end
+end
+
+A2_blocks, b2_blocks = assemble_matrix_and_vector(assem_blocks,bdata)
+@test A2_blocks ≈ A2
+@test b2_blocks ≈ b2
+
+A3_blocks = allocate_matrix(assem_blocks,bmatdata)
+b3_blocks = allocate_vector(assem_blocks,bvecdata)
+assemble_matrix!(A3_blocks,assem_blocks,bmatdata)
+assemble_vector!(b3_blocks,assem_blocks,bvecdata)
+@test A3_blocks ≈ A1_blocks
+@test b3_blocks ≈ b1_blocks
+
+A4_blocks, b4_blocks = allocate_matrix_and_vector(assem_blocks,bdata)
+assemble_matrix_and_vector!(A4_blocks,b4_blocks,assem_blocks,bdata)
+@test A4_blocks ≈ A2_blocks
+@test b4_blocks ≈ b2_blocks
+
+############################################################################################
+
+op = AffineFEOperator(biform,liform,X,Y)
+block_op = AffineFEOperator(biform,liform,Xb,Yb)
+
+@test get_matrix(op) ≈ get_matrix(block_op)
+@test get_vector(op) ≈ get_vector(block_op)

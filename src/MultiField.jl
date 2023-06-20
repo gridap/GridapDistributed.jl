@@ -401,6 +401,16 @@ function FESpaces.SparseMatrixAssembler(
   return BlockMatrixAssembler(block_assemblers)
 end
 
+function FESpaces.SparseMatrixAssembler(
+  trial::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
+  test::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
+  par_strategy=SubAssembledRows())
+  Tv = get_vector_type(get_part(local_views(first(trial))))
+  T  = eltype(Tv)
+  Tm = SparseMatrixCSC{T,Int}
+  SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)
+end
+
 function MultiField.select_block_matdata(matdata::AbstractPData,i::Integer,j::Integer)
   map_parts(matdata) do matdata
     MultiField.select_block_matdata(matdata,i,j)
