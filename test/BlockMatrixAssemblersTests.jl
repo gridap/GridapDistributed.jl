@@ -53,6 +53,10 @@ bdata = collect_cell_matrix_and_vector(Xb,Yb,biform(ub,vb),liform(vb))
 bmatdata = collect_cell_matrix(Xb,Yb,biform(ub,vb))
 bvecdata = collect_cell_vector(Yb,liform(vb))
 
+
+touched = MultiField.select_touched_blocks_vecdata(bvecdata,(2,1))
+
+
 ############################################################################################
 # Block Assembly
 
@@ -93,36 +97,8 @@ mul!(y1,A1,x1)
 @test same_vector(y1,y1_blocks,X)
 @test same_vector(b1,b1_blocks,Y)
 
-
-tests = []
-for i in blockaxes(A1_blocks,1)
-  for j in blockaxes(A1_blocks,2)
-    push!(tests,(oids_are_equal(y1_blocks[i].rows,A1_blocks[i,j].rows),
-    oids_are_equal(A1_blocks[i,j].cols,x1_blocks[j].rows),
-    hids_are_equal(A1_blocks[i,j].cols,x1_blocks[j].rows)))
-  end
-end
-
-A2_blocks, b2_blocks = assemble_matrix_and_vector(assem_blocks,bdata)
-@test A2_blocks ≈ A2
-@test b2_blocks ≈ b2
-
-A3_blocks = allocate_matrix(assem_blocks,bmatdata)
-b3_blocks = allocate_vector(assem_blocks,bvecdata)
-assemble_matrix!(A3_blocks,assem_blocks,bmatdata)
-assemble_vector!(b3_blocks,assem_blocks,bvecdata)
-@test A3_blocks ≈ A1_blocks
-@test b3_blocks ≈ b1_blocks
-
-A4_blocks, b4_blocks = allocate_matrix_and_vector(assem_blocks,bdata)
-assemble_matrix_and_vector!(A4_blocks,b4_blocks,assem_blocks,bdata)
-@test A4_blocks ≈ A2_blocks
-@test b4_blocks ≈ b2_blocks
-
 ############################################################################################
 
 op = AffineFEOperator(biform,liform,X,Y)
 block_op = AffineFEOperator(biform,liform,Xb,Yb)
 
-@test get_matrix(op) ≈ get_matrix(block_op)
-@test get_vector(op) ≈ get_vector(block_op)

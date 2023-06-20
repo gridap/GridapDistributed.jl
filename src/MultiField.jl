@@ -411,20 +411,26 @@ function FESpaces.SparseMatrixAssembler(
   SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)
 end
 
-function MultiField.select_block_matdata(matdata::AbstractPData,i::Integer,j::Integer)
-  map_parts(matdata) do matdata
-    MultiField.select_block_matdata(matdata,i,j)
+# select_block_Xdata
+for fun in [:select_block_matdata,:select_block_vecdata,:select_block_matvecdata]
+  @eval begin
+    function MultiField.$fun(data::AbstractPData,s::Tuple)
+      map_parts(data) do data
+        MultiField.$fun(data,s)
+      end
+    end
   end
 end
 
-function MultiField.select_block_vecdata(vecdata::AbstractPData,j::Integer)
-  map_parts(vecdata) do vecdata
-    MultiField.select_block_vecdata(vecdata,j)
-  end
-end
-
-function MultiField.select_block_matvecdata(matvecdata::AbstractPData,i::Integer,j::Integer)
-  map_parts(matvecdata) do matvecdata
-    MultiField.select_block_matvecdata(matvecdata,i,j)
+# select_touched_blocks_Xdata
+for fun in [:select_touched_blocks_matdata,:select_touched_blocks_vecdata,:select_touched_blocks_matvecdata]
+  @eval begin
+    function MultiField.$fun(data::AbstractPData,s::Tuple)
+      touched = map_parts(data) do data
+        MultiField.$fun(data,s)
+      end
+      return get_part(touched)
+      #return reduce(.|,touched; init=fill(false,s))
+    end
   end
 end
