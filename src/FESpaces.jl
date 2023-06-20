@@ -486,8 +486,8 @@ function _find_vector_type(spaces,gids)
     T = eltype(local_vector_type)
     A = typeof(map_parts(i->Vector{T}(undef,0),gids.partition))
     B = typeof(gids)
-    block_type  = PVector{T,A,B}
-    vector_type = BlockVector{T,Vector{block_type}}
+    vector_type  = PVector{T,A,B}
+    #vector_type = BlockVector{T,Vector{block_type}}
   else
     T = eltype(local_vector_type)
     A = typeof(map_parts(i->local_vector_type(undef,0),gids.partition))

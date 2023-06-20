@@ -71,9 +71,9 @@ function MultiField.restrict_to_field(
   PVector(values,gids)
 end
 
-function FESpaces.zero_free_values(f::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle})
-  return mortar(map(zero_free_values,f.field_fe_space))
-end
+#function FESpaces.zero_free_values(f::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle})
+#  return mortar(map(zero_free_values,f.field_fe_space))
+#end
 
 function FESpaces.FEFunction(
   f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
@@ -411,18 +411,24 @@ function FESpaces.SparseMatrixAssembler(
   SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)
 end
 
-# select_block_Xdata
-for fun in [:select_block_matdata,:select_block_vecdata,:select_block_matvecdata]
-  @eval begin
-    function MultiField.$fun(data::AbstractPData,s::Tuple)
-      map_parts(data) do data
-        MultiField.$fun(data,s)
-      end
-    end
+function MultiField.select_block_matdata(matdata::AbstractPData,i::Integer,j::Integer)
+  map_parts(matdata) do matdata
+    MultiField.select_block_matdata(matdata,i,j)
   end
 end
 
-# select_touched_blocks_Xdata
+function MultiField.select_block_vecdata(vecdata::AbstractPData,j::Integer)
+  map_parts(vecdata) do vecdata
+    MultiField.select_block_vecdata(vecdata,j)
+  end
+end
+
+function MultiField.select_block_matvecdata(matvecdata::AbstractPData,i::Integer,j::Integer)
+  map_parts(matvecdata) do matvecdata
+    MultiField.select_block_matvecdata(matvecdata,i,j)
+  end
+end
+
 for fun in [:select_touched_blocks_matdata,:select_touched_blocks_vecdata,:select_touched_blocks_matvecdata]
   @eval begin
     function MultiField.$fun(data::AbstractPData,s::Tuple)
@@ -433,4 +439,13 @@ for fun in [:select_touched_blocks_matdata,:select_touched_blocks_vecdata,:selec
       #return reduce(.|,touched; init=fill(false,s))
     end
   end
+end
+
+function MultiField.zero_block(::Type{<:PSparseMatrix},a::DistributedSparseMatrixAssembler)
+  rows = get_rows(a)
+  cols = get_cols(a)
+  mats = map_parts(local_views(a)) do a
+    MultiField.zero_block(get_matrix_type(a),a)
+  end
+  return PSparseMatrix(mats,rows,cols)
 end

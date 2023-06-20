@@ -53,10 +53,6 @@ bdata = collect_cell_matrix_and_vector(Xb,Yb,biform(ub,vb),liform(vb))
 bmatdata = collect_cell_matrix(Xb,Yb,biform(ub,vb))
 bvecdata = collect_cell_vector(Yb,liform(vb))
 
-
-touched = MultiField.select_touched_blocks_vecdata(bvecdata,(2,1))
-
-
 ############################################################################################
 # Block Assembly
 
