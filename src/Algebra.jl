@@ -102,6 +102,12 @@ function Algebra.nz_counter(
   DistributedCounterCOO(builder.par_strategy,counters,rows,cols)
 end
 
+function Algebra.get_array_type(::PSparseMatrixBuilderCOO{Tv}) where Tv
+  T = eltype(Tv)
+  return PSparseMatrix{T}
+end
+
+
 """
 """
 struct DistributedCounterCOO{A,B,C,D} <: DistributedGridapType
@@ -384,6 +390,11 @@ function Algebra.nz_counter(builder::PVectorBuilder,axs::Tuple{<:PRange})
     nz_counter(ArrayBuilder(T),axs)
   end
   PVectorCounter(builder.par_strategy,counters,rows)
+end
+
+function Algebra.get_array_type(::PVectorBuilder{Tv}) where Tv
+  T = eltype(Tv)
+  return PVector{T}
 end
 
 struct PVectorCounter{A,B,C}
