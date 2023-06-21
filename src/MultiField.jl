@@ -429,6 +429,18 @@ function MultiField.select_block_matvecdata(matvecdata::AbstractPData,i::Integer
   end
 end
 
+function MultiField.combine_matdata(data1::AbstractPData,data2::AbstractPData)
+  map_parts(data1,data2) do data1,data2
+    MultiField.combine_matdata(data1,data2)
+  end
+end
+
+function MultiField.recombine_data(matvecdata::AbstractPData,matdata::AbstractPData,vecdata::AbstractPData)
+  map_parts(matvecdata,matdata,vecdata) do matvecdata,matdata,vecdata
+    (matvecdata,matdata,vecdata)
+  end
+end
+
 for fun in [:select_touched_blocks_matdata,:select_touched_blocks_vecdata,:select_touched_blocks_matvecdata]
   @eval begin
     function MultiField.$fun(data::AbstractPData,s::Tuple)
