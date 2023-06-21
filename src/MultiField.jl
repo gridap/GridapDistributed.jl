@@ -432,10 +432,11 @@ end
 for fun in [:select_touched_blocks_matdata,:select_touched_blocks_vecdata,:select_touched_blocks_matvecdata]
   @eval begin
     function MultiField.$fun(data::AbstractPData,s::Tuple)
-      touched = map_parts(data) do data
-        MultiField.$fun(data,s)
-      end
-      return get_part(touched)
+      return fill(true,s)
+      #touched = map_parts(data) do data
+      #  MultiField.$fun(data,s)
+      #end
+      #return get_part(touched)
       #return reduce(.|,touched; init=fill(false,s))
     end
   end
