@@ -34,11 +34,11 @@ function local_views(a::AbstractArray)
 end
 
 function local_views(a::PRange)
-  a.partition
+  partition(a)
 end
 
 function local_views(a::PVector)
-  a.values
+  partition(a)
 end
 
 function local_views(a::PVector,rows::PRange)
@@ -46,7 +46,7 @@ function local_views(a::PVector,rows::PRange)
 end
 
 function local_views(a::PSparseMatrix)
-  a.values
+  partition(a)
 end
 
 function local_views(a::PSparseMatrix,rows::PRange,cols::PRange)
@@ -54,10 +54,10 @@ function local_views(a::PSparseMatrix,rows::PRange,cols::PRange)
 end
 
 function change_ghost(a::PVector,ids_fespace::PRange)
-  if a.rows === ids_fespace
+  if a.index_partition === partition(ids_fespace)
     a_fespace = a
   else
-    a_fespace = similar(a,eltype(a),ids_fespace)
+    a_fespace = similar(a,eltype(a),(ids_fespace,))
     a_fespace .= a
   end
   a_fespace
@@ -66,17 +66,17 @@ end
 function consistent_local_views(a::PVector,ids_fespace::PRange,isconsistent)
   a_fespace = change_ghost(a,ids_fespace)
   if ! isconsistent
-    exchange!(a_fespace)
+    assemble!((a,b)->b, partition(a_fespace),map(reverse,a_fespace.cache)) |> wait
   end
-  a_fespace.values
+  partition(a_fespace)
 end
 
-function Algebra.allocate_vector(::Type{<:PVector{T,A}},ids::PRange) where {T,A}
-  values = map(ids.partition) do ids
+function Algebra.allocate_vector(::Type{<:PVector{V,A}},ids::PRange) where {V,A}
+  values = map(partition(ids)) do ids
     Tv = eltype(A)
-    Tv(undef,num_lids(ids))
+    Tv(undef,length(local_to_owner(ids)))
   end
-  PVector(values,ids)
+  PVector(values,partition(ids))
 end
 
 struct FullyAssembledRows end
@@ -95,8 +95,8 @@ end
 function Algebra.nz_counter(
   builder::PSparseMatrixBuilderCOO{A}, axs::Tuple{<:PRange,<:PRange}) where A
   rows, cols = axs
-  counters = map(rows.partition,cols.partition) do r,c
-    axs = (Base.OneTo(num_lids(r)),Base.OneTo(num_lids(c)))
+  counters = map(partition(rows),partition(cols)) do r,c
+    axs = (Base.OneTo(local_length(r)),Base.OneTo(local_length(c)))
     Algebra.CounterCOO{A}(axs)
   end
   DistributedCounterCOO(builder.par_strategy,counters,rows,cols)
@@ -157,8 +157,8 @@ end
 
 function change_axes(a::DistributedAllocationCOO{A,B,<:PRange,<:PRange},
                      axes::Tuple{<:PRange,<:PRange}) where {A,B}
-  local_axes=map(axes[1].partition,axes[2].partition) do rows,cols
-    (Base.OneTo(num_lids(rows)), Base.OneTo(num_lids(cols)))
+  local_axes=map(partition(axes[1]),partition(axes[2])) do rows,cols
+    (Base.OneTo(local_length(rows)), Base.OneTo(local_length(cols)))
   end
   allocs=map(change_axes,a.allocs,local_axes)
   DistributedAllocationCOO(a.par_strategy,allocs,axes[1],axes[2])
@@ -175,14 +175,20 @@ function local_views(a::DistributedAllocationCOO,rows,cols)
 end
 
 function first_gdof_from_ids(ids)
-  num_oids(ids)>0 ? Int(ids.lid_to_gid[ids.oid_to_lid[1]]) : 1
+  lid_to_gid=local_to_global(ids) 
+  owner_to_lid=own_to_local(ids)
+  own_length(ids)>0 ? Int(lid_to_gid[first(owner_to_lid)]) : 1
 end
 
-function find_gid_and_part(hid_to_hdof,dofs)
-  hid_to_ldof = view(dofs.hid_to_lid,hid_to_hdof)
-  hid_to_gid = dofs.lid_to_gid[hid_to_ldof]
-  hid_to_part = dofs.lid_to_part[hid_to_ldof]
-  hid_to_gid, hid_to_part
+function find_gid_and_owner(ighost_to_jghost,jindices)
+  jghost_to_local=ghost_to_local(jindices)
+  jlocal_to_global=local_to_global(jindices)
+  jlocal_to_owner=local_to_owner(jindices)
+  ighost_to_jlocal = view(jghost_to_local,ighost_to_jghost)
+
+  ighost_to_global = jlocal_to_global[ighost_to_jlocal]
+  ighost_to_owner = jlocal_to_owner[ighost_to_jlocal]
+  ighost_to_global, ighost_to_owner
 end
 
 function Algebra.create_from_nz(a::PSparseMatrix)
@@ -198,6 +204,36 @@ function Algebra.create_from_nz(a::DistributedAllocationCOO{<:FullyAssembledRows
   A
 end
 
+# The given ids are assumed to be a sub-set of the lids
+function ghost_lids_touched(a::AbstractLocalIndices,gids::AbstractVector{<:Integer})
+  i = 0
+  ghost_lids_touched = fill(false,ghost_length(a))
+  glo_to_loc=global_to_local(a)
+  loc_to_gho=local_to_ghost(a)
+  for gid in gids
+    lid = glo_to_loc[gid]
+    ghost_lid = loc_to_gho[lid]
+    if ghost_lid > 0 && !ghost_lids_touched[ghost_lid]
+      ghost_lids_touched[ghost_lid] = true
+      i += 1
+    end
+  end
+  gids_ghost_lid_to_ghost_lid = Vector{Int32}(undef,i)
+  i = 0
+  ghost_lids_touched .= false
+  for gid in gids
+    lid = glo_to_loc[gid]
+    ghost_lid = loc_to_gho[lid]
+    if ghost_lid > 0 && !ghost_lids_touched[ghost_lid]
+      ghost_lids_touched[ghost_lid] = true
+      i += 1
+      gids_ghost_lid_to_ghost_lid[i] = ghost_lid
+    end
+  end
+  gids_ghost_lid_to_ghost_lid
+end
+
+
 function _fa_create_from_nz_with_callback(callback,a)
 
   # Recover some data
@@ -209,10 +245,10 @@ function _fa_create_from_nz_with_callback(callback,a)
   cdofs = a.cols # dof ids of the trial space
   ngrdofs = length(rdofs)
   ngcdofs = length(cdofs)
-  nordofs = map(num_oids,rdofs.partition)
-  nocdofs = map(num_oids,cdofs.partition)
-  first_grdof = map(first_gdof_from_ids,rdofs.partition)
-  first_gcdof = map(first_gdof_from_ids,cdofs.partition)
+  nordofs = map(own_length,partition(rdofs))
+  nocdofs = map(own_length,partition(cdofs))
+  first_grdof = map(first_gdof_from_ids,partition(rdofs))
+  first_gcdof = map(first_gdof_from_ids,partition(cdofs))
   cneigs_snd = cdofs.exchanger.parts_snd
   cneigs_rcv = cdofs.exchanger.parts_rcv
 
@@ -226,13 +262,13 @@ function _fa_create_from_nz_with_callback(callback,a)
   callback_output = callback(rows)
 
   # convert I and J to global dof ids
-  to_gids!(I,rdofs)
-  to_gids!(J,cdofs)
+  to_global!(I,rdofs)
+  to_global!(J,cdofs)
 
   # Find the ghost cols
-  hcol_to_hcdof = touched_hids(cdofs,J)
+  hcol_to_hcdof = ghost_lids_touched(cdofs,J)
   hcol_to_gid, hcol_to_part = map(
-    find_gid_and_part,hcol_to_hcdof,cdofs.partition)
+    find_gid_and_owner,hcol_to_hcdof,partition(cdofs))
 
   # Create the range for cols
   cols = PRange(
@@ -271,105 +307,87 @@ function Algebra.create_from_nz(a::DistributedAllocationCOO{<:SubAssembledRows})
 end
 
 function _sa_create_from_nz_with_callback(callback,async_callback,a)
-
   # Recover some data
-  I,J,C = map(a.allocs) do alloc
+  I,J,V = map(a.allocs) do alloc
     alloc.I, alloc.J, alloc.V
-  end
-  parts = get_part_ids(a.allocs)
+  end |> tuple_of_arrays
   rdofs = a.rows # dof ids of the test space
   cdofs = a.cols # dof ids of the trial space
   ngrdofs = length(rdofs)
   ngcdofs = length(cdofs)
-  nordofs = map(num_oids,rdofs.partition)
-  nocdofs = map(num_oids,cdofs.partition)
-  first_grdof = map(first_gdof_from_ids,rdofs.partition)
-  first_gcdof = map(first_gdof_from_ids,cdofs.partition)
-  rneigs_snd = rdofs.exchanger.parts_snd
-  rneigs_rcv = rdofs.exchanger.parts_rcv
-  cneigs_snd = cdofs.exchanger.parts_snd
-  cneigs_rcv = cdofs.exchanger.parts_rcv
 
   # convert I and J to global dof ids
-  to_gids!(I,rdofs)
-  to_gids!(J,cdofs)
+  map(to_global!,I,partition(rdofs))
+  map(to_global!,J,partition(cdofs))
 
   # Find the ghost rows
-  hrow_to_hrdof = touched_hids(rdofs,I)
-  hrow_to_gid, hrow_to_part = map(
-    find_gid_and_part,hrow_to_hrdof,rdofs.partition)
+  I_ghost_lids_to_rdofs_ghost_lids = map(ghost_lids_touched,partition(rdofs),I)
+  I_ghost_to_global, I_ghost_to_owner = map(
+    find_gid_and_owner,I_ghost_lids_to_rdofs_ghost_lids,partition(rdofs)) |> tuple_of_arrays
 
-  # Create the range for rows
-  rows = PRange(
-    parts,
-    ngrdofs,
-    nordofs,
-    first_grdof,
-    hrow_to_gid,
-    hrow_to_part,
-    rneigs_snd,
-    rneigs_rcv)
+  rindices=map(partition(rdofs), 
+               I_ghost_to_global, 
+               I_ghost_to_owner) do rindices, ghost_to_global, ghost_to_owner 
+     owner = part_id(rindices)
+     own_indices=OwnIndices(ngrdofs,owner,own_to_global(rindices))
+     ghost_indices=GhostIndices(ngrdofs,ghost_to_global,ghost_to_owner)
+     OwnAndGhostIndices(own_indices,ghost_indices)
+  end
+
+  rows=PRange(rindices)
 
   # Move values to the owner part
   # since we have integrated only over owned cells
-  t = async_assemble!(I,J,C,rows)
+  t = PArrays.assemble_coo!(I,J,V,partition(rows))
 
   # Here we can overlap computations
   # This is a good place to overlap since
   # sending the matrix rows is a lot of data
-  callback_output = callback(rows)
+  b = callback(rows)
 
   # Wait the transfer to finish
-  map(schedule,t)
-  map(wait,t)
+  wait(t)
 
   # Find the ghost cols
-  hcol_to_hcdof = touched_hids(cdofs,J)
-  hcol_to_gid, hcol_to_part = map(
-    find_gid_and_part,hcol_to_hcdof,cdofs.partition)
+  J_ghost_lids_to_cdofs_ghost_lids = map(ghost_lids_touched,partition(cdofs),J)
+  J_ghost_to_global, J_ghost_to_owner = map(
+    find_gid_and_owner,J_ghost_lids_to_cdofs_ghost_lids,partition(cdofs)) |> tuple_of_arrays
+
+  cindices=map(partition(cdofs), 
+               J_ghost_to_global, 
+               J_ghost_to_owner) do cindices, ghost_to_global, ghost_to_owner 
+      owner = part_id(cindices)
+      own_indices=OwnIndices(ngcdofs,owner,own_to_global(cindices))
+      ghost_indices=GhostIndices(ngcdofs,ghost_to_global,ghost_to_owner)
+      OwnAndGhostIndices(own_indices,ghost_indices)
+  end
 
   # Create the range for cols
-  cols = PRange(
-    parts,
-    ngcdofs,
-    nocdofs,
-    first_gcdof,
-    hcol_to_gid,
-    hcol_to_part,
-    cneigs_snd,
-    cneigs_rcv)
+  cols = PRange(cindices)
 
   # Overlap rhs communications with CSC compression
-  t2 = async_callback(callback_output)
+  t2 = async_callback(b)
 
   # Convert again I,J to local numeration
-  to_lids!(I,rows)
-  to_lids!(J,cols)
+  map(to_local!,I,partition(rows))
+  map(to_local!,J,partition(cols))
 
   # Adjust local matrix size to linear system's index sets
-  b=change_axes(a,(rows,cols))
+  asys=change_axes(a,(rows,cols))
 
   # Compress the local matrices
-  values = map(create_from_nz,b.allocs)
+  values = map(create_from_nz,asys.allocs)
 
   # Wait the transfer to finish
   if t2 !== nothing
-    map(schedule,t2)
-    map(wait,t2)
+    wait(t2)
   end
 
   # Finally build the matrix
-  # A matrix exchanger will be created under the hood.
-  # Building a exchanger can be costly and not always needed.
-  # TODO add a more lazy initzialization of this inside PSparseMatrix
-  A = PSparseMatrix(values,rows,cols)
+  A = PSparseMatrix(values,partition(rows),partition(cols))
 
-  A, callback_output
+  A, b
 end
-
-
-
-
 
 struct PVectorBuilder{T,B}
   local_vector_type::Type{T}
@@ -379,8 +397,8 @@ end
 function Algebra.nz_counter(builder::PVectorBuilder,axs::Tuple{<:PRange})
   T = builder.local_vector_type
   rows, = axs
-  counters = map(rows.partition) do rows
-    axs = (Base.OneTo(num_lids(rows)),)
+  counters = map(partition(rows)) do rows
+    axs = (Base.OneTo(local_length(rows)),)
     nz_counter(ArrayBuilder(T),axs)
   end
   PVectorCounter(builder.par_strategy,counters,rows)
@@ -428,8 +446,8 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues{<:FullyAssem
   # Create PRange for the rows of the linear system
   parts = get_part_ids(a.values)
   ngdofs = length(a.rows)
-  nodofs = map(num_oids,a.rows.partition)
-  first_grdof = map(first_gdof_from_ids,a.rows.partition)
+  nodofs = map(own_length,partition(a.rows))
+  first_grdof = map(first_gdof_from_ids,partition(a.rows))
 
   # This one has no ghost rows
   rows = PRange(parts,ngdofs,nodofs,first_grdof)
@@ -446,7 +464,7 @@ end
 function _rhs_callback(c_fespace,rows)
   # The ghost values in b_fespace are aligned with the FESpace
   # but not with the ghost values in the rows of A
-  b_fespace = PVector(c_fespace.values,c_fespace.rows)
+  b_fespace = PVector(c_fespace.values,partition(c_fespace.rows))
 
   # This one is aligned with the rows of A
   b = similar(b_fespace,eltype(b_fespace),(rows,))
@@ -456,19 +474,23 @@ function _rhs_callback(c_fespace,rows)
 
   # Now transfer ghost
   function transfer_ghost(b,b_fespace,ids,ids_fespace)
-    for hid in 1:num_hids(ids)
-      lid = ids.hid_to_lid[hid]
-      gid = ids.lid_to_gid[lid]
-      lid_fespace = ids_fespace.gid_to_lid[gid]
-      b[lid] = b_fespace[lid_fespace]
+    num_ghosts_vec = ghost_length(ids)
+    gho_to_loc_vec = ghost_to_local(ids)
+    loc_to_glo_vec = local_to_global(ids)
+    gid_to_lid_fe  = global_to_local(ids_fespace)
+    for ghost_lid_vec in 1:num_ghosts_vec
+      lid_vec     = gho_to_loc_vec[ghost_lid_vec]
+      gid         = loc_to_glo_vec[lid_vec]
+      lid_fespace = gid_to_lid_fe[gid]
+      b[lid_vec] = b_fespace[lid_fespace]
     end
   end
   map(
     transfer_ghost,
-    b.values,
-    b_fespace.values,
-    b.rows.partition,
-    b_fespace.rows.partition)
+    partition(b),
+    partition(b_fespace),
+    b.index_partition,
+    b_fespace.index_partition)
 
   return b
 end
@@ -508,7 +530,7 @@ function Algebra.create_from_nz(
 
   function async_callback(b)
     # now we can assemble contributions
-    async_assemble!(b)
+    assemble!(b)
   end
 
   A,b = _sa_create_from_nz_with_callback(callback,async_callback,a)
@@ -587,13 +609,13 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
    parts = get_part_ids(a.values)
    rdofs = a.rows # dof ids of the test space
    ngrdofs = length(rdofs)
-   nordofs = map(num_oids,rdofs.partition)
-   first_grdof = map(first_gdof_from_ids,rdofs.partition)
+   nordofs = map(own_length,partition(rdofs))
+   first_grdof = map(first_gdof_from_ids,partition(rdofs))
    rneigs_snd = rdofs.exchanger.parts_snd
    rneigs_rcv = rdofs.exchanger.parts_rcv
 
    # Find the ghost rows
-   hrow_to_hrdof=map(local_views(a.allocations),rdofs.partition) do allocation, indices
+   hrow_to_hrdof=map(local_views(a.allocations),partition(rdofs)) do allocation, indices
     lids_touched=findall(allocation.touched)
     nhlids = count((x)->indices.lid_to_ohid[x]<0,lids_touched)
     hlids = Vector{Int32}(undef,nhlids)
@@ -608,7 +630,7 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
     hlids
    end
    hrow_to_gid, hrow_to_part = map(
-       find_gid_and_part,hrow_to_hrdof,rdofs.partition)
+       find_gid_and_owner,hrow_to_hrdof,partition(rdofs))
 
    # Create the range for rows
    rows = PRange(

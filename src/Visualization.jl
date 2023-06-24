@@ -10,7 +10,11 @@ function Base.getproperty(x::DistributedVisualizationData, sym::Symbol)
   if sym == :grid
     map(i->i.grid,x.visdata)
   elseif sym == :filebase
-    get_part(x.visdata).filebase
+    r=nothing
+    map(x.visdata) do visdata
+      r = visdata.filebase
+    end
+    r
   elseif sym == :celldata
     map(i->i.celldata,x.visdata)
   elseif sym == :nodaldata
@@ -31,16 +35,13 @@ function Visualization.visualization_data(
   filebase::AbstractString;
   labels=get_face_labeling(model)) where Dc
 
-  parts  = get_parts(model)
-  nparts = length(parts)
   cell_gids = get_cell_gids(model)
-  vd = map(
-    parts,local_views(model),cell_gids.partition,labels.labels) do part,model,gids,labels
-
+  vd = map(local_views(model),partition(cell_gids),labels.labels) do model,gids,labels
+    part = part_id(gids)
     vd = visualization_data(model,filebase;labels=labels)
     vd_cells = vd[end]
-    push!(vd_cells.celldata, "gid" => gids.lid_to_gid)
-    push!(vd_cells.celldata, "part" => gids.lid_to_part)
+    push!(vd_cells.celldata, "gid" => local_to_global(gids))
+    push!(vd_cells.celldata, "part" => local_to_owner(gids))
     vd
   end
   r = []
@@ -58,15 +59,15 @@ function Visualization.visualization_data(
   celldata=nothing,
   cellfields=nothing)
 
-  trians = trian.trians
-  parts = get_part_ids(trians)
-  nparts = length(trians)
+  trians    = trian.trians
+  cell_gids = get_cell_gids(trian.model)
 
   cdat = _prepare_cdata(trians,celldata)
   fdat = _prepare_fdata(trians,cellfields)
 
   vd = map(
-    parts,trians,cdat,fdat) do part,trian,celldata,cellfields
+    partition(cell_gids),trians,cdat,fdat) do lindices,trian,celldata,cellfields
+    part = part_id(lindices)
     _celldata = Dict{Any,Any}(celldata)
     # we do not use "part" since it is likely to be used by the user
     if haskey(_celldata,"piece")
@@ -142,15 +143,25 @@ end
 
 # Vtk related
 
+function Visualization.writevtk(parts,args...;kwargs...)
+  map(visualization_data(args...;kwargs...)) do visdata
+    write_vtk_file(
+    parts,visdata.grid,visdata.filebase,celldata=visdata.celldata,nodaldata=visdata.nodaldata)
+  end
+end
+
 function Visualization.write_vtk_file(
+  parts::AbstractArray,
   grid::AbstractArray{<:Grid}, filebase; celldata, nodaldata)
-  pvtk = Visualization.create_vtk_file(grid,filebase;celldata=celldata,nodaldata=nodaldata)
+  pvtk = Visualization.create_vtk_file(parts,grid,filebase;celldata=celldata,nodaldata=nodaldata)
   map(vtk_save,pvtk)
 end
 
 function Visualization.create_vtk_file(
-  grid::AbstractArray{<:Grid}, filebase; celldata, nodaldata)
-  parts = get_part_ids(grid)
+  parts::AbstractArray,
+  grid::AbstractArray{<:Grid}, 
+  filebase; 
+  celldata, nodaldata)
   nparts = length(parts)
   map(parts,grid,celldata,nodaldata) do part,g,c,n
     Visualization.create_pvtk_file(

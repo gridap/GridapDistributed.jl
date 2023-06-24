@@ -47,7 +47,7 @@ function main(parts)
   end
 
   cell_gids = get_cell_gids(model)
-  map(local_views(model),cell_gids.partition) do lmodel,gids
+  map(local_views(model),partition(cell_gids)) do lmodel,gids
     @test test_local_part_face_labelings_consistency(lmodel,gids,gmodel)
   end
 

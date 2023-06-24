@@ -36,7 +36,7 @@ end
 
 function _generate_sign_flips(model,cell_reffes)
   cell_gids  = get_cell_gids(model)
-  sign_flips = map(local_views(model),cell_gids.partition,cell_reffes) do m, p, cell_reffe
+  sign_flips = map(local_views(model),partition(cell_gids),cell_reffes) do m, p, cell_reffe
     D = num_cell_dims(model)
 
     gtopo = get_grid_topology(m)

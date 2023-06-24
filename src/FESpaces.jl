@@ -53,13 +53,13 @@ function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,c
   map(cell_wise_vector,
           dof_wise_vector,
           cell_to_ldofs,
-          cell_prange.partition) do cwv,dwv,cell_to_ldofs,partition
+          partition(cell_prange)) do cwv,dwv,cell_to_ldofs,indices
     cache  = array_cache(cell_to_ldofs)
     ncells = length(cell_to_ldofs)
     ptrs = cwv.ptrs
     data = cwv.data
-    gdof = 0
-    for cell in partition.oid_to_lid
+    cell_own_to_local = own_to_local(indices)
+    for cell in cell_own_to_local
       ldofs = getindex!(cache,cell_to_ldofs,cell)
       p = ptrs[cell]-1
       for (i,ldof) in enumerate(ldofs)
@@ -73,13 +73,12 @@ end
 
 function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_range)
   map(dof_wise_vector,
-            cell_wise_vector,
-            cell_to_ldofs,
-            cell_range.partition) do dwv,cwv,cell_to_ldofs,partition
-
-    gdof = 0
+      cell_wise_vector,
+      cell_to_ldofs,
+      partition(cell_range)) do dwv,cwv,cell_to_ldofs,indices
     cache = array_cache(cell_to_ldofs)
-    for cell in partition.hid_to_lid
+    cell_ghost_to_local = ghost_to_local(indices)
+    for cell in cell_ghost_to_local
       ldofs = getindex!(cache,cell_to_ldofs,cell)
       p = cwv.ptrs[cell]-1
       for (i,ldof) in enumerate(ldofs)
@@ -91,9 +90,8 @@ function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,c
   end
 end
 
-
 function dof_wise_to_cell_wise(dof_wise_vector,cell_to_ldofs,cell_prange)
-    cwv=map(dof_wise_vector,cell_to_ldofs,cell_prange.partition) do dwv,cell_to_ldofs,partition
+    cwv=map(cell_to_ldofs) do cell_to_ldofs
       cache = array_cache(cell_to_ldofs)
       ncells = length(cell_to_ldofs)
       ptrs = Vector{Int32}(undef,ncells+1)
@@ -104,7 +102,7 @@ function dof_wise_to_cell_wise(dof_wise_vector,cell_to_ldofs,cell_prange)
       PArrays.length_to_ptrs!(ptrs)
       ndata = ptrs[end]-1
       data = Vector{Int}(undef,ndata)
-      gdof = 0
+      data .= -1
       JaggedArray(data,ptrs)
     end
     dof_wise_to_cell_wise!(cwv,dof_wise_vector,cell_to_ldofs,cell_prange)
@@ -117,65 +115,73 @@ function generate_gids(
   cell_to_ldofs::AbstractArray{<:AbstractArray},
   nldofs::AbstractArray{<:Integer})
 
-  neighbors = cell_range.exchanger.parts_snd
   ngcells = length(cell_range)
 
   # Find and count number owned dofs
-  ldof_to_part, nodofs = map(
-    cell_range.partition,cell_to_ldofs,nldofs) do partition,cell_to_ldofs,nldofs
-
-    ldof_to_part = fill(Int32(0),nldofs)
+  ldof_to_owner, nodofs = map(partition(cell_range),cell_to_ldofs,nldofs) do indices,cell_to_ldofs,nldofs
+    ldof_to_owner = fill(Int32(0),nldofs)
     cache = array_cache(cell_to_ldofs)
+    lcell_to_owner = local_to_owner(indices)
     for cell in 1:length(cell_to_ldofs)
-      owner = partition.lid_to_part[cell]
+      owner = lcell_to_owner[cell]
       ldofs = getindex!(cache,cell_to_ldofs,cell)
       for ldof in ldofs
         if ldof>0
-          #TODO this simple approach concentrates dofs
-          # in the last part and creates inbalances
-          ldof_to_part[ldof] = max(owner,ldof_to_part[ldof])
+          # TODO this simple approach concentrates dofs
+          # in the last part and creates imbalances
+          ldof_to_owner[ldof] = max(owner,ldof_to_owner[ldof])
         end
       end
     end
-    nodofs = count(p->p==partition.part,ldof_to_part)
-    ldof_to_part, nodofs
-  end
+    me = part_id(indices) 
+    nodofs = count(p->p==me,ldof_to_owner)
+    ldof_to_owner, nodofs
+  end |> tuple_of_arrays
 
-  cell_ldofs_to_part = dof_wise_to_cell_wise(ldof_to_part,
+  cell_ldofs_to_part = dof_wise_to_cell_wise(ldof_to_owner,
                                               cell_to_ldofs,
                                               cell_range)
-  # Exchange the dof owners
-  exchange!(cell_ldofs_to_part,cell_range.exchanger)
 
-  cell_wise_to_dof_wise!(ldof_to_part,
-                          cell_ldofs_to_part,
-                          cell_to_ldofs,
-                          cell_range)
+  # Note1 : this call potentially updates cell_prange with the 
+  #         info required to exchange info among nearest neighbours
+  #         so that it can be re-used in the future for other exchanges
+
+  # Note2 : we need to call reverse() as the senders and receivers are 
+  #         swapped in the AssemblyCache of partition(cell_range)
+
+  cell_exchange_cache_jagged = 
+     PArrays.p_vector_cache(cell_ldofs_to_part,partition(cell_range))
+  
+  cell_exchange_cache_jagged = map(reverse,cell_exchange_cache_jagged)
+
+  # Exchange the dof owners
+  assemble!((a,b)->b, cell_ldofs_to_part,cell_exchange_cache_jagged) |> wait 
+  
+  cell_wise_to_dof_wise!(ldof_to_owner,
+                         cell_ldofs_to_part,
+                         cell_to_ldofs,
+                         cell_range)
 
 
   # Find the global range of owned dofs
-  first_gdof, ngdofsplus1 = xscan(+,reduce,nodofs,init=1)
-  ngdofs = ngdofsplus1 - 1
-
+  first_gdof = scan(+,nodofs,type=:exclusive,init=one(eltype(nodofs)))
+  
   # Distribute gdofs to owned ones
-  parts = get_part_ids(nodofs)
-  ldof_to_gdof = map(
-    parts,first_gdof,ldof_to_part) do part,first_gdof,ldof_to_part
-
+  ldof_to_gdof = map(first_gdof,ldof_to_owner,partition(cell_range)) do first_gdof,ldof_to_owner,indices
+    me = part_id(indices)
     offset = first_gdof-1
-    ldof_to_gdof = Vector{Int}(undef,length(ldof_to_part))
+    ldof_to_gdof = Vector{Int}(undef,length(ldof_to_owner))
     odof = 0
-    gdof = 0
-    for (ldof,owner) in enumerate(ldof_to_part)
-      if owner == part
+    for (ldof,owner) in enumerate(ldof_to_owner)
+      if owner == me
         odof += 1
         ldof_to_gdof[ldof] = odof
       else
-        ldof_to_gdof[ldof] = gdof
+        ldof_to_gdof[ldof] = 0
       end
     end
-    for (ldof,owner) in enumerate(ldof_to_part)
-      if owner == part
+    for (ldof,owner) in enumerate(ldof_to_owner)
+      if owner == me
         ldof_to_gdof[ldof] += offset
       end
     end
@@ -188,22 +194,20 @@ function generate_gids(
                                         cell_range)
 
   # Exchange the global dofs
-  exchange!(cell_to_gdofs,cell_range.exchanger)
+  assemble!((a,b)->b, cell_to_gdofs,cell_exchange_cache_jagged) |> wait 
 
 
   # Distribute global dof ids also to ghost
-  map(
-    parts,
-    cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_part,cell_range.partition) do part,
-    cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_part,partition
-
+  map(cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_owner,partition(cell_range)) do cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_owner,indices
     gdof = 0
     cache = array_cache(cell_to_ldofs)
-    for cell in partition.hid_to_lid
+    cell_ghost_to_local = ghost_to_local(indices)
+    cell_local_to_owner = local_to_owner(indices)
+    for cell in cell_ghost_to_local
       ldofs = getindex!(cache,cell_to_ldofs,cell)
       p = cell_to_gdofs.ptrs[cell]-1
       for (i,ldof) in enumerate(ldofs)
-        if ldof > 0 && ldof_to_part[ldof] == partition.lid_to_part[cell]
+        if ldof > 0 && ldof_to_owner[ldof] == cell_local_to_owner[cell]
           ldof_to_gdof[ldof] = cell_to_gdofs.data[i+p]
         end
       end
@@ -212,35 +216,27 @@ function generate_gids(
 
   dof_wise_to_cell_wise!(cell_to_gdofs,ldof_to_gdof,cell_to_ldofs,cell_range)
 
-  exchange!(cell_to_gdofs,cell_range.exchanger)
+  assemble!((a,b)->b, cell_to_gdofs,cell_exchange_cache_jagged) |> wait 
 
   cell_wise_to_dof_wise!(ldof_to_gdof,
-                          cell_to_gdofs,
-                          cell_to_ldofs,
-                          cell_range)
+                         cell_to_gdofs,
+                         cell_to_ldofs,
+                         cell_range)
 
-  # Setup dof partition
-  dof_partition = map(parts,ldof_to_gdof,ldof_to_part) do part,ldof_to_gdof,ldof_to_part
-    IndexSet(part,ldof_to_gdof,ldof_to_part)
+  # Setup DoFs LocalIndices
+  ngdofs = reduction(+,nodofs,destination=:all,init=zero(eltype(nodofs)))
+  local_indices = map(ngdofs,partition(cell_range),ldof_to_gdof,ldof_to_owner) do ngdofs,
+                                                                                  indices,
+                                                                                  ldof_to_gdof,
+                                                                                  ldof_to_owner
+     me = part_id(indices)
+     LocalIndices(ngdofs,me,ldof_to_gdof,ldof_to_owner)
   end
 
-  # map(parts,dof_partition,cell_to_ldofs,cell_to_gdofs,cell_range.partition) do part, partition, cell_to_ldofs,cell_to_gdofs, cell_range
-  #   if (part==3)
-  #     println("XXXX $(part)")
-  #     println(partition)
-  #     println(cell_to_ldofs)
-  #     println(cell_to_gdofs)
-  #     println(cell_range)
-  #   end
-  # end
-
-  # Setup dof exchanger
-  dof_exchanger = Exchanger(dof_partition,neighbors)
-
   # Setup dof range
-  dofs = PRange(ngdofs,dof_partition,dof_exchanger)
+  dofs_range = PRange(local_indices)
 
-  return dofs
+  return dofs_range
 end
 
 # FEFunction related
@@ -477,14 +473,18 @@ function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;kwargs...)
 end
 
 function _find_vector_type(spaces,gids)
-  #TODO Now the user can select the local vector type but not the global one
+  # TODO Now the user can select the local vector type but not the global one
   # new kw-arg global_vector_type ?
   # we use PVector for the moment
-  local_vector_type = get_vector_type(get_part(spaces))
-  T = eltype(local_vector_type)
-  A = typeof(map(i->local_vector_type(undef,0),gids.partition))
-  B = typeof(gids)
-  vector_type = PVector{T,A,B}
+  local_vector_type=typeof(Int)
+  map(spaces) do space
+    local_vector_type=get_vector_type(space)
+  end
+  vector_entries=map(i->local_vector_type(undef,length(local_to_owner(i))),partition(gids))
+  
+  # Here we are determining the full type of a PVector by creating one auxiliary vector
+  # Can this be done more efficiently?
+  vector_type = typeof(PVector(vector_entries,partition(gids)))
 end
 
 # Assembly
@@ -632,8 +632,8 @@ function FESpaces.SparseMatrixAssembler(
   Tv = local_vec_type
   T = eltype(Tv)
   Tm = local_mat_type
-  cols = trial.gids.partition
-  rows = test.gids.partition
+  cols = partition(trial.gids)
+  rows = partition(test.gids)
   assems = map(local_views(test),local_views(trial),rows,cols) do v,u,rows,cols
     local_strategy = local_assembly_strategy(par_strategy,rows,cols)
     SparseMatrixAssembler(Tm,Tv,u,v,local_strategy)
@@ -649,7 +649,11 @@ function FESpaces.SparseMatrixAssembler(
   trial::DistributedFESpace,
   test::DistributedFESpace,
   par_strategy=SubAssembledRows())
-  Tv = get_vector_type(get_part(local_views(trial)))
+
+  Tv = typeof(Int)
+  map(local_views(trial)) do trial
+    Tv = get_vector_type(trial)
+  end
   T = eltype(Tv)
   Tm = SparseMatrixCSC{T,Int}
   SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)

@@ -1,7 +1,7 @@
 
 struct WithGhost end
-
 struct NoGhost end
+const no_ghost = NoGhost()
 
 # We do not inherit from Grid on purpose.
 # This object cannot implement the Grid interface in a strict sense
@@ -184,63 +184,29 @@ function _setup_face_gids!(dmodel::GenericDistributedDiscreteModel{Dc},dim) wher
 end
 
 # CartesianDiscreteModel
-
 function Geometry.CartesianDiscreteModel(
-  parts::AbstractArray{<:Integer},args...;isperiodic=map(i->false,size(parts)),kwargs...)
+  ranks::AbstractArray{<:Integer}, # Distributed array with the rank IDs
+  parts::NTuple{N,<:Integer},      # Number of ranks (parts) in each direction
+  args...;isperiodic=map(i->false,parts),kwargs...) where N 
 
   desc = CartesianDescriptor(args...;isperiodic=isperiodic,kwargs...)
   nc = desc.partition
   msg = """
-  A CartesianDiscreteModel needs a Cartesian subdomain partition
-  of the right dimensions.
-  """
-  @assert length(size(parts)) == length(nc) msg
+  #A CartesianDiscreteModel needs a Cartesian subdomain partition
+  #of the right dimensions.
+  #"""
+  @assert N == length(nc) msg
 
-  if any(isperiodic)
-    model = _cartesian_model_with_periodic_bcs(parts,desc)
-  else
-    gcids = PCartesianIndices(parts,nc,PArrays.with_ghost)
-    models = map(parts,gcids) do part, gcids
-      cmin = first(gcids)
-      cmax = last(gcids)
-      CartesianDiscreteModel(desc,cmin,cmax)
-    end
-    gids = PRange(parts,nc,PArrays.with_ghost)
-    model = GenericDistributedDiscreteModel(models,gids)
+  ghost=map(i->true,parts)
+  upartition=uniform_partition(ranks,parts,nc,ghost,isperiodic)
+  gcids=CartesianIndices(nc)
+  models=map(ranks,upartition) do rank, upartition
+     cmin = gcids[first(upartition)]
+     cmax = gcids[last(upartition)]
+     CartesianDiscreteModel(desc,cmin,cmax)  
   end
-  model
-end
-
-function _cartesian_model_with_periodic_bcs(parts,desc)
-  h = desc.sizes
-  _origin = map(desc.isperiodic,Tuple(desc.origin),h,size(parts)) do isp,o,h,np
-    isp&&np!=1 ? o-h : o
-  end
-  _sizes = h
-  _partition = map(desc.isperiodic,desc.partition,size(parts)) do isp,o,np
-    isp&&np!=1 ? o+2 : o
-  end
-   # Important, the map should be periodic if you want to integrate
-   # functions in the ghost cells.
-  _map = desc.map
-  _isperiodic = map(desc.isperiodic,size(parts)) do isp,np
-    np==1 ? isp : false
-  end
-  _desc = CartesianDescriptor(Point(_origin),_sizes,_partition;map=_map,isperiodic=_isperiodic)
-  isperiodic_global = map(desc.isperiodic,size(parts)) do isp,np
-    np==1 ? false : isp
-  end
-  in_bounds = Val(false)
-  gcids = PCartesianIndices(parts,desc.partition,PArrays.with_ghost,isperiodic_global,in_bounds)
-  nparts = size(parts)
-  models = map(parts,gcids) do part, gcids
-    cmin = CartesianIndex(map((p,i,n)->( p&&n!=1 ? i+1 : i),desc.isperiodic,Tuple(first(gcids)),nparts))
-    cmax = CartesianIndex(map((p,i,n)->( p&&n!=1 ? i+1 : i),desc.isperiodic,Tuple(last(gcids)),nparts))
-    remove_boundary = map((p,n)->(p&&n!=1 ? true : false),desc.isperiodic,nparts)
-    CartesianDiscreteModel(_desc,cmin,cmax,remove_boundary)
-  end
-  gids = PRange(parts,desc.partition,PArrays.with_ghost,isperiodic_global)
-  model = GenericDistributedDiscreteModel(models,gids)
+  gids=PRange(upartition)
+  GenericDistributedDiscreteModel(models,gids)
 end
 
 ## Helpers to partition a serial model
@@ -472,7 +438,7 @@ function Geometry.Triangulation(
   portion,::Type{ReferenceFE{Dt}},model::DistributedDiscreteModel{Dm};kwargs...) where {Dt,Dm}
   # Generate global ordering for the faces of dimension Dt (if needed)
   gids   = get_face_gids(model,Dt)
-  trians = map(local_views(model),gids.partition) do model, gids
+  trians = map(local_views(model),partition(gids)) do model, gids
     Triangulation(portion,gids,ReferenceFE{Dt},model;kwargs...)
   end
   DistributedTriangulation(trians,model)
@@ -481,7 +447,7 @@ end
 function Geometry.BoundaryTriangulation(
   portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
   gids   = get_face_gids(model,Dc)
-  trians = map(local_views(model),gids.partition) do model, gids
+  trians = map(local_views(model),partition(gids)) do model, gids
     BoundaryTriangulation(portion,gids,model;kwargs...)
   end
   DistributedTriangulation(trians,model)
@@ -490,7 +456,7 @@ end
 function Geometry.SkeletonTriangulation(
   portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
   gids   = get_face_gids(model,Dc)
-  trians = map(local_views(model),gids.partition) do model, gids
+  trians = map(local_views(model),partition(gids)) do model, gids
     SkeletonTriangulation(portion,gids,model;kwargs...)
   end
   DistributedTriangulation(trians,model)
@@ -585,9 +551,9 @@ end
 
 function remove_ghost_cells(glue::FaceToFaceGlue,trian,gids)
   tcell_to_mcell = glue.tface_to_mface
-  mcell_to_part  = gids.lid_to_part
+  mcell_to_part  = local_to_owner(gids)
   tcell_to_part  = view(mcell_to_part,tcell_to_mcell)
-  tcell_to_mask  = tcell_to_part .== gids.part
+  tcell_to_mask  = tcell_to_part .== part_id(gids)
   view(trian, findall(tcell_to_mask))
 end
 
@@ -682,7 +648,7 @@ function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
     mgids = get_face_gids(dmodel,Dt)
     # count number owned cells
     notcells, tcell_to_mcell = map(
-      local_views(dmodel),local_views(dtrian),mgids.partition) do model,trian,partition
+      local_views(dmodel),local_views(dtrian),partition(mgids)) do model,trian,partition
       glue = get_glue(trian,Val(Dt))
       @assert isa(glue,FaceToFaceGlue)
       tcell_to_mcell = glue.tface_to_mface
@@ -698,7 +664,7 @@ function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
 
     # Assign global cell ids to owned cells
     mcell_to_gtcell = map(
-      first_gtcell,tcell_to_mcell,mgids.partition) do first_gtcell,tcell_to_mcell,partition
+      first_gtcell,tcell_to_mcell,partition(mgids)) do first_gtcell,tcell_to_mcell,partition
       mcell_to_gtcell = zeros(Int,length(partition.lid_to_part))
       gtcell = first_gtcell
       for mcell in tcell_to_mcell
@@ -712,7 +678,7 @@ function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
     exchange!(mcell_to_gtcell,mgids.exchanger)
 
     # Prepare new partition
-    partition = map(mcell_to_gtcell,tcell_to_mcell,mgids.partition) do mcell_to_gtcell,tcell_to_mcell,partition
+    partition = map(mcell_to_gtcell,tcell_to_mcell,partition(mgids)) do mcell_to_gtcell,tcell_to_mcell,partition
       tcell_to_gtcell = mcell_to_gtcell[tcell_to_mcell]
       tcell_to_part = partition.lid_to_part[tcell_to_mcell]
       IndexSet(partition.part,tcell_to_gtcell,tcell_to_part)

@@ -280,7 +280,7 @@ function generate_multi_field_gids(
 
   # Find the first gid of the multifield space in each part
   ngids = sum(map(num_gids,f_frange))
-  p_noids = map(f_fiset->sum(map(num_oids,f_fiset)),p_f_fiset)
+  p_noids = map(f_fiset->sum(map(own_length,f_fiset)),p_f_fiset)
   p_part = get_part_ids(p_noids)
   p_firstgid = xscan(+,p_noids,init=1)
 
@@ -296,7 +296,7 @@ function generate_multi_field_gids(
       fiset = f_fiset[f]
       flid_lid = f_flid_lid[f]
       part = fiset.part
-      for foid in 1:num_oids(fiset)
+      for foid in 1:own_length(fiset)
         flid = fiset.oid_to_lid[foid]
         lid = flid_lid[flid]
         lid_part[lid] = part
@@ -357,7 +357,7 @@ function propagate_to_ghost_multifield!(
     p_fiset = f_p_fiset[f]
     map(
       p_flid_gid,p_flid_lid,p_lid_gid,p_fiset) do flid_gid,flid_lid,lid_gid,fiset
-      for foid in 1:num_oids(fiset)
+      for foid in 1:own_length(fiset)
         flid = fiset.oid_to_lid[foid]
         lid = flid_lid[flid]
         flid_gid[flid] = lid_gid[lid]
