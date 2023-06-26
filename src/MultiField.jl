@@ -279,7 +279,7 @@ function generate_multi_field_gids(
   p_f_flid_lid = map(v,f_p_flid_lid...)
 
   # Find the first gid of the multifield space in each part
-  ngids = sum(map(num_gids,f_frange))
+  ngids = sum(map(length,f_frange))
   p_noids = map(f_fiset->sum(map(own_length,f_fiset)),p_f_fiset)
   p_part = get_part_ids(p_noids)
   p_firstgid = xscan(+,p_noids,init=1)

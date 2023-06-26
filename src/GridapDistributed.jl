@@ -35,6 +35,7 @@ export get_cell_gids
 export get_face_gids
 
 export local_views, get_parts
+export with_ghost, no_ghost
 
 include("Interface.jl")
 
@@ -57,5 +58,10 @@ include("TransientDistributedCellField.jl")
 include("TransientMultiFieldDistributedCellField.jl")
 
 include("TransientFESpaces.jl")
+
+# TO-DO: propose this as a modification to PArrays through PR
+function PArrays.with_debug(f,args...;kwargs...)
+    f(DebugArray,args...;kwargs...)
+end
 
 end # module

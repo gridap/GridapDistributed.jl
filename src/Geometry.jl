@@ -1,6 +1,8 @@
 
 struct WithGhost end
 struct NoGhost end
+
+const with_ghost = WithGhost()
 const no_ghost = NoGhost()
 
 # We do not inherit from Grid on purpose.
@@ -101,23 +103,23 @@ Geometry.num_point_dims(::DistributedDiscreteModel{Dc,Dp}) where {Dc,Dp} = Dp
 Geometry.num_point_dims(::Type{<:DistributedDiscreteModel{Dc,Dp}}) where {Dc,Dp} = Dp
 
 function Geometry.num_cells(model::DistributedDiscreteModel{Dc}) where Dc
-  num_gids(get_cell_gids(model))
+  length(get_cell_gids(model))
 end
 
 function Geometry.num_facets(model::DistributedDiscreteModel{Dc}) where Dc
-  num_gids(get_face_gids(model,Dc-1))
+  length(get_face_gids(model,Dc-1))
 end
 
 function Geometry.num_edges(model::DistributedDiscreteModel{Dc}) where Dc
-  num_gids(get_face_gids(model,1))
+  length(get_face_gids(model,1))
 end
 
 function Geometry.num_vertices(model::DistributedDiscreteModel{Dc}) where Dc
-  num_gids(get_face_gids(model,0))
+  length(get_face_gids(model,0))
 end
 
 function Geometry.num_faces(model::DistributedDiscreteModel{Dc},dim::Integer) where Dc
-  num_gids(get_face_gids(model,dim))
+  length(get_face_gids(model,dim))
 end
 
 function Geometry.num_faces(model::DistributedDiscreteModel{Dc}) where Dc
@@ -291,16 +293,24 @@ function Geometry.DiscreteModel(
           cell_to_mask[jcell] = true
         end
       end
-    end
+    end 
     lcell_to_cell = findall(cell_to_mask)
     lcell_to_part = zeros(Int32,length(lcell_to_cell))
     lcell_to_part .= cell_to_part[lcell_to_cell]
     lcell_to_cell, lcell_to_part, cell_to_part
-  end
+  end |> tuple_of_arrays
 
-  partition = map(IndexSet,parts,lcell_to_cell,lcell_to_part)
-  exchanger = Exchanger(partition;reuse_parts_rcv=true)
-  gids = PRange(ncells,partition,exchanger,gid_to_part)
+  partition = map(parts,lcell_to_cell,lcell_to_part) do part, lcell_to_cell, lcell_to_part
+    LocalIndices(part, ncells, lcell_to_cell, lcell_to_part)
+  end 
+
+  # This is required to provide the hint that the communication 
+  # pattern underlying partition is symmetric, so that we do not have 
+  # to execute the algorithm the reconstructs the reciprocal in the 
+  # communication graph
+  assembly_neighbors(partition;symmetric=true)
+   
+  gids = PRange(partition)
 
   models = map(lcell_to_cell) do lcell_to_cell
     DiscreteModelPortion(model,lcell_to_cell)
