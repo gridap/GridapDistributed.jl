@@ -143,13 +143,6 @@ end
 
 # Vtk related
 
-function Visualization.writevtk(parts,args...;kwargs...)
-  map(visualization_data(args...;kwargs...)) do visdata
-    write_vtk_file(
-    parts,visdata.grid,visdata.filebase,celldata=visdata.celldata,nodaldata=visdata.nodaldata)
-  end
-end
-
 function Visualization.write_vtk_file(
   parts::AbstractArray,
   grid::AbstractArray{<:Grid}, filebase; celldata, nodaldata)
@@ -169,6 +162,23 @@ function Visualization.create_vtk_file(
       part=part,nparts=nparts,
       celldata=c,nodaldata=n)
   end
+end
+
+function Visualization.writevtk(arg::DistributedGridapType,args...;kwargs...)
+  parts=get_parts(arg)
+  map(visualization_data(arg,args...;kwargs...)) do visdata
+    write_vtk_file(
+    parts,visdata.grid,visdata.filebase,celldata=visdata.celldata,nodaldata=visdata.nodaldata)
+  end
+end
+
+function Visualization.createvtk(arg::DistributedGridapType,args...;kwargs...)
+  v = visualization_data(arg,args...;kwargs...)
+  parts=get_parts(arg)
+  @notimplementedif length(v) != 1
+  visdata = first(v)
+  Visualization.create_vtk_file(
+    parts,visdata.grid,visdata.filebase,celldata=visdata.celldata,nodaldata=visdata.nodaldata)
 end
 
 struct DistributedPvd{T<:AbstractArray}
