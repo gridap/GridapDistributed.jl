@@ -345,27 +345,9 @@ function _fa_create_from_nz_with_callback(callback,a)
   map(to_global!,I,test_dofs_gids_partition)
   map(to_global!,J,trial_dofs_gids_partition)
 
-  # Find the ghost cols
-  J_ghost_lids_to_trial_dofs_ghost_lids = map(ghost_lids_touched,trial_dofs_gids_partition,J)
-  J_ghost_to_global, J_ghost_to_owner = map(
-    find_gid_and_owner,J_ghost_lids_to_trial_dofs_ghost_lids,trial_dofs_gids_partition) |> tuple_of_arrays
-  
   # Create the range for cols
-  cindices=map(trial_dofs_gids_partition, 
-               J_ghost_to_global, 
-               J_ghost_to_owner) do dofs_indices, ghost_to_global, ghost_to_owner 
-      owner = part_id(dofs_indices)
-      own_indices=OwnIndices(ngcdofs,owner,own_to_global(dofs_indices))
-      ghost_indices=GhostIndices(ngcdofs,ghost_to_global,ghost_to_owner)
-      OwnAndGhostIndices(own_indices,ghost_indices)
-  end
+  cols = _setup_prange(trial_dofs_gids_prange,J)
 
-  trial_dofs_snd, trial_dofs_rcv = assembly_neighbors(trial_dofs_gids_partition)
-  trial_dofs_graph = ExchangeGraph(trial_dofs_snd, trial_dofs_rcv)
-  assembly_neighbors(cindices; neighbors=trial_dofs_graph)
-
-  # Create the range for cols
-  cols = PRange(cindices)
 
   # Convert again I,J to local numeration
   map(to_local!,I,partition(rows))
