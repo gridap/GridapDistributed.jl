@@ -1,5 +1,5 @@
 module StokesOpenBoundaryTestsSeq
 using PartitionedArrays
 include("../StokesOpenBoundaryTests.jl")
-with_backend(StokesOpenBoundaryTests.main,SequentialBackend(),(2,2))
+with_debug(StokesOpenBoundaryTests.main,(2,2))
 end # module

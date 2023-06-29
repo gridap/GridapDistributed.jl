@@ -1,5 +1,5 @@
 module PLaplacianTestsSeq
 using PartitionedArrays
 include("../PLaplacianTests.jl")
-with_backend(PLaplacianTests.main,SequentialBackend(),(2,2))
+with_debug(PLaplacianTests.main,(2,2))
 end # module

@@ -634,7 +634,8 @@ function add_ghost_cells(dmodel::DistributedDiscreteModel{Dm},
       mcell_intrian
     end
     gids = get_face_gids(dmodel,Dt)
-    exchange!(mcell_intrian,gids.exchanger)
+    vcache=PartitionedArrays.p_vector_cache(mcell_intrian,partition(gids))
+    assemble!((a,b)->b, mcell_intrian, vcache) |> wait
     dreffes=map(local_views(dmodel)) do model
       ReferenceFE{Dt}
     end
@@ -658,46 +659,60 @@ function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
     mgids = get_face_gids(dmodel,Dt)
     # count number owned cells
     notcells, tcell_to_mcell = map(
-      local_views(dmodel),local_views(dtrian),partition(mgids)) do model,trian,partition
+      local_views(dmodel),local_views(dtrian),PArrays.partition(mgids)) do model,trian,partition
+      lid_to_owner = local_to_owner(partition)  
+      part = part_id(partition)
       glue = get_glue(trian,Val(Dt))
       @assert isa(glue,FaceToFaceGlue)
       tcell_to_mcell = glue.tface_to_mface
       notcells = count(tcell_to_mcell) do mcell
-        partition.lid_to_part[mcell] == partition.part
+        lid_to_owner[mcell] == part
       end
       notcells, tcell_to_mcell
-    end
+    end |> tuple_of_arrays
 
     # Find the global range of owned dofs
-    first_gtcell, ngtcellsplus1 = xscan(+,reduce,notcells,init=1)
-    ngtcells = ngtcellsplus1 - 1
+    first_gtcell = scan(+,notcells,type=:exclusive,init=one(eltype(notcells)))
 
     # Assign global cell ids to owned cells
     mcell_to_gtcell = map(
-      first_gtcell,tcell_to_mcell,partition(mgids)) do first_gtcell,tcell_to_mcell,partition
-      mcell_to_gtcell = zeros(Int,length(partition.lid_to_part))
+      first_gtcell,tcell_to_mcell,PArrays.partition(mgids)) do first_gtcell,tcell_to_mcell,partition
+      mcell_to_gtcell = zeros(Int,local_length(partition))
+      loc_to_owner = local_to_owner(partition)
+      part = part_id(partition)
       gtcell = first_gtcell
       for mcell in tcell_to_mcell
-        if partition.lid_to_part[mcell] == partition.part
+        if loc_to_owner[mcell] == part
           mcell_to_gtcell[mcell] = gtcell
           gtcell += 1
         end
       end
       mcell_to_gtcell
     end
-    exchange!(mcell_to_gtcell,mgids.exchanger)
+    vcache=PartitionedArrays.p_vector_cache(mcell_to_gtcell,PArrays.partition(mgids))
+    assemble!((a,b)->b, mcell_to_gtcell, map(reverse,vcache)) |> wait
 
     # Prepare new partition
-    partition = map(mcell_to_gtcell,tcell_to_mcell,partition(mgids)) do mcell_to_gtcell,tcell_to_mcell,partition
+    ngtcells = reduction(+,notcells,destination=:all,init=zero(eltype(notcells)))
+    partition = map(ngtcells, 
+                    mcell_to_gtcell,
+                    tcell_to_mcell,
+                    PArrays.partition(mgids)) do ngtcells,mcell_to_gtcell,tcell_to_mcell,partition
       tcell_to_gtcell = mcell_to_gtcell[tcell_to_mcell]
-      tcell_to_part = partition.lid_to_part[tcell_to_mcell]
-      IndexSet(partition.part,tcell_to_gtcell,tcell_to_part)
+      lid_to_owner = local_to_owner(partition)
+      tcell_to_part = lid_to_owner[tcell_to_mcell]
+      LocalIndices(ngtcells,part_id(partition),tcell_to_gtcell,tcell_to_part)
     end
 
-    # Prepare the PRange
-    neighbors = mgids.exchanger.parts_snd
-    exchanger = Exchanger(partition,neighbors)
-    gids = PRange(ngtcells,partition,exchanger)
+    # Prepare the PRange 
+    # Get the neighbors corresponding to partition(mgids) 
+    snd_neighbors,rcv_neighbors = assembly_neighbors(PArrays.partition(mgids))
+    neighbors=ExchangeGraph(snd_neighbors,rcv_neighbors)
+
+    # Use the neighbors corresponding to partition(mgids)
+    # as a hint to compute the neighbors of the new partition  
+    assembly_neighbors(partition;neighbors=neighbors)
+    gids = PRange(partition)
     gids
   end
 end

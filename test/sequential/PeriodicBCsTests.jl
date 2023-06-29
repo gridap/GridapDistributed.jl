@@ -20,9 +20,9 @@ for np in nps
 end
 
 include("../PeriodicBCsTests.jl")
-with_backend(PeriodicBCsTests.main,SequentialBackend(),(2,2))
-with_backend(PeriodicBCsTests.main,SequentialBackend(),(2,1))
-with_backend(PeriodicBCsTests.main,SequentialBackend(),(1,1))
-with_backend(PeriodicBCsTests.main,SequentialBackend(),(1,2))
-with_backend(PeriodicBCsTests.main,SequentialBackend(),(2,3))
+with_debug(PeriodicBCsTests.main,(2,2))
+with_debug(PeriodicBCsTests.main,(2,1))
+with_debug(PeriodicBCsTests.main,(1,1))
+with_debug(PeriodicBCsTests.main,(1,2))
+with_debug(PeriodicBCsTests.main,(2,3))
 end # module
