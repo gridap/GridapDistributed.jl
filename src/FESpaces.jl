@@ -109,6 +109,14 @@ function dof_wise_to_cell_wise(dof_wise_vector,cell_to_ldofs,cell_prange)
     cwv
 end
 
+function fetch_vector_ghost_values_cache(vector_partition,partition)
+  cache = PArrays.p_vector_cache(vector_partition,partition)
+  map(reverse,cache)
+end 
+
+function fetch_vector_ghost_values!(vector_partition,cache)
+  assemble!((a,b)->b, vector_partition, cache) 
+end 
 
 function generate_gids(
   cell_range::PRange,
@@ -149,13 +157,9 @@ function generate_gids(
   # Note2 : we need to call reverse() as the senders and receivers are 
   #         swapped in the AssemblyCache of partition(cell_range)
 
-  cell_exchange_cache_jagged = 
-     PArrays.p_vector_cache(cell_ldofs_to_part,partition(cell_range))
-  
-  cell_exchange_cache_jagged = map(reverse,cell_exchange_cache_jagged)
-
   # Exchange the dof owners
-  assemble!((a,b)->b, cell_ldofs_to_part,cell_exchange_cache_jagged) |> wait 
+  cache_fetch=fetch_vector_ghost_values_cache(cell_ldofs_to_part,partition(cell_range))
+  fetch_vector_ghost_values!(cell_ldofs_to_part,cache_fetch) |> wait
   
   cell_wise_to_dof_wise!(ldof_to_owner,
                          cell_ldofs_to_part,
@@ -194,8 +198,7 @@ function generate_gids(
                                         cell_range)
 
   # Exchange the global dofs
-  assemble!((a,b)->b, cell_to_gdofs,cell_exchange_cache_jagged) |> wait 
-
+  fetch_vector_ghost_values!(cell_to_gdofs,cache_fetch) |> wait
 
   # Distribute global dof ids also to ghost
   map(cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_owner,partition(cell_range)) do cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_owner,indices
@@ -214,9 +217,12 @@ function generate_gids(
     end
   end
 
-  dof_wise_to_cell_wise!(cell_to_gdofs,ldof_to_gdof,cell_to_ldofs,cell_range)
+  dof_wise_to_cell_wise!(cell_to_gdofs,
+                         ldof_to_gdof,
+                         cell_to_ldofs,
+                         cell_range)
 
-  assemble!((a,b)->b, cell_to_gdofs,cell_exchange_cache_jagged) |> wait 
+  fetch_vector_ghost_values!(cell_to_gdofs,cache_fetch) |> wait
 
   cell_wise_to_dof_wise!(ldof_to_gdof,
                          cell_to_gdofs,

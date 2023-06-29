@@ -582,22 +582,24 @@ end
 function _find_owned_skeleton_facets(glue,gids)
   glue_p = glue.plus
   glue_m = glue.minus
-  T = eltype(gids.lid_to_part)
+  loc_to_own = local_to_owner(gids)
+  loc_to_glo = local_to_global(gids)
+  T = eltype(loc_to_own)
   ntfaces = length(glue_p.tface_to_mface)
   tface_to_part = zeros(T,ntfaces)
   for tface in 1:ntfaces
     mface_p = glue_p.tface_to_mface[tface]
     mface_m = glue_m.tface_to_mface[tface]
-    gcell_p = gids.lid_to_gid[mface_p]
-    gcell_m = gids.lid_to_gid[mface_m]
+    gcell_p = loc_to_glo[mface_p]
+    gcell_m = loc_to_glo[mface_m]
     if gcell_p > gcell_m
-      part = gids.lid_to_part[mface_p]
+      part = loc_to_own[mface_p]
     else
-      part = gids.lid_to_part[mface_m]
+      part = loc_to_own[mface_m]
     end
     tface_to_part[tface] = part
   end
-  findall(part->part==gids.part,tface_to_part)
+  findall(part->part==part_id(gids),tface_to_part)
 end
 
 function add_ghost_cells(dtrian::DistributedTriangulation)
@@ -634,8 +636,10 @@ function add_ghost_cells(dmodel::DistributedDiscreteModel{Dm},
       mcell_intrian
     end
     gids = get_face_gids(dmodel,Dt)
-    vcache=PartitionedArrays.p_vector_cache(mcell_intrian,partition(gids))
-    assemble!((a,b)->b, mcell_intrian, vcache) |> wait
+
+    cache=fetch_vector_ghost_values_cache(mcell_intrian,partition(gids))
+    fetch_vector_ghost_values!(mcell_intrian,cache) |> wait
+    
     dreffes=map(local_views(dmodel)) do model
       ReferenceFE{Dt}
     end
@@ -689,8 +693,9 @@ function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
       end
       mcell_to_gtcell
     end
-    vcache=PartitionedArrays.p_vector_cache(mcell_to_gtcell,PArrays.partition(mgids))
-    assemble!((a,b)->b, mcell_to_gtcell, map(reverse,vcache)) |> wait
+
+    cache = fetch_vector_ghost_values_cache(mcell_to_gtcell,PArrays.partition(mgids))
+    fetch_vector_ghost_values!(mcell_to_gtcell,cache) |> wait
 
     # Prepare new partition
     ngtcells = reduction(+,notcells,destination=:all,init=zero(eltype(notcells)))
@@ -703,15 +708,7 @@ function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
       tcell_to_part = lid_to_owner[tcell_to_mcell]
       LocalIndices(ngtcells,part_id(partition),tcell_to_gtcell,tcell_to_part)
     end
-
-    # Prepare the PRange 
-    # Get the neighbors corresponding to partition(mgids) 
-    snd_neighbors,rcv_neighbors = assembly_neighbors(PArrays.partition(mgids))
-    neighbors=ExchangeGraph(snd_neighbors,rcv_neighbors)
-
-    # Use the neighbors corresponding to partition(mgids)
-    # as a hint to compute the neighbors of the new partition  
-    assembly_neighbors(partition;neighbors=neighbors)
+    _find_neighbours!(partition, PArrays.partition(mgids))
     gids = PRange(partition)
     gids
   end

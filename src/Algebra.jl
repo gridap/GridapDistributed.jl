@@ -1,4 +1,11 @@
 
+# This might go to PartitionedArrays in the future. We keep it here for the moment.
+function Base.copy(a::PSparseMatrix)
+  a_matrix_partition = similar(a.matrix_partition)
+  copy!(a_matrix_partition, a.matrix_partition)
+  PSparseMatrix(a_matrix_partition,a.row_partition,a.col_partition)
+end
+
 # This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.ArrayCounter,axes)
   @notimplemented
@@ -146,10 +153,13 @@ function change_ghost(a::PVector,ids_fespace::PRange)
   a_fespace
 end
 
-function consistent_local_views(a::PVector,ids_fespace::PRange,isconsistent)
+function consistent_local_views(a::PVector,
+                                ids_fespace::PRange,
+                                isconsistent)
   a_fespace = change_ghost(a,ids_fespace)
   if ! isconsistent
-    assemble!((a,b)->b, partition(a_fespace),map(reverse,a_fespace.cache)) |> wait
+    fetch_vector_ghost_values!(partition(a_fespace),
+                               map(reverse,a_fespace.cache)) |> wait
   end
   partition(a_fespace)
 end

@@ -63,11 +63,11 @@ end
 
 function MultiField.restrict_to_field(
   f::DistributedMultiFieldFESpace,free_values::PVector,field::Integer)
-  values = map(f.part_fe_space,free_values.values) do u,x
+  values = map(f.part_fe_space,partition(free_values)) do u,x
     restrict_to_field(u,x,field)
   end
   gids = f.field_fe_space[field].gids
-  PVector(values,gids)
+  PVector(values,partition(gids))
 end
 
 function FESpaces.FEFunction(
@@ -281,8 +281,7 @@ function generate_multi_field_gids(
   # Find the first gid of the multifield space in each part
   ngids = sum(map(length,f_frange))
   p_noids = map(f_fiset->sum(map(own_length,f_fiset)),p_f_fiset)
-  p_part = get_part_ids(p_noids)
-  p_firstgid = xscan(+,p_noids,init=1)
+  p_firstgid = scan(+,p_noids,type=:exclusive,init=one(eltype(p_noids)))
 
   # Distributed gids to owned dofs
   p_lid_gid, p_lid_part = map(
@@ -294,10 +293,11 @@ function generate_multi_field_gids(
     gid = firstgid
     for f in 1:nf
       fiset = f_fiset[f]
+      fiset_owner_to_local = own_to_local(fiset)
       flid_lid = f_flid_lid[f]
-      part = fiset.part
+      part = part_id(fiset)
       for foid in 1:own_length(fiset)
-        flid = fiset.oid_to_lid[foid]
+        flid = fiset_owner_to_local[foid]
         lid = flid_lid[flid]
         lid_part[lid] = part
         lid_gid[lid] = gid
@@ -305,19 +305,24 @@ function generate_multi_field_gids(
       end
     end
     lid_gid,lid_part
-  end
+  end |> tuple_of_arrays
 
   # Now we need to propagate to ghost
   # to this end we use the already available
   # communicators in each of the single fields
   # We cannot use the cell wise dof like in the old version
   # since each field can be defined on an independent mesh.
-  f_aux = map(frange->PVector{Int}(undef,frange),f_frange)
-  propagate_to_ghost_multifield!(p_lid_gid,f_aux,f_p_flid_lid,f_p_fiset)
-  propagate_to_ghost_multifield!(p_lid_part,f_aux,f_p_flid_lid,f_p_fiset)
+  f_aux_gids = map(frange->PVector{Vector{eltype(eltype(p_lid_gid))}}(undef,partition(frange)),f_frange)
+  f_aux_part = map(frange->PVector{Vector{eltype(eltype(p_lid_part))}}(undef,partition(frange)),f_frange)
+  propagate_to_ghost_multifield!(p_lid_gid,f_aux_gids,f_p_flid_lid,f_p_fiset)
+  propagate_to_ghost_multifield!(p_lid_part,f_aux_part,f_p_flid_lid,f_p_fiset)
 
-  # Setup IndexSet
-  p_iset = map(IndexSet,p_part,p_lid_gid,p_lid_part)
+  p_iset = map(partition(f_frange[1]),p_lid_gid,p_lid_part) do indices,
+                                                               lid_to_gid,
+                                                               lid_to_owner
+     me = part_id(indices)
+     LocalIndices(ngids,me,lid_to_gid,lid_to_owner)
+  end
 
   # Merge neighbors
   function merge_neigs(f_neigs)
@@ -329,20 +334,17 @@ function generate_multi_field_gids(
     end
     collect(keys(dict))
   end
-  f_p_parts_snd = map(i->i.exchanger.parts_snd,f_frange)
-  f_p_parts_rcv = map(i->i.exchanger.parts_rcv,f_frange)
+  
+  f_p_parts_snd, f_p_parts_rcv = map(x->assembly_neighbors(partition(x)),f_frange) |> tuple_of_arrays
   p_f_parts_snd = map(v,f_p_parts_snd...)
   p_f_parts_rcv = map(v,f_p_parts_rcv...)
   p_neigs_snd = map(merge_neigs,p_f_parts_snd)
   p_neigs_rcv = map(merge_neigs,p_f_parts_rcv)
-
-  # Setup exchanger
-  exchanger = Exchanger(p_iset,p_neigs_snd,p_neigs_rcv)
-
-  # Setup the range
-  ran = PRange(ngids,p_iset,exchanger)
-
-  ran
+  
+  exchange_graph = ExchangeGraph(p_neigs_snd,p_neigs_rcv)
+  assembly_neighbors(p_iset;neighbors=exchange_graph)
+  
+  PRange(p_iset)
 end
 
 function propagate_to_ghost_multifield!(
@@ -352,24 +354,27 @@ function propagate_to_ghost_multifield!(
   for f in 1:nf
     # Write data into owned in single-field buffer
     gids = f_gids[f]
-    p_flid_gid = gids.values
+    p_flid_gid = gids.vector_partition
     p_flid_lid = f_p_flid_lid[f]
     p_fiset = f_p_fiset[f]
     map(
       p_flid_gid,p_flid_lid,p_lid_gid,p_fiset) do flid_gid,flid_lid,lid_gid,fiset
+      fiset_own_to_local = own_to_local(fiset)
       for foid in 1:own_length(fiset)
-        flid = fiset.oid_to_lid[foid]
+        flid = fiset_own_to_local[foid]
         lid = flid_lid[flid]
         flid_gid[flid] = lid_gid[lid]
       end
     end
     # move to ghost
-    exchange!(gids)
+    cache=fetch_vector_ghost_values_cache(partition(gids),p_fiset)
+    fetch_vector_ghost_values!(partition(gids),cache) |> wait
     # write again into multifield array on ghost ids
     map(
       p_flid_gid,p_flid_lid,p_lid_gid,p_fiset) do flid_gid,flid_lid,lid_gid,fiset
-      for fhid in 1:num_hids(fiset)
-        flid = fiset.hid_to_lid[fhid]
+      fiset_ghost_to_local=ghost_to_local(fiset)
+      for fhid in 1:ghost_length(fiset)
+        flid = fiset_ghost_to_local[fhid]
         lid = flid_lid[flid]
         lid_gid[lid] = flid_gid[flid]
       end

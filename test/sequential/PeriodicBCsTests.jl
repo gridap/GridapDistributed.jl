@@ -12,8 +12,9 @@ reffe = ReferenceFE(lagrangian,Float64,1)
 ndofss = [25,20,20,16]
 for np in nps
   for (ndofs, isperiodic) in zip(ndofss,isperiodics)
-    parts = get_part_ids(SequentialBackend(),np)
-    model = CartesianDiscreteModel(parts,domain,cells;isperiodic=isperiodic)
+    parts = DebugArray(LinearIndices((prod(np),)))
+    println(isperiodic)
+    model = CartesianDiscreteModel(parts,np,domain,cells;isperiodic=isperiodic)
     V = FESpace(model,reffe)
     @test ndofs == num_free_dofs(V)
   end

@@ -286,7 +286,7 @@ end
 # Skeleton related
 
 function DistributedCellField(a::AbstractArray{<:SkeletonPair})
-  plus, minus = map(s->(s.plus,s.minus),a)
+  plus, minus = map(s->(s.plus,s.minus),a) |> tuple_of_arrays
   dplus = DistributedCellField(plus)
   dminus = DistributedCellField(minus)
   SkeletonPair(dplus,dminus)
