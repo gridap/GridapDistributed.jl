@@ -15,7 +15,7 @@ function Base.copy(a::PSparseMatrix)
 end
 
 function main(distribute,parts)
-  # main(distribute,parts,FullyAssembledRows(),SparseMatrixCSR{0,Float64,Int})
+  main(distribute,parts,FullyAssembledRows(),SparseMatrixCSR{0,Float64,Int})
   main(distribute,parts,SubAssembledRows(),SparseMatrixCSC{Float64,Int})
 end
 
