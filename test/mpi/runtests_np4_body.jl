@@ -1,5 +1,5 @@
 function all_tests(distribute,parts)
-  ranks = distribute(LinearIndices((prod(nparts),)))
+  ranks = distribute(LinearIndices((prod(parts),)))
 
   t = PArrays.PTimer(ranks,verbose=true)
   PArrays.tic!(t)
