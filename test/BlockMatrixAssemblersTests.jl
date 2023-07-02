@@ -95,6 +95,26 @@ end
 
 assem_blocks = SparseMatrixAssembler(Xb,Yb,FullyAssembledRows())
 
+using Gridap.Fields: ArrayBlock, MatrixBlock, VectorBlock
+using Gridap.FESpaces: nz_counter, nz_allocation,create_from_nz
+using Gridap.FESpaces: symbolic_loop_matrix!, numeric_loop_matrix!
+using Gridap.Helpers
+using Gridap.FESpaces: get_assembly_strategy
+
+mat_builders = get_matrix_builder(assem_blocks)
+rows = get_rows(assem_blocks)
+cols = get_cols(assem_blocks)
+
+m1 = nz_counter(mat_builders,(rows,cols))
+symbolic_loop_matrix!(m1,assem_blocks,bmatdata)
+m2 = nz_allocation(m1)
+numeric_loop_matrix!(m2,assem_blocks,bmatdata)
+m3 = create_from_nz(m2)
+
+
+strat = get_assembly_strategy(assem_blocks)
+
+
 A1_blocks = assemble_matrix(assem_blocks,bmatdata);
 b1_blocks = assemble_vector(assem_blocks,bvecdata);
 

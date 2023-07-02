@@ -383,7 +383,7 @@ function propagate_to_ghost_multifield!(
 end
 
 
-# BlockMatrixAssemblers
+# BlockSparseMatrixAssemblers
 
 function FESpaces.SparseMatrixAssembler(
   local_mat_type,
@@ -398,7 +398,7 @@ function FESpaces.SparseMatrixAssembler(
     return SparseMatrixAssembler(local_mat_type,local_vec_type,Xj,Yi,par_strategy)
   end
 
-  return BlockMatrixAssembler(block_assemblers)
+  return MultiField.BlockSparseMatrixAssembler(block_assemblers)
 end
 
 function FESpaces.SparseMatrixAssembler(
@@ -411,54 +411,73 @@ function FESpaces.SparseMatrixAssembler(
   SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)
 end
 
-function MultiField.select_block_matdata(matdata::AbstractPData,i::Integer,j::Integer)
-  map_parts(matdata) do matdata
-    MultiField.select_block_matdata(matdata,i,j)
-  end
-end
-
-function MultiField.select_block_vecdata(vecdata::AbstractPData,j::Integer)
-  map_parts(vecdata) do vecdata
-    MultiField.select_block_vecdata(vecdata,j)
-  end
-end
-
-function MultiField.select_block_matvecdata(matvecdata::AbstractPData,i::Integer,j::Integer)
-  map_parts(matvecdata) do matvecdata
-    MultiField.select_block_matvecdata(matvecdata,i,j)
-  end
-end
-
-function MultiField.combine_matdata(data1::AbstractPData,data2::AbstractPData)
-  map_parts(data1,data2) do data1,data2
-    MultiField.combine_matdata(data1,data2)
-  end
-end
-
-function MultiField.recombine_data(matvecdata::AbstractPData,matdata::AbstractPData,vecdata::AbstractPData)
-  map_parts(matvecdata,matdata,vecdata) do matvecdata,matdata,vecdata
-    (matvecdata,matdata,vecdata)
-  end
-end
-
-for fun in [:select_touched_blocks_matdata,:select_touched_blocks_vecdata,:select_touched_blocks_matvecdata]
-  @eval begin
-    function MultiField.$fun(data::AbstractPData,s::Tuple)
-      return fill(true,s)
-      #touched = map_parts(data) do data
-      #  MultiField.$fun(data,s)
-      #end
-      #return get_part(touched)
-      #return reduce(.|,touched; init=fill(false,s))
+function local_views(a::MultiField.BlockSparseMatrixAssembler{<:DistributedSparseMatrixAssembler})
+  assems = a.block_assemblers
+  parts = get_part_ids(local_views(first(assems)))
+  map_parts(parts) do p
+    idx = CartesianIndices(axes(assems))
+    block_assems = map(idx) do I
+      get_part(local_views(assems[I]),p)
     end
+    return MultiField.BlockSparseMatrixAssembler(block_assems)
   end
 end
 
-function MultiField.zero_block(::Type{<:PSparseMatrix},a::DistributedSparseMatrixAssembler)
+function local_views(a::MatrixBlock,rows,cols)
+  parts = get_part_ids(local_views(first(a.array)))
+  map_parts(parts) do p
+    idx = CartesianIndices(axes(a))
+    array = map(idx) do I
+      get_part(local_views(a[I],rows[I[1]],cols[I[2]]),p)
+    end
+    ArrayBlock(array,a.touched)
+  end
+end
+
+function local_views(a::VectorBlock,rows)
+  parts = get_part_ids(local_views(first(a.array)))
+  map_parts(parts) do p
+    idx = CartesianIndices(axes(a))
+    array = map(idx) do I
+      get_part(local_views(a[I],rows[I]),p)
+    end
+    ArrayBlock(array,a.touched)
+  end
+end
+
+
+#! The following functions could be avoided if we created am abstract superclass for
+#! DistributedSparseMatrixAssembler
+function FESpaces.symbolic_loop_matrix!(A,a::MultiField.BlockSparseMatrixAssembler,matdata::AbstractPData)
   rows = get_rows(a)
   cols = get_cols(a)
-  mats = map_parts(local_views(a)) do a
-    MultiField.zero_block(get_matrix_type(a),a)
-  end
-  return PSparseMatrix(mats,rows,cols)
+  map_parts(symbolic_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
+end
+
+function FESpaces.numeric_loop_matrix!(A,a::MultiField.BlockSparseMatrixAssembler,matdata::AbstractPData)
+  rows = get_rows(a)
+  cols = get_cols(a)
+  map_parts(numeric_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
+end
+
+function FESpaces.symbolic_loop_vector!(b,a::MultiField.BlockSparseMatrixAssembler,vecdata::AbstractPData)
+  rows = get_rows(a)
+  map_parts(symbolic_loop_vector!,local_views(b,rows),local_views(a),vecdata)
+end
+
+function FESpaces.numeric_loop_vector!(b,a::MultiField.BlockSparseMatrixAssembler,vecdata::AbstractPData)
+  rows = get_rows(a)
+  map_parts(numeric_loop_vector!,local_views(b,rows),local_views(a),vecdata)
+end
+
+function FESpaces.symbolic_loop_matrix_and_vector!(A,b,a::MultiField.BlockSparseMatrixAssembler,data::AbstractPData)
+  rows = get_rows(a)
+  cols = get_cols(a)
+  map_parts(symbolic_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
+end
+
+function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::MultiField.BlockSparseMatrixAssembler,data::AbstractPData)
+  rows = get_rows(a)
+  cols = get_cols(a)
+  map_parts(numeric_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
 end
