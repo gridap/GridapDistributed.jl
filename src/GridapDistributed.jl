@@ -59,31 +59,4 @@ include("TransientMultiFieldDistributedCellField.jl")
 
 include("TransientFESpaces.jl")
 
-# TO-DO: propose this as a modification to PArrays through PR
-function PArrays.with_debug(f,args...;kwargs...)
-    f(DebugArray,args...;kwargs...)
-end
-
-# TO-DO: propose this as a modification to PArrays through PR
-function PArrays.with_mpi(f,args...;comm=MPI.COMM_WORLD,kwargs...)
-    if !MPI.Initialized()
-        MPI.Init()
-    end
-    distribute = a -> distribute_with_mpi(a,comm;kwargs...)
-    if MPI.Comm_size(comm) == 1
-        f(distribute,args...)
-    else
-        try
-            f(distribute,args...)
-        catch e
-            @error "" exception=(e, catch_backtrace())
-            if MPI.Initialized() && !MPI.Finalized()
-                MPI.Abort(MPI.COMM_WORLD,1)
-            end
-        end
-    end
-    # We are NOT invoking MPI.Finalize() here because we rely on
-    # MPI.jl, which registers MPI.Finalize() in atexit()
-end
-
 end # module
