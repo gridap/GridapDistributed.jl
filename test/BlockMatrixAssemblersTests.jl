@@ -18,7 +18,7 @@ V = FESpace(Ω, reffe)
 U = TrialFESpace(sol,V)
 
 dΩ = Measure(Ω, 4)
-biform((u1,u2),(v1,v2)) = ∫(∇(u1)⋅∇(v1) + u2⋅v2 + u1⋅v2)*dΩ
+biform((u1,u2),(v1,v2)) = ∫(∇(u1)⋅∇(v1) + u2⋅v2 + u1⋅v2 - u2⋅v1)*dΩ
 liform((v1,v2)) = ∫(v1 + v2)*dΩ
 
 ############################################################################################
@@ -81,45 +81,27 @@ function LinearAlgebra.mul!(y::BlockVector,A::BlockMatrix,x::BlockVector)
 end
 
 function test_axes(c::BlockVector,a::BlockMatrix,b::BlockVector)
-  tests = []
+  res = Matrix(undef,blocksize(a)...)
   for i in blockaxes(a,1)
     for j in blockaxes(a,2)
-      push!(tests,
-      (oids_are_equal(c[i].rows,a[i,j].rows),
+      res[i.n[1],j.n[1]] = Tuple([oids_are_equal(c[i].rows,a[i,j].rows),
       oids_are_equal(a[i,j].cols,b[j].rows),
-      hids_are_equal(a[i,j].cols,b[j].rows)))
+      hids_are_equal(a[i,j].cols,b[j].rows)])
     end
   end
-  return tests
+  return res
 end
 
+#! TODO: Does not work if there are empty blocks due to PRange checks when multiplying. 
+#! Maybe we should change to MatrixBlocks?  
+
 assem_blocks = SparseMatrixAssembler(Xb,Yb,FullyAssembledRows())
-
-using Gridap.Fields: ArrayBlock, MatrixBlock, VectorBlock
-using Gridap.FESpaces: nz_counter, nz_allocation,create_from_nz
-using Gridap.FESpaces: symbolic_loop_matrix!, numeric_loop_matrix!
-using Gridap.Helpers
-using Gridap.FESpaces: get_assembly_strategy
-
-mat_builders = get_matrix_builder(assem_blocks)
-rows = get_rows(assem_blocks)
-cols = get_cols(assem_blocks)
-
-m1 = nz_counter(mat_builders,(rows,cols))
-symbolic_loop_matrix!(m1,assem_blocks,bmatdata)
-m2 = nz_allocation(m1)
-numeric_loop_matrix!(m2,assem_blocks,bmatdata)
-m3 = create_from_nz(m2)
-
-
-strat = get_assembly_strategy(assem_blocks)
-
 
 A1_blocks = assemble_matrix(assem_blocks,bmatdata);
 b1_blocks = assemble_vector(assem_blocks,bvecdata);
 
-y1_blocks = mortar(map(Aii->PVector(0.0,Aii.rows),A1_blocks.blocks[:,1]));
-x1_blocks = mortar(map(Aii->PVector(1.0,Aii.cols),A1_blocks.blocks[1,:]));
+y1_blocks = mortar(map(Aii->PVector(0.0,Aii.rows),diag(A1_blocks.blocks)));
+x1_blocks = mortar(map(Aii->PVector(1.0,Aii.cols),diag(A1_blocks.blocks)));
 test_axes(y1_blocks,A1_blocks,x1_blocks)
 
 mul!(y1_blocks,A1_blocks,x1_blocks)
