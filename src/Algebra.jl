@@ -1,11 +1,3 @@
-
-# This might go to PartitionedArrays in the future. We keep it here for the moment.
-function Base.copy(a::PSparseMatrix)
-  a_matrix_partition = similar(a.matrix_partition)
-  copy!(a_matrix_partition, a.matrix_partition)
-  PSparseMatrix(a_matrix_partition,a.row_partition,a.col_partition)
-end
-
 # This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.ArrayCounter,axes)
   @notimplemented
