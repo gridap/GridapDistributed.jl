@@ -348,7 +348,15 @@ function _fa_create_from_nz_with_callback(callback,a)
   map(to_global!,J,trial_dofs_gids_partition)
 
   # Create the range for cols
-  cols = _setup_prange(trial_dofs_gids_prange,J)
+  # Note that we are calling here the _setup_rows_prange(...) function even though we 
+  # are setting up the range for the cols. Inherent to the FullyAssembledRows() 
+  # assembly strategy with a single layer of ghost cells 
+  # is the fact that "The global column identifiers of matrix entries 
+  # located in rows that a given processor owns have to be such they belong to the set of 
+  # ghost DoFs in the local partition of the FE space corresponding to such processor."
+  # Any entry in the global matrix sparsity pattern that fulfills this condition is just 
+  # ignored in the FullyAssembledRows() assembly strategy with a single layer of ghost cells 
+  cols = _setup_rows_prange(trial_dofs_gids_prange,J)
 
 
   # Convert again I,J to local numeration
@@ -373,6 +381,100 @@ function Algebra.create_from_nz(a::DistributedAllocationCOO{<:SubAssembledRows})
   A
 end
 
+function _generate_column_owner(J,trial_dofs_partition)
+  map(J,trial_dofs_partition) do J, indices 
+    glo_to_loc=global_to_local(indices) 
+    loc_to_own=local_to_owner(indices)
+     map(x->loc_to_own[glo_to_loc[x]], J)
+  end 
+end 
+
+function assemble_coo_with_column_owner!(I,J,Jown,V,row_partition)
+  """
+    Returns three JaggedArrays with the coo triplets
+    to be sent to the corresponding owner parts in parts_snd
+  """
+  function setup_snd(part,parts_snd,row_lids,coo_entries_with_column_owner)
+      global_to_local_row = global_to_local(row_lids)
+      local_row_to_owner = local_to_owner(row_lids)
+      owner_to_i = Dict(( owner=>i for (i,owner) in enumerate(parts_snd) ))
+      ptrs = zeros(Int32,length(parts_snd)+1)
+      k_gi, k_gj, k_jo, k_v = coo_entries_with_column_owner
+      for k in 1:length(k_gi)
+          gi = k_gi[k]
+          li = global_to_local_row[gi]
+          owner = local_row_to_owner[li]
+          if owner != part
+              ptrs[owner_to_i[owner]+1] +=1
+          end
+      end
+      PArrays.length_to_ptrs!(ptrs)
+      gi_snd_data = zeros(eltype(k_gi),ptrs[end]-1)
+      gj_snd_data = zeros(eltype(k_gj),ptrs[end]-1)
+      jo_snd_data = zeros(eltype(k_jo),ptrs[end]-1)
+      v_snd_data = zeros(eltype(k_v),ptrs[end]-1)
+      for k in 1:length(k_gi)
+          gi = k_gi[k]
+          li = global_to_local_row[gi]
+          owner = local_row_to_owner[li]
+          if owner != part
+              gj = k_gj[k]
+              v = k_v[k]
+              p = ptrs[owner_to_i[owner]]
+              gi_snd_data[p] = gi
+              gj_snd_data[p] = gj
+              jo_snd_data[p] = k_jo[k]
+              v_snd_data[p] = v
+              k_v[k] = zero(v)
+              ptrs[owner_to_i[owner]] += 1
+          end
+      end
+      PArrays.rewind_ptrs!(ptrs)
+      gi_snd = JaggedArray(gi_snd_data,ptrs)
+      gj_snd = JaggedArray(gj_snd_data,ptrs)
+      jo_snd = JaggedArray(jo_snd_data,ptrs)
+      v_snd = JaggedArray(v_snd_data,ptrs)
+      gi_snd, gj_snd, jo_snd, v_snd
+  end
+  """
+    Pushes to coo_entries_with_column_owner the tuples 
+    gi_rcv,gj_rcv,jo_rcv,v_rcv received from remote processes
+  """
+  function setup_rcv!(coo_entries_with_column_owner,gi_rcv,gj_rcv,jo_rcv,v_rcv)
+      k_gi, k_gj, k_jo, k_v = coo_entries_with_column_owner
+      current_n = length(k_gi)
+      new_n = current_n + length(gi_rcv.data)
+      resize!(k_gi,new_n)
+      resize!(k_gj,new_n)
+      resize!(k_jo,new_n)
+      resize!(k_v,new_n)
+      for p in 1:length(gi_rcv.data)
+          k_gi[current_n+p] = gi_rcv.data[p]
+          k_gj[current_n+p] = gj_rcv.data[p]
+          k_jo[current_n+p] = jo_rcv.data[p]
+          k_v[current_n+p] = v_rcv.data[p]
+      end
+  end
+  part = linear_indices(row_partition)
+  parts_snd, parts_rcv = assembly_neighbors(row_partition)
+  coo_entries_with_column_owner = map(tuple,I,J,Jown,V)
+  gi_snd, gj_snd, jo_snd, v_snd = map(setup_snd,part,parts_snd,row_partition,coo_entries_with_column_owner) |> tuple_of_arrays
+  graph = ExchangeGraph(parts_snd,parts_rcv)
+  t1 = exchange(gi_snd,graph)
+  t2 = exchange(gj_snd,graph)
+  t3 = exchange(jo_snd,graph)
+  t4 = exchange(v_snd,graph)
+  @async begin
+      gi_rcv = fetch(t1)
+      gj_rcv = fetch(t2)
+      jo_rcv = fetch(t3)
+      v_rcv = fetch(t4)
+      map(setup_rcv!,coo_entries_with_column_owner,gi_rcv,gj_rcv,jo_rcv,v_rcv)
+      I,J,Jown,V
+  end
+end
+
+
 function _sa_create_from_nz_with_callback(callback,async_callback,a)
   # Recover some data
   I,J,V = map(a.allocs) do alloc
@@ -390,11 +492,12 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   map(to_global!,J,trial_dofs_gids_partition)
 
   # Create the Prange for the rows
-  rows = _setup_prange(test_dofs_gids_prange,I)
+  rows = _setup_rows_prange(test_dofs_gids_prange,I)
   
-  # Move values to the owner part
-  # since we have integrated only over owned cells
-  t = PArrays.assemble_coo!(I,J,V,partition(rows))
+  # Move (I,J,V) triplets to the owner process of each row I.
+  # The triplets are accompanyed which Jo which is the process column owner
+  Jo=_generate_column_owner(J,trial_dofs_gids_partition)
+  t=assemble_coo_with_column_owner!(I,J,Jo,V,partition(rows))
 
   # Here we can overlap computations
   # This is a good place to overlap since
@@ -405,7 +508,7 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   wait(t)
 
   # Create the Prange for the cols
-  cols = _setup_prange(trial_dofs_gids_prange,J)
+  cols = _setup_cols_prange(trial_dofs_gids_prange,J,Jo)
 
   # Overlap rhs communications with CSC compression
   t2 = async_callback(b)
@@ -500,21 +603,18 @@ function _setup_prange_rows_without_ghosts(test_dofs_gids_prange)
   PRange(rindices)
 end
 
-# dofs_gids_prange can be either test_dofs_gids_prange or trial_dofs_gids_prange
-# In the former case, gids is a vector of global test dof identifiers, while in the 
-# latter, a vector of global trial dof identifiers
-function _setup_prange(dofs_gids_prange,gids)
-  ngdofs = length(dofs_gids_prange)
-  dofs_gids_partition = partition(dofs_gids_prange)
-  gids_ghost_lids_to_dofs_ghost_lids = map(ghost_lids_touched,dofs_gids_partition,gids)
-  _setup_prange_impl_(ngdofs,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition)
+function _setup_rows_prange(test_dofs_gids_prange,I)
+  ngdofs = length(test_dofs_gids_prange)
+  test_dofs_gids_partition = partition(test_dofs_gids_prange)
+  I_ghost_lids_to_test_dofs_ghost_lids = map(ghost_lids_touched,test_dofs_gids_partition,I)
+  _setup_rows_prange_impl_(ngdofs,I_ghost_lids_to_test_dofs_ghost_lids,test_dofs_gids_partition)
 end
 
-function _setup_prange_impl_(ngdofs,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition)
+function _setup_rows_prange_impl_(ngdofs,I_ghost_lids_to_dofs_ghost_lids,test_dofs_gids_partition)
   gids_ghost_to_global, gids_ghost_to_owner = map(
-    find_gid_and_owner,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition) |> tuple_of_arrays
+    find_gid_and_owner,I_ghost_lids_to_dofs_ghost_lids,test_dofs_gids_partition) |> tuple_of_arrays
 
-  indices=map(dofs_gids_partition, 
+  indices=map(test_dofs_gids_partition, 
                gids_ghost_to_global, 
                gids_ghost_to_owner) do dofs_indices, ghost_to_global, ghost_to_owner 
      owner = part_id(dofs_indices)
@@ -522,7 +622,51 @@ function _setup_prange_impl_(ngdofs,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids
      ghost_indices=GhostIndices(ngdofs,ghost_to_global,ghost_to_owner)
      OwnAndGhostIndices(own_indices,ghost_indices)
   end
-  _find_neighbours!(indices, dofs_gids_partition)
+  # Here we are assuming that the sparse communication graph underlying test_dofs_gids_partition
+  # is a superset of the one underlying indices. This is (has to be) true for the rows of the linear system.
+  # The precondition required for the consistency of any parallel assembly process in GridapDistributed 
+  # is that each processor can determine locally with a single layer of ghost cells the global indices and associated 
+  # processor owners of the rows that it touches after assembly of integration terms posed on locally-owned entities 
+  # (i.e., either cells or faces). 
+  _find_neighbours!(indices, test_dofs_gids_partition)
+  PRange(indices)
+end 
+
+function _setup_cols_prange(trial_dofs_gids_prange,J,Jown)
+  ngdofs = length(trial_dofs_gids_prange)
+  trial_dofs_gids_partition = partition(trial_dofs_gids_prange)
+   
+  J_ghost_to_global, J_ghost_to_owner = map(J,Jown,trial_dofs_gids_partition) do J, Jown, trial_dofs_gids_partition
+    ghost_touched=Dict{Int,Bool}()
+    ghost_to_global=Int64[] 
+    ghost_to_owner=Int64[]
+    me=part_id(trial_dofs_gids_partition)
+    for (j,jo) in zip(J,Jown)
+      if jo!=me
+        if !haskey(ghost_touched,j)
+          push!(ghost_to_global,j)
+          push!(ghost_to_owner,jo)
+          ghost_touched[j]=true
+        end
+      end
+    end
+    ghost_to_global, ghost_to_owner
+  end |> tuple_of_arrays
+
+  indices=map(trial_dofs_gids_partition, 
+              J_ghost_to_global,
+              J_ghost_to_owner) do dofs_indices, ghost_to_global, ghost_to_owner 
+     owner = part_id(dofs_indices)
+     own_indices=OwnIndices(ngdofs,owner,own_to_global(dofs_indices))
+     ghost_indices=GhostIndices(ngdofs,ghost_to_global,ghost_to_owner)
+     OwnAndGhostIndices(own_indices,ghost_indices)
+  end
+  # Here we cannot assume that the sparse communication graph underlying 
+  # trial_dofs_gids_partition is a superset of the one underlying indices.
+  # Here we chould check whether it is included and call _find_neighbours!()
+  # if this is the case. At present, we are not taking advantage of this, 
+  # but let the parallel scalable algorithm to compute the reciprocal to do the 
+  # job. 
   PRange(indices)
 end 
 
@@ -702,7 +846,7 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
     I_ghost_lids
   end
 
-  rows = _setup_prange_impl_(ngrdofs,
+  rows = _setup_rows_prange_impl_(ngrdofs,
                              I_ghost_lids_to_dofs_ghost_lids,
                              test_dofs_prange_partition)
 
