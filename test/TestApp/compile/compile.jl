@@ -10,7 +10,7 @@ module sysimagegenerator
 
    include("../../mpi/runtests_np4_body.jl")
 
-   with_backend(all_tests,MPIBackend(),(1,1))
+   with_mpi(all_tests,(1,1))
 
    MPI.Finalize()
 
