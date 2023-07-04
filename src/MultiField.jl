@@ -388,17 +388,26 @@ end
 function FESpaces.SparseMatrixAssembler(
   local_mat_type,
   local_vec_type,
-  trial::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
-  test::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
-  par_strategy=SubAssembledRows())
+  trial::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}},
+  test::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}},
+  par_strategy=SubAssembledRows()) where {NB,SB,P}
+
+  # Build block spaces #! TODO: Eliminate this, build the PRANGES directly
+  function get_block_fespace(spaces,range)
+    (length(range) == 1) ? spaces[range[1]] : MultiFieldFESpace(spaces[range])
+  end
+  NV = length(trial.field_fe_space)
+  block_ranges = MultiField.get_block_ranges(NB,SB,P)
+  block_tests  = map(range -> get_block_fespace(test.field_fe_space,range),block_ranges)
+  block_trials = map(range -> get_block_fespace(trial.field_fe_space,range),block_ranges)
 
   block_idx = CartesianIndices((length(test),length(trial)))
   block_assemblers = map(block_idx) do idx
-    Yi = test[idx[1]]; Xj = trial[idx[2]]
+    Yi = block_tests[idx[1]]; Xj = block_trials[idx[2]]
     return SparseMatrixAssembler(local_mat_type,local_vec_type,Xj,Yi,par_strategy)
   end
 
-  return MultiField.BlockSparseMatrixAssembler(block_assemblers)
+  return MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P}(block_assemblers)
 end
 
 function FESpaces.SparseMatrixAssembler(
@@ -411,7 +420,7 @@ function FESpaces.SparseMatrixAssembler(
   SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)
 end
 
-function local_views(a::MultiField.BlockSparseMatrixAssembler{<:DistributedSparseMatrixAssembler})
+function local_views(a::MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P}) where {NB,NV,SB,P}
   assems = a.block_assemblers
   parts = get_part_ids(local_views(first(assems)))
   map_parts(parts) do p
@@ -419,7 +428,7 @@ function local_views(a::MultiField.BlockSparseMatrixAssembler{<:DistributedSpars
     block_assems = map(idx) do I
       get_part(local_views(assems[I]),p)
     end
-    return MultiField.BlockSparseMatrixAssembler(block_assems)
+    return MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P}(block_assems)
   end
 end
 
@@ -446,7 +455,7 @@ function local_views(a::VectorBlock,rows)
 end
 
 
-#! The following functions could be avoided if we created am abstract superclass for
+#! The following functions could be avoided if we created an abstract superclass for
 #! DistributedSparseMatrixAssembler
 function FESpaces.symbolic_loop_matrix!(A,a::MultiField.BlockSparseMatrixAssembler,matdata::AbstractPData)
   rows = get_rows(a)

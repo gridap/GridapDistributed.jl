@@ -46,8 +46,8 @@ A11 = assemble_matrix((u1,v1)->∫(∇(u1)⋅∇(v1))*dΩ,assem11,U,V)
 # Block MultiFieldStyle
 
 mfs = BlockMultiFieldStyle()
-Yb = MultiFieldFESpace([V,V];style=mfs)
-Xb = MultiFieldFESpace([U,U];style=mfs)
+Yb  = MultiFieldFESpace([V,V];style=mfs)
+Xb  = MultiFieldFESpace([U,U];style=mfs)
 
 ub = get_trial_fe_basis(Xb)
 vb = get_fe_basis(Yb)
