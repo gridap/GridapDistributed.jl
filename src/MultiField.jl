@@ -401,7 +401,7 @@ function FESpaces.SparseMatrixAssembler(
   block_tests  = map(range -> get_block_fespace(test.field_fe_space,range),block_ranges)
   block_trials = map(range -> get_block_fespace(trial.field_fe_space,range),block_ranges)
 
-  block_idx = CartesianIndices((length(test),length(trial)))
+  block_idx = CartesianIndices((NB,NB))
   block_assemblers = map(block_idx) do idx
     Yi = block_tests[idx[1]]; Xj = block_trials[idx[2]]
     return SparseMatrixAssembler(local_mat_type,local_vec_type,Xj,Yi,par_strategy)
@@ -451,6 +451,13 @@ function local_views(a::VectorBlock,rows)
       get_part(local_views(a[I],rows[I]),p)
     end
     ArrayBlock(array,a.touched)
+  end
+end
+
+function local_views(a::MultiField.ArrayBlockView,axes...)
+  array = local_views(a.array,axes...)
+  map_parts(array) do array
+    MultiField.ArrayBlockView(array,a.block_map)
   end
 end
 

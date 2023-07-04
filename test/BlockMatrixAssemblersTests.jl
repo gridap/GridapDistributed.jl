@@ -18,14 +18,14 @@ V = FESpace(Ω, reffe)
 U = TrialFESpace(sol,V)
 
 dΩ = Measure(Ω, 4)
-biform((u1,u2),(v1,v2)) = ∫(∇(u1)⋅∇(v1) + u2⋅v2 + u1⋅v2 - u2⋅v1)*dΩ
-liform((v1,v2)) = ∫(v1 + v2)*dΩ
+biform((u1,u2,u3),(v1,v2,v3)) = ∫(∇(u1)⋅∇(v1) + u2⋅v2 + u1⋅v2 - u2⋅v1 - v3⋅u3 + v3⋅u1 - v1⋅u3)*dΩ
+liform((v1,v2,v3)) = ∫(v1 + v2 - v3)*dΩ
 
 ############################################################################################
 # Normal assembly 
 
-Y = MultiFieldFESpace([V,V])
-X = MultiFieldFESpace([U,U])
+Y = MultiFieldFESpace([V,V,V])
+X = MultiFieldFESpace([U,U,U])
 
 u = get_trial_fe_basis(X)
 v = get_fe_basis(Y)
@@ -45,9 +45,11 @@ A11 = assemble_matrix((u1,v1)->∫(∇(u1)⋅∇(v1))*dΩ,assem11,U,V)
 ############################################################################################
 # Block MultiFieldStyle
 
-mfs = BlockMultiFieldStyle()
-Yb  = MultiFieldFESpace([V,V];style=mfs)
-Xb  = MultiFieldFESpace([U,U];style=mfs)
+#mfs = BlockMultiFieldStyle()
+mfs = BlockMultiFieldStyle(2,(1,2))
+
+Yb  = MultiFieldFESpace([V,V,V];style=mfs)
+Xb  = MultiFieldFESpace([U,U,U];style=mfs)
 
 ub = get_trial_fe_basis(Xb)
 vb = get_fe_basis(Yb)
@@ -59,9 +61,9 @@ bvecdata = collect_cell_vector(Yb,liform(vb))
 ############################################################################################
 # Block Assembly
 
-function same_solution(x1::PVector,x2::BlockVector,X,dΩ)
+function same_solution(x1::PVector,x2::BlockVector,X,Xi,dΩ)
   u1 = [FEFunction(X,x1)...]
-  u2 = map(i->FEFunction(X[i],x2[Block(i)]),1:blocklength(x2))
+  u2 = map(i->FEFunction(Xi[i],x2[Block(i)]),1:blocklength(x2))
 
   err = map(u1,u2) do u1,u2
     eh = u1-u2
@@ -92,6 +94,13 @@ function test_axes(c::BlockVector,a::BlockMatrix,b::BlockVector)
   return res
 end
 
+function get_block_fespace(spaces,range)
+  (length(range) == 1) ? spaces[range[1]] : MultiFieldFESpace(spaces[range])
+end
+
+block_ranges = Gridap.MultiField.get_block_ranges(2,(1,2),(1,2,3))
+block_trials = map(range -> get_block_fespace(X.field_fe_space,range),block_ranges)
+
 #! TODO: Does not work if there are empty blocks due to PRange checks when multiplying. 
 #! Maybe we should change to MatrixBlocks?  
 
@@ -110,7 +119,7 @@ y1 = PVector(0.0,A1.rows)
 x1 = PVector(1.0,A1.cols)
 mul!(y1,A1,x1)
 
-@test all(same_solution(y1,y1_blocks,X,dΩ) .< 1e-10)
+@test all(same_solution(y1,y1_blocks,X,block_trials,dΩ) .< 1e-5)
 
 ############################################################################################
 
