@@ -7,13 +7,11 @@ module sysimagegenerator
    using PartitionedArrays
    const PArrays = PartitionedArrays
    using MPI
-
    include("../../mpi/runtests_np4_body.jl")
-
-   with_mpi(all_tests,(1,1))
-
+   with_mpi() do distribute
+    all_tests(distribute,(1,1))
+   end 
    MPI.Finalize()
-
 end #module
 """
 
