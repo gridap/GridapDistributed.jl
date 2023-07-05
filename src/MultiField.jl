@@ -497,3 +497,92 @@ function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::MultiField.BlockSparseM
   cols = get_cols(a)
   map_parts(numeric_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
 end
+
+#! The following is horrible (see dicussion in PR) but necessary for the moment. We will be 
+#! bringing potentially too many ghosts from other procs. This will be dealt with in teh future, 
+#! but requires a little bit of refactoring of the assembly code. Postponed until GridapDistributed v0.3.
+
+function Algebra.create_from_nz(a::ArrayBlock{<:DistributedAllocationCOO{<:FullyAssembledRows}})
+  array = map(_fa_create_from_nz_temporary_fix,a.array)
+  return mortar(array)
+end
+
+function _fa_create_from_nz_temporary_fix(a::DistributedAllocationCOO{<:FullyAssembledRows})
+  parts     = get_part_ids(local_views(a))
+
+  rdofs = a.rows # dof ids of the test space
+  cdofs = a.cols # dof ids of the trial space
+  ngrdofs = length(rdofs)
+  ngcdofs = length(cdofs)
+  nordofs = map_parts(num_oids,rdofs.partition)
+  nocdofs = map_parts(num_oids,cdofs.partition)
+  first_grdof = map_parts(first_gdof_from_ids,rdofs.partition)
+  first_gcdof = map_parts(first_gdof_from_ids,cdofs.partition)
+  cneigs_snd  = cdofs.exchanger.parts_snd
+  cneigs_rcv  = cdofs.exchanger.parts_rcv
+
+  hcol_to_gid  = map_parts(part -> part.lid_to_gid[part.hid_to_lid], cdofs.partition)
+  hcol_to_part = map_parts(part -> part.lid_to_part[part.hid_to_lid], cdofs.partition)
+  
+  rows = PRange(
+    parts,
+    ngrdofs,
+    nordofs,
+    first_grdof)
+
+  cols = PRange(
+    parts,
+    ngcdofs,
+    nocdofs,
+    first_gcdof,
+    hcol_to_gid,
+    hcol_to_part,
+    cneigs_snd,
+    cneigs_rcv)
+
+  I,J,C = map_parts(a.allocs) do alloc
+    alloc.I, alloc.J, alloc.V
+  end
+  to_gids!(I,rdofs)
+  to_gids!(J,cdofs)
+  to_lids!(I,rows)
+  to_lids!(J,cols)
+
+  b = change_axes(a,(rows,cols))
+  
+  values    = map_parts(Algebra.create_from_nz,local_views(b))
+  exchanger = empty_exchanger(parts)
+  return PSparseMatrix(values,rows,cols,exchanger)
+end
+
+"""
+function Algebra.nz_allocation(a::ArrayBlock{<:DistributedCounterCOO})
+  array = map(Algebra.nz_allocation,a.array)
+  match_block_indexes!(array)
+  return ArrayBlock(array,a.touched)
+end
+
+function match_block_indexes!(allocators::Vector{<:DistributedAllocationCOO})
+  return allocators
+end
+
+function match_block_indexes!(allocators::Matrix{<:DistributedAllocationCOO})
+  s = size(allocators)
+
+  # Get an AbstractPData containing in each part the the matrix of local allocators
+  parts = get_part_ids(local_views(first(allocators)))
+  allocs = map_parts(parts) do p
+    idx = CartesianIndices(s)
+    allocs = map(idx) do I
+      get_part(local_views(a[I],rows[I[1]],cols[I[2]]),p)
+    end
+    return allocs
+  end
+
+  # Accumulate the index sets for each 
+  map_parts()
+  for block_row in 1:s[1]
+
+  end
+end
+"""

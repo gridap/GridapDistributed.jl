@@ -1,4 +1,4 @@
-using Test, LinearAlgebra, BlockArrays
+using Test, LinearAlgebra, BlockArrays, SparseArrays
 
 using Gridap
 using Gridap.FESpaces, Gridap.ReferenceFEs, Gridap.MultiField
@@ -18,7 +18,7 @@ V = FESpace(Ω, reffe)
 U = TrialFESpace(sol,V)
 
 dΩ = Measure(Ω, 4)
-biform((u1,u2,u3),(v1,v2,v3)) = ∫(∇(u1)⋅∇(v1) + u2⋅v2 + u1⋅v2 - u2⋅v1 - v3⋅u3 + v3⋅u1 - v1⋅u3)*dΩ
+biform((u1,u2,u3),(v1,v2,v3)) = ∫(∇(u1)⋅∇(v1) + u2⋅v2 + u1⋅v2 - u2⋅v1 - v3⋅u3)*dΩ # + v3⋅u1 - v1⋅u3)*dΩ
 liform((v1,v2,v3)) = ∫(v1 + v2 - v3)*dΩ
 
 ############################################################################################
@@ -125,3 +125,9 @@ mul!(y1,A1,x1)
 
 op = AffineFEOperator(biform,liform,X,Y)
 block_op = AffineFEOperator(biform,liform,Xb,Yb)
+
+
+A11 = A1_blocks.blocks[1,1]
+A12 = A1_blocks.blocks[1,2]
+A22 = A1_blocks.blocks[2,2]
+
