@@ -36,8 +36,6 @@ export get_face_gids
 
 export local_views, get_parts
 
-include("Interface.jl")
-
 include("Algebra.jl")
 
 include("Geometry.jl")
