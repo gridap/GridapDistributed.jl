@@ -76,7 +76,7 @@ function _generate_sign_flips(model,cell_reffes)
           if (length(facet_cells_around)==1)
             is_slave == false
           else
-            mx=maximum(loc_to_glo)
+            mx=maximum(loc_to_glo[facet_cells_around])
             is_slave = (loc_to_glo[cell] == mx)
           end
           if is_slave
