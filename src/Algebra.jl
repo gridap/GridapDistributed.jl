@@ -17,6 +17,14 @@ function change_axes(a::Algebra.AllocationCOO{T,A}, axes::A) where {T,A}
   Algebra.AllocationCOO(counter,a.I,a.J,a.V)
 end
 
+function local_views(a)
+  @abstractmethod
+end
+
+function get_parts(x)
+  return PArrays.get_part_ids(local_views(x))
+end
+
 function local_views(a::AbstractVector,rows)
   @notimplemented
 end
@@ -104,7 +112,7 @@ end
 
 """
 """
-struct DistributedCounterCOO{A,B,C,D} <: DistributedGridapType
+struct DistributedCounterCOO{A,B,C,D} <: GridapType
   par_strategy::A
   counters::B
   rows::C
@@ -137,7 +145,7 @@ function Algebra.nz_allocation(a::DistributedCounterCOO)
   DistributedAllocationCOO(a.par_strategy,allocs,a.rows,a.cols)
 end
 
-struct DistributedAllocationCOO{A,B,C,D} <:DistributedGridapType
+struct DistributedAllocationCOO{A,B,C,D} <:GridapType
   par_strategy::A
   allocs::B
   rows::C
