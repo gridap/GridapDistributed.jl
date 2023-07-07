@@ -1,5 +1,5 @@
 
-struct DistributedMultiFieldFEFunction{A,B,C} <: DistributedGridapType
+struct DistributedMultiFieldFEFunction{A,B,C} <: GridapType
   field_fe_fun::A
   part_fe_fun::B
   free_values::C
@@ -180,7 +180,7 @@ end
 
 """
 """
-struct DistributedMultiFieldFEBasis{A,B} <: DistributedGridapType
+struct DistributedMultiFieldFEBasis{A,B} <: GridapType
   field_fe_basis::A
   part_fe_basis::B
   function DistributedMultiFieldFEBasis(

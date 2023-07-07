@@ -1,5 +1,5 @@
 
-abstract type DistributedCellDatum <: DistributedGridapType end
+abstract type DistributedCellDatum <: GridapType end
 
 # DistributedCellPoint
 """
@@ -186,7 +186,7 @@ end
 # Integration related
 """
 """
-struct DistributedMeasure{A<:AbstractArray{<:Measure}} <: DistributedGridapType
+struct DistributedMeasure{A<:AbstractArray{<:Measure}} <: GridapType
   measures::A
 end
 
@@ -212,7 +212,7 @@ end
 
 """
 """
-struct DistributedDomainContribution{A<:AbstractArray{<:DomainContribution}} <: DistributedGridapType
+struct DistributedDomainContribution{A<:AbstractArray{<:DomainContribution}} <: GridapType
   contribs::A
 end
 

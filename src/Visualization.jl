@@ -164,7 +164,9 @@ function Visualization.create_vtk_file(
   end
 end
 
-function Visualization.writevtk(arg::DistributedGridapType,args...;kwargs...)
+const DistributedModelOrTriangulation = Union{DistributedDiscreteModel,DistributedTriangulation}
+
+function Visualization.writevtk(arg::DistributedModelOrTriangulation,args...;kwargs...)
   parts=get_parts(arg)
   map(visualization_data(arg,args...;kwargs...)) do visdata
     write_vtk_file(
@@ -172,7 +174,7 @@ function Visualization.writevtk(arg::DistributedGridapType,args...;kwargs...)
   end
 end
 
-function Visualization.createvtk(arg::DistributedGridapType,args...;kwargs...)
+function Visualization.createvtk(arg::DistributedModelOrTriangulation,args...;kwargs...)
   v = visualization_data(arg,args...;kwargs...)
   parts=get_parts(arg)
   @notimplementedif length(v) != 1

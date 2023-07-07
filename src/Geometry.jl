@@ -9,7 +9,7 @@ const no_ghost = NoGhost()
 # This object cannot implement the Grid interface in a strict sense
 """
 """
-struct DistributedGrid{Dc,Dp,A} <: DistributedGridapType
+struct DistributedGrid{Dc,Dp,A} <: GridapType
   grids::A
   function DistributedGrid(grids::AbstractArray{<:Grid{Dc,Dp}}) where {Dc,Dp}
     A = typeof(grids)
@@ -38,7 +38,7 @@ Geometry.num_point_dims(::Type{<:DistributedGrid{Dc,Dp}}) where {Dc,Dp} = Dp
 # This object cannot implement the GridTopology interface in a strict sense
 """
 """
-struct DistributedGridTopology{Dc,Dp,A} <: DistributedGridapType
+struct DistributedGridTopology{Dc,Dp,A} <: GridapType
   topos::A
   function DistributedGridTopology(topos::AbstractArray{<:GridTopology{Dc,Dp}}) where {Dc,Dp}
     A = typeof(topos)
@@ -83,7 +83,7 @@ end
 
 """
 """
-abstract type DistributedDiscreteModel{Dc,Dp} <: DistributedGridapType end
+abstract type DistributedDiscreteModel{Dc,Dp} <: GridapType end
 
 function generate_gids(::DistributedDiscreteModel)
   @abstractmethod
@@ -403,7 +403,7 @@ end
 # This object cannot implement the Triangulation interface in a strict sense
 """
 """
-struct DistributedTriangulation{Dc,Dp,A,B} <: DistributedGridapType
+struct DistributedTriangulation{Dc,Dp,A,B} <: GridapType
   trians::A
   model::B
   function DistributedTriangulation(
