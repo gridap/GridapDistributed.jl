@@ -365,7 +365,7 @@ function allocate_rcv_buffer(t::Type{T},g::RedistributeGlue) where T
   data = zeros(T,ptrs[end]-1)
   JaggedArray(data,ptrs)
 end 
-function allocate_snd_bufer(t::Type{T},g::RedistributeGlue) where T
+function allocate_snd_buffer(t::Type{T},g::RedistributeGlue) where T
   ptrs = local_indices_snd.ptrs
   data = zeros(T,ptrs[end]-1)
   JaggedArray(data,ptrs)
