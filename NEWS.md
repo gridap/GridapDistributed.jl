@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- Reverted some changes introduced in PR [98](https://github.com/gridap/GridapDistributed.jl/pull/98). Eliminated `DistributedGridapType`. Functions `local_views` and `get_parts` now take argument of type `Any`. Since PR [117](https://github.com/gridap/GridapDistributed.jl/pull/117).
 
 ### Fixed
 

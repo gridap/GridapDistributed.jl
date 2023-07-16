@@ -21,9 +21,26 @@ for np in nps
 end
 
 include("../PeriodicBCsTests.jl")
-with_debug(PeriodicBCsTests.main,(2,2))
-with_debug(PeriodicBCsTests.main,(2,1))
-with_debug(PeriodicBCsTests.main,(1,1))
-with_debug(PeriodicBCsTests.main,(1,2))
-with_debug(PeriodicBCsTests.main,(2,3))
+
+
+with_debug() do distribute
+  PeriodicBCsTests.main(distribute,(2,2))
+end 
+
+with_debug() do distribute
+  PeriodicBCsTests.main(distribute,(2,1))
+end 
+
+with_debug() do distribute
+  PeriodicBCsTests.main(distribute,(1,1))
+end 
+
+with_debug() do distribute
+  PeriodicBCsTests.main(distribute,(1,2))
+end 
+
+with_debug() do distribute 
+  PeriodicBCsTests.main(distribute,(2,3))
+end 
+
 end # module

@@ -9,7 +9,7 @@ const no_ghost = NoGhost()
 # This object cannot implement the Grid interface in a strict sense
 """
 """
-struct DistributedGrid{Dc,Dp,A} <: DistributedGridapType
+struct DistributedGrid{Dc,Dp,A} <: GridapType
   grids::A
   function DistributedGrid(grids::AbstractArray{<:Grid{Dc,Dp}}) where {Dc,Dp}
     A = typeof(grids)
@@ -38,7 +38,7 @@ Geometry.num_point_dims(::Type{<:DistributedGrid{Dc,Dp}}) where {Dc,Dp} = Dp
 # This object cannot implement the GridTopology interface in a strict sense
 """
 """
-struct DistributedGridTopology{Dc,Dp,A} <: DistributedGridapType
+struct DistributedGridTopology{Dc,Dp,A} <: GridapType
   topos::A
   function DistributedGridTopology(topos::AbstractArray{<:GridTopology{Dc,Dp}}) where {Dc,Dp}
     A = typeof(topos)
@@ -83,7 +83,7 @@ end
 
 """
 """
-abstract type DistributedDiscreteModel{Dc,Dp} <: DistributedGridapType end
+abstract type DistributedDiscreteModel{Dc,Dp} <: GridapType end
 
 function generate_gids(::DistributedDiscreteModel)
   @abstractmethod
@@ -342,54 +342,37 @@ end
   RedistributeGlue
 
   Glue linking two distributions of the same mesh.
-
-  - `exchanger`: Send/Receive exchanger information between old and new mesh.
-  - `old2new`  : Mapping of local IDs from the old to the new mesh.
-  - `new2old`  : Mapping of local IDs from the new to the old mesh.
+  - `parts_rcv`: Array with the part IDs from which each part receives
+  - `parts_snd`: Array with the part IDs to which each part sends
+  - `lids_rcv` : Local IDs of the entries that are received from each part
+  - `lids_snd` : Local IDs of the entries that are sent to each part
+  - `old2new`  : Mapping of local IDs from the old to the new mesh
+  - `new2old`  : Mapping of local IDs from the new to the old mesh
 """
 struct RedistributeGlue
-  exchanger# ::PArrays.Exchanger
-  old2new   ::AbstractArray{<:AbstractVector{<:Integer}}
-  new2old   ::AbstractArray{<:AbstractVector{<:Integer}}
+  parts_rcv :: AbstractArray{<:AbstractVector{<:Integer}}
+  parts_snd :: AbstractArray{<:AbstractVector{<:Integer}}
+  lids_rcv  :: AbstractArray{<:JaggedArray{<:Integer}}
+  lids_snd  :: AbstractArray{<:JaggedArray{<:Integer}}
+  old2new   :: AbstractArray{<:AbstractVector{<:Integer}}
+  new2old   :: AbstractArray{<:AbstractVector{<:Integer}}
 end
 
-function RedistributeGlue(
-    parts_rcv ::AbstractArray{<:AbstractVector{<:Integer}},
-    parts_snd ::AbstractArray{<:AbstractVector{<:Integer}},
-    lids_rcv  ::AbstractArray{<:JaggedArray{<:Integer}},
-    lids_snd  ::AbstractArray{<:JaggedArray{<:Integer}},
-    old2new   ::AbstractArray{<:AbstractVector{<:Integer}},
-    new2old   ::AbstractArray{<:AbstractVector{<:Integer}})
-  ex = PArrays.Exchanger(parts_rcv,parts_snd,lids_rcv,lids_snd)
-  return RedistributeGlue(ex,old2new,new2old)
+get_parts(g::RedistributeGlue) = get_parts(g.parts_rcv)
+
+function allocate_rcv_buffer(t::Type{T},g::RedistributeGlue) where T
+  ptrs = local_indices_rcv.ptrs
+  data = zeros(T,ptrs[end]-1)
+  JaggedArray(data,ptrs)
+end 
+function allocate_snd_buffer(t::Type{T},g::RedistributeGlue) where T
+  ptrs = local_indices_snd.ptrs
+  data = zeros(T,ptrs[end]-1)
+  JaggedArray(data,ptrs)
 end
-
-# Bridge properties from Exchanger to ResdistributeGlue
-function Base.getproperty(x::RedistributeGlue, sym::Symbol)
-  if sym === :parts_rcv
-    x.exchanger.parts_rcv
-  elseif sym === :parts_snd
-    x.exchanger.parts_snd
-  elseif sym === :lids_rcv
-    x.exchanger.lids_rcv
-  elseif sym === :lids_snd
-    x.exchanger.lids_snd
-  else
-    getfield(x, sym)
-  end
-end
-
-function Base.propertynames(x::RedistributeGlue, private::Bool=false)
-  (fieldnames(typeof(x))...,fieldnames(typeof(x.exchanger))...)
-end
-
-get_parts(g::RedistributeGlue) = PArrays.get_part_ids(g.old2new)
-
-allocate_rcv_buffer(t::Type{T},g::RedistributeGlue) where T = allocate_rcv_buffer(t,g.exchanger)
-allocate_snd_buffer(t::Type{T},g::RedistributeGlue) where T = allocate_snd_buffer(t,g.exchanger)
 
 """
-  Redistributes an DistributedDiscreteModel to optimaly 
+  Redistributes an DistributedDiscreteModel to optimally 
   rebalance the loads between the processors. 
   Returns the rebalanced model and a RedistributeGlue instance. 
 """
@@ -403,7 +386,7 @@ end
 # This object cannot implement the Triangulation interface in a strict sense
 """
 """
-struct DistributedTriangulation{Dc,Dp,A,B} <: DistributedGridapType
+struct DistributedTriangulation{Dc,Dp,A,B} <: GridapType
   trians::A
   model::B
   function DistributedTriangulation(

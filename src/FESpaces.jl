@@ -248,7 +248,7 @@ end
 # FEFunction related
 """
 """
-struct DistributedFEFunctionData{T<:AbstractVector} <:DistributedGridapType
+struct DistributedFEFunctionData{T<:AbstractVector} <:GridapType
   free_values::T
 end
 
