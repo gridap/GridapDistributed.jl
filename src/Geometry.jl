@@ -319,67 +319,6 @@ function Geometry.DiscreteModel(
   GenericDistributedDiscreteModel(models,gids)
 end
 
-# DistributedAdaptedDiscreteModels
-
-const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:AdaptedDiscreteModel{Dc,Dp}}}
-
-function DistributedAdaptedDiscreteModel(model  ::DistributedDiscreteModel,
-                                         parent ::DistributedDiscreteModel,
-                                         glue   ::AbstractArray{<:AdaptivityGlue})
-  models = map(local_views(model),local_views(parent),glue) do model, parent, glue
-    AdaptedDiscreteModel(model,parent,glue)
-  end
-  return GenericDistributedDiscreteModel(models,get_cell_gids(model))
-end
-
-function Adaptivity.get_adaptivity_glue(model::DistributedAdaptedDiscreteModel)
-  return map(Adaptivity.get_adaptivity_glue,local_views(model))
-end
-
-# RedistributeGlue : Redistributing discrete models
-
-"""
-  RedistributeGlue
-
-  Glue linking two distributions of the same mesh.
-  - `parts_rcv`: Array with the part IDs from which each part receives
-  - `parts_snd`: Array with the part IDs to which each part sends
-  - `lids_rcv` : Local IDs of the entries that are received from each part
-  - `lids_snd` : Local IDs of the entries that are sent to each part
-  - `old2new`  : Mapping of local IDs from the old to the new mesh
-  - `new2old`  : Mapping of local IDs from the new to the old mesh
-"""
-struct RedistributeGlue
-  parts_rcv :: AbstractArray{<:AbstractVector{<:Integer}}
-  parts_snd :: AbstractArray{<:AbstractVector{<:Integer}}
-  lids_rcv  :: AbstractArray{<:JaggedArray{<:Integer}}
-  lids_snd  :: AbstractArray{<:JaggedArray{<:Integer}}
-  old2new   :: AbstractArray{<:AbstractVector{<:Integer}}
-  new2old   :: AbstractArray{<:AbstractVector{<:Integer}}
-end
-
-get_parts(g::RedistributeGlue) = get_parts(g.parts_rcv)
-
-function allocate_rcv_buffer(t::Type{T},g::RedistributeGlue) where T
-  ptrs = local_indices_rcv.ptrs
-  data = zeros(T,ptrs[end]-1)
-  JaggedArray(data,ptrs)
-end 
-function allocate_snd_buffer(t::Type{T},g::RedistributeGlue) where T
-  ptrs = local_indices_snd.ptrs
-  data = zeros(T,ptrs[end]-1)
-  JaggedArray(data,ptrs)
-end
-
-"""
-  Redistributes an DistributedDiscreteModel to optimally 
-  rebalance the loads between the processors. 
-  Returns the rebalanced model and a RedistributeGlue instance. 
-"""
-function redistribute(::DistributedDiscreteModel,args...;kwargs...)
-  @abstractmethod
-end
-
 # Triangulation
 
 # We do not inherit from Triangulation on purpose.

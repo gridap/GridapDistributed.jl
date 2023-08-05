@@ -49,6 +49,13 @@ function FESpaces.gather_free_and_dirichlet_values!(free_values,dirichlet_values
   map(gather_free_and_dirichlet_values!, local_views(free_values), local_views(dirichlet_values), local_views(f), local_views(cell_vals))
 end
 
+function FESpaces.gather_free_and_dirichlet_values(f::DistributedFESpace,cell_vals)
+  free_values, dirichlet_values = map(local_views(f),cell_vals) do f, cell_vals
+    FESpaces.gather_free_and_dirichlet_values(f,cell_vals)
+  end |> tuple_of_arrays
+  return free_values, dirichlet_values
+end
+
 function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_prange)
   map(cell_wise_vector,
           dof_wise_vector,
