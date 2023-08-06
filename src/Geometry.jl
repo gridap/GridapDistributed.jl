@@ -301,7 +301,7 @@ function Geometry.DiscreteModel(
   end |> tuple_of_arrays
 
   partition = map(parts,lcell_to_cell,lcell_to_part) do part, lcell_to_cell, lcell_to_part
-    LocalIndices(part, ncells, lcell_to_cell, lcell_to_part)
+    LocalIndices(ncells, part, lcell_to_cell, lcell_to_part)
   end 
 
   # This is required to provide the hint that the communication 
@@ -309,7 +309,7 @@ function Geometry.DiscreteModel(
   # to execute the algorithm the reconstructs the reciprocal in the 
   # communication graph
   assembly_neighbors(partition;symmetric=true)
-   
+
   gids = PRange(partition)
 
   models = map(lcell_to_cell) do lcell_to_cell
