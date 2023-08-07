@@ -1,3 +1,4 @@
+module AdaptivityTests
 using Test
 
 using Gridap
@@ -235,3 +236,5 @@ end
 with_mpi() do distribute
   run(distribute)
 end
+
+end # module AdaptivityTests
