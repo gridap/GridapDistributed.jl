@@ -58,8 +58,6 @@ include("TransientMultiFieldDistributedCellField.jl")
 
 include("TransientFESpaces.jl")
 
-include("VoidTypes.jl")
-
 include("Adaptivity.jl")
 
 end # module

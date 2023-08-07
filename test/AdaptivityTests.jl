@@ -9,7 +9,7 @@ using MPI
 using GridapDistributed
 using PartitionedArrays
 
-using GridapDistributed: i_am_in, MPIVoidVector
+using GridapDistributed: i_am_in, generate_subparts
 using GridapDistributed: find_local_to_local_map
 using GridapDistributed: DistributedAdaptedDiscreteModel
 using GridapDistributed: RedistributeGlue, redistribute_cell_dofs, redistribute_fe_function, redistribute_free_values
@@ -23,34 +23,6 @@ end
 
 function are_equal(a1::PVector,a2::PVector)
   are_equal(own_values(a1),own_values(a2))
-end
-
-function generate_subcommunicator(parts::MPIArray,new_comm_size)
-  root_comm = parts.comm
-  root_size = MPI.Comm_size(root_comm)
-  rank = MPI.Comm_rank(root_comm)
-
-  @static if isdefined(MPI,:MPI_UNDEFINED)
-    mpi_undefined = MPI.MPI_UNDEFINED[]
-  else
-    mpi_undefined = MPI.API.MPI_UNDEFINED[]
-  end
-  
-  if root_size == new_comm_size
-    return parts
-  else
-    if rank < new_comm_size
-      comm = MPI.Comm_split(root_comm,0,0)
-      return distribute_with_mpi(LinearIndices((new_comm_size,));comm=comm,duplicate_comm=false)
-    else
-      comm = MPI.Comm_split(root_comm,mpi_undefined,mpi_undefined)
-      return MPIVoidVector(eltype(parts))
-    end
-  end
-end
-
-function generate_subcommunicator(parts::DebugArray,new_comm_size)
-  DebugArray(LinearIndices((new_comm_size,)))
 end
 
 function DistributedAdaptivityGlue(serial_glue,parent,child)
@@ -222,7 +194,7 @@ end
 
 function run(distribute)
   fine_ranks = distribute(LinearIndices((4,)))
-  coarse_ranks = coarse_ranks = generate_subcommunicator(fine_ranks,2)
+  coarse_ranks = coarse_ranks = generate_subparts(fine_ranks,2)
 
   # Create models and glues 
   serial_parent = UnstructuredDiscreteModel(CartesianDiscreteModel((0,1,0,1),(4,4)))
