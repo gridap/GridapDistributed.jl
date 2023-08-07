@@ -11,6 +11,7 @@ using PartitionedArrays
 
 using GridapDistributed: i_am_in, MPIVoidVector, VoidDistributedDiscreteModel, VoidDistributedFESpace
 using GridapDistributed: find_local_to_local_map
+using GridapDistributed: DistributedAdaptedDiscreteModel
 using GridapDistributed: RedistributeGlue, redistribute_cell_dofs, redistribute_fe_function, redistribute_free_values
 
 function are_equal(a1::MPIArray,a2::MPIArray)
@@ -54,10 +55,12 @@ end
 
 function DistributedAdaptivityGlue(serial_glue,parent,child)
   glue = map(partition(get_cell_gids(parent)),partition(get_cell_gids(child))) do parent_gids, child_gids
+    old_g2l = global_to_local(parent_gids)
     old_l2g = local_to_global(parent_gids)
     new_l2g = local_to_global(child_gids)
-  
-    n2o_faces_map = [Int64[],Int64[],serial_glue.n2o_faces_map[3][new_l2g]]
+
+    n2o_cell_map  = lazy_map(Reindex(old_g2l),serial_glue.n2o_faces_map[3][new_l2g])
+    n2o_faces_map = [Int64[],Int64[],collect(n2o_cell_map)]
     n2o_cell_to_child_id = serial_glue.n2o_cell_to_child_id[new_l2g]
     rrules = serial_glue.refinement_rules[old_l2g]
     AdaptivityGlue(n2o_faces_map,n2o_cell_to_child_id,rrules)
@@ -175,6 +178,47 @@ function test_redistribution(coarse_ranks, fine_ranks, model, redist_model, redi
   return true
 end
 
+function test_adaptivity(ranks,cmodel,fmodel,glue)
+  if i_am_in(ranks)
+    sol(x) = sum(x)
+    reffe  = ReferenceFE(lagrangian,Float64,1)
+    amodel = DistributedAdaptedDiscreteModel(fmodel,cmodel,glue)
+
+    Ωf  = Triangulation(amodel)
+    dΩf = Measure(Ωf,2)
+    Vf  = FESpace(amodel,reffe)
+    Uf  = TrialFESpace(Vf)
+    uh_fine = interpolate(sol,Vf)
+
+    Ωc  = Triangulation(cmodel)
+    dΩc = Measure(Ωc,2)
+    Vc  = FESpace(cmodel,reffe)
+    Uc  = TrialFESpace(Vc)
+    uh_coarse = interpolate(sol,Vc)
+
+    dΩcf = Measure(Ωc,Ωf,2)
+
+    # Coarse to Fine projection
+    af(u,v) = ∫(u⋅v)*dΩf
+    lf(v) = ∫(uh_coarse*v)*dΩf
+    op = AffineFEOperator(af,lf,Uf,Vf)
+    uh_coarse_to_fine = solve(op)
+
+    eh  = uh_fine - uh_coarse_to_fine
+    @test sum(∫(eh⋅eh)*dΩf) < 1e-8
+
+    # Fine to Coarse projection
+    ac(u,v) = ∫(u⋅v)*dΩc
+    lc(v) = ∫(uh_fine*v)*dΩcf
+    op = AffineFEOperator(ac,lc,Uc,Vc)
+    uh_fine_to_coarse = solve(op)
+
+    eh  = uh_coarse - uh_fine_to_coarse
+    @test sum(∫(eh⋅eh)*dΩc) < 1e-8
+
+  end
+end
+
 ############################################################################################
 
 function run(distribute)
@@ -207,7 +251,12 @@ function run(distribute)
   fine_adaptivity_glue = DistributedAdaptivityGlue(serial_rglue,redist_parent,redist_child)
   redist_glue_child = get_redistribute_glue(coarse_ranks,fine_ranks,child_cell_to_part,redist_child_cell_to_part,child,redist_child);
 
+  # Tests
   test_redistribution(coarse_ranks,fine_ranks,parent,redist_parent,redist_glue_parent)
+  test_redistribution(coarse_ranks,fine_ranks,child,redist_child,redist_glue_child)
+
+  test_adaptivity(coarse_ranks,parent,child,coarse_adaptivity_glue)
+  test_adaptivity(fine_ranks,redist_parent,redist_child,fine_adaptivity_glue)
 
   return
 end
