@@ -40,5 +40,10 @@ function all_tests(distribute,parts)
   TestApp.StokesOpenBoundaryTests.main(distribute,parts)
   PArrays.toc!(t,"StokesOpenBoundary")
 
+  if prod(parts) == 4
+    TestApp.AdaptivityTests.main(distribute)
+    PArrays.toc!(t,"Adaptivity")
+  end
+
   display(t)
 end
