@@ -9,7 +9,7 @@ using MPI
 using GridapDistributed
 using PartitionedArrays
 
-using GridapDistributed: i_am_in, MPIVoidVector, VoidDistributedDiscreteModel, VoidDistributedFESpace
+using GridapDistributed: i_am_in, MPIVoidVector
 using GridapDistributed: find_local_to_local_map
 using GridapDistributed: DistributedAdaptedDiscreteModel
 using GridapDistributed: RedistributeGlue, redistribute_cell_dofs, redistribute_fe_function, redistribute_free_values
@@ -97,7 +97,7 @@ function get_redistribute_glue(old_parts,new_parts::DebugArray,old_cell_to_part,
     return parts_rcv,parts_snd,JaggedArray(lids_rcv),JaggedArray(lids_snd),old2new,new2old
   end |> tuple_of_arrays
 
-  return RedistributeGlue(parts_rcv,parts_snd,lids_rcv,lids_snd,old2new,new2old)
+  return RedistributeGlue(new_parts,old_parts,parts_rcv,parts_snd,lids_rcv,lids_snd,old2new,new2old)
 end
 
 function get_redistribute_glue(old_parts,new_parts::MPIArray,old_cell_to_part,new_cell_to_part,model,redist_model)
@@ -129,7 +129,7 @@ function get_redistribute_glue(old_parts,new_parts::MPIArray,old_cell_to_part,ne
     return parts_rcv,parts_snd,JaggedArray(lids_rcv),JaggedArray(lids_snd),old2new,new2old
   end |> tuple_of_arrays
 
-  return RedistributeGlue(parts_rcv,parts_snd,lids_rcv,lids_snd,old2new,new2old)
+  return RedistributeGlue(new_parts,old_parts,parts_rcv,parts_snd,lids_rcv,lids_snd,old2new,new2old)
 end
 
 function test_redistribution(coarse_ranks, fine_ranks, model, redist_model, redist_glue)
@@ -143,8 +143,7 @@ function test_redistribution(coarse_ranks, fine_ranks, model, redist_model, redi
     free_values = get_free_dof_values(u)
     dir_values = zero_dirichlet_values(space)
   else
-    space = VoidDistributedFESpace(coarse_ranks)
-    u = nothing; cell_dofs = nothing; free_values = nothing; dir_values = nothing;
+    space = nothing; u = nothing; cell_dofs = nothing; free_values = nothing; dir_values = nothing;
   end
 
   redist_space = FESpace(redist_model,reffe)
@@ -215,8 +214,8 @@ function test_adaptivity(ranks,cmodel,fmodel,glue)
 
     eh  = uh_coarse - uh_fine_to_coarse
     @test sum(∫(eh⋅eh)*dΩc) < 1e-8
-
   end
+  return true
 end
 
 ############################################################################################
@@ -237,9 +236,7 @@ function run(distribute)
     child  = DiscreteModel(coarse_ranks,serial_child,child_cell_to_part)
     coarse_adaptivity_glue = DistributedAdaptivityGlue(serial_rglue,parent,child)
   else
-    parent = VoidDistributedDiscreteModel(2,2,coarse_ranks)
-    child  = VoidDistributedDiscreteModel(2,2,coarse_ranks)
-    coarse_adaptivity_glue = nothing
+    parent = nothing; child  = nothing; coarse_adaptivity_glue = nothing
   end
 
   redist_parent_cell_to_part = [1,1,2,2,1,1,2,2,3,3,4,4,3,3,4,4]

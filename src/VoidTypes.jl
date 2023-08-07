@@ -55,21 +55,3 @@ function change_parts(x::Union{MPIArray,DebugArray,Nothing,MPIVoidVector}, new_p
   end
   return x_new
 end
-
-# VoidStructures
-
-struct VoidDistributedDiscreteModel{Dc,Dp,A} <: GridapDistributed.DistributedDiscreteModel{Dc,Dp}
-  parts::A
-  function VoidDistributedDiscreteModel(Dc::Int,Dp::Int,parts)
-    A = typeof(parts)
-    return new{Dc,Dp,A}(parts)
-  end
-end
-
-get_parts(x::VoidDistributedDiscreteModel) = x.parts
-
-struct VoidDistributedFESpace{A} <: Gridap.GridapType
-  parts::A
-end
-
-get_parts(x::VoidDistributedFESpace) = x.parts
