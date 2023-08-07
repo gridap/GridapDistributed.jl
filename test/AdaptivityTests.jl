@@ -193,9 +193,9 @@ end
 
 ############################################################################################
 
-function run(distribute)
+function main(distribute)
   fine_ranks = distribute(LinearIndices((4,)))
-  coarse_ranks = coarse_ranks = generate_subparts(fine_ranks,2)
+  coarse_ranks = generate_subparts(fine_ranks,2)
 
   # Create models and glues 
   serial_parent = UnstructuredDiscreteModel(CartesianDiscreteModel((0,1,0,1),(4,4)))
@@ -229,12 +229,6 @@ function run(distribute)
   test_adaptivity(fine_ranks,redist_parent,redist_child,fine_adaptivity_glue)
 
   return
-end
-
-############################################################################################
-
-with_mpi() do distribute
-  run(distribute)
 end
 
 end # module AdaptivityTests

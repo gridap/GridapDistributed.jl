@@ -11,4 +11,5 @@ module TestApp
   include("../../TransientMultiFieldDistributedCellFieldTests.jl")
   include("../../HeatEquationTests.jl")
   include("../../StokesOpenBoundaryTests.jl")
+  include("../../AdaptivityTests.jl")
 end
