@@ -224,7 +224,7 @@ function redistribute_cell_dofs!(caches,
   _unpack_rcv_data!(cell_dof_values_new,rcv_data,lids_rcv)
 
   # Now that every part knows it's new owned dofs, exchange ghosts
-  new_parts = model_new.parts
+  new_parts = get_parts(model_new)
   cell_dof_values_new = change_parts(cell_dof_values_new,new_parts)
   if i_am_in(new_parts)
     cache = fetch_vector_ghost_values_cache(cell_dof_values_new,partition(get_cell_gids(model_new)))
@@ -256,7 +256,7 @@ function get_redistribute_free_values_cache(fv_new::Union{PVector,Nothing},
   return caches
 end
 
-function redistribute_free_values!(fv_new::Union{PVector,Nothing},
+function redistribute_free_values(fv_new::Union{PVector,Nothing},
                                   Uh_new::Union{DistributedSingleFieldFESpace,VoidDistributedFESpace},
                                   fv_old::Union{PVector,Nothing},
                                   dv_old::Union{AbstractArray,Nothing},
