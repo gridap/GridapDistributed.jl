@@ -1,9 +1,51 @@
 
-struct VoidDistributedFESpace{A} <: Gridap.GridapType
-  parts::A
+# This type is required because MPIArray from PArrays 
+# cannot be instantiated with a NULL communicator
+struct MPIVoidVector{T} <: AbstractVector{T}
+  comm::MPI.Comm
+  function MPIVoidVector(::Type{T}) where {T}
+    new{T}(MPI.COMM_NULL)
+  end
 end
 
-function change_parts(x::Union{MPIArray,DebugArray,Nothing}, new_parts; default=nothing)
+Base.size(a::MPIVoidVector) = (0,)
+Base.IndexStyle(::Type{<:MPIVoidVector}) = IndexLinear()
+function Base.getindex(a::MPIVoidVector,i::Int)
+  error("Indexing of MPIVoidVector not possible.")
+end
+function Base.setindex!(a::MPIVoidVector,v,i::Int)
+  error("Indexing of MPIVoidVector not possible.")
+end
+function Base.show(io::IO,k::MIME"text/plain",data::MPIVoidVector)
+  println(io,"MPIVoidVector")
+end
+
+# i_am_in
+
+function get_part_id(comm::MPI.Comm)
+  if comm != MPI.COMM_NULL
+    id = MPI.Comm_rank(comm)+1
+  else
+    id = -1
+  end
+  id
+end
+
+function i_am_in(comm::MPI.Comm)
+  get_part_id(comm) >=0
+end
+
+function i_am_in(comm::MPIArray)
+  i_am_in(comm.comm)
+end
+
+function i_am_in(comm::MPIVoidVector)
+  i_am_in(comm.comm)
+end
+
+# change_parts
+
+function change_parts(x::Union{MPIArray,DebugArray,Nothing,MPIVoidVector}, new_parts; default=nothing)
   x_new = map(new_parts) do _p
     if isa(x,MPIArray) || isa(x,DebugArray)
       PartitionedArrays.getany(x)
@@ -13,3 +55,21 @@ function change_parts(x::Union{MPIArray,DebugArray,Nothing}, new_parts; default=
   end
   return x_new
 end
+
+# VoidStructures
+
+struct VoidDistributedDiscreteModel{Dc,Dp,A} <: GridapDistributed.DistributedDiscreteModel{Dc,Dp}
+  parts::A
+  function VoidDistributedDiscreteModel(Dc::Int,Dp::Int,parts)
+    A = typeof(parts)
+    return new{Dc,Dp,A}(parts)
+  end
+end
+
+get_parts(x::VoidDistributedDiscreteModel) = x.parts
+
+struct VoidDistributedFESpace{A} <: Gridap.GridapType
+  parts::A
+end
+
+get_parts(x::VoidDistributedFESpace) = x.parts
