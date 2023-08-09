@@ -194,21 +194,67 @@ function Geometry.CartesianDiscreteModel(
   desc = CartesianDescriptor(args...;isperiodic=isperiodic,kwargs...)
   nc = desc.partition
   msg = """
-  #A CartesianDiscreteModel needs a Cartesian subdomain partition
-  #of the right dimensions.
-  #"""
+    A CartesianDiscreteModel needs a Cartesian subdomain partition
+    of the right dimensions.
+  """
   @assert N == length(nc) msg
 
-  ghost=map(i->true,parts)
-  upartition=uniform_partition(ranks,parts,nc,ghost,isperiodic)
-  gcids=CartesianIndices(nc)
-  models=map(ranks,upartition) do rank, upartition
-     cmin = gcids[first(upartition)]
-     cmax = gcids[last(upartition)]
-     CartesianDiscreteModel(desc,cmin,cmax)  
+  if any(isperiodic)
+    _cartesian_model_with_periodic_bcs(ranks,parts,desc)
+  else
+    ghost = map(i->true,parts)
+    upartition = uniform_partition(ranks,parts,nc,ghost,isperiodic)
+    gcids  = CartesianIndices(nc)
+    models = map(ranks,upartition) do rank, upartition
+      cmin = gcids[first(upartition)]
+      cmax = gcids[last(upartition)]
+      CartesianDiscreteModel(desc,cmin,cmax)  
+    end
+    gids = PRange(upartition)
+    return GenericDistributedDiscreteModel(models,gids)
   end
-  gids=PRange(upartition)
-  GenericDistributedDiscreteModel(models,gids)
+end
+
+function _cartesian_model_with_periodic_bcs(ranks,parts,desc)
+  # We create and extended CartesianDescriptor for the local models: 
+  # If a direction is periodic and partitioned: 
+  #   - we add a ghost cell at either side, which will be made periodic by the index partition.
+  #   - We move the origin to accomodate the new cells. 
+  #   - We turn OFF the periodicity in the local model, since periodicity will be taken care of
+  #     by the global index partition.
+  _map = desc.map #! Important: the map should be periodic if you want to integrate on the ghost cells.
+  _sizes  = desc.sizes
+  _origin, _partition, _isperiodic = map(parts,desc.isperiodic,Tuple(desc.origin),_sizes,desc.partition) do np,isp,o,h,nc
+    if isp && (np != 1)
+      return o-h, nc+2, false
+    else
+      return o, nc, isp
+    end
+  end |> tuple_of_arrays
+  _desc = CartesianDescriptor(Point(_origin),_sizes,_partition;map=_map,isperiodic=_isperiodic)
+
+  # We create the global index partition, which has the original number of cells per direction. 
+  # Globally, the periodicity is turned ON in the directions which are periodic and partitioned
+  # (if a direction is not partitioned, the periodicity is handled locally).
+  ghost = map(i->true,parts)
+  global_isperiodic = map((isp,np) -> (np==1) ? false : isp, desc.isperiodic,parts)
+  global_partition = uniform_partition(ranks,parts,desc.partition,ghost,global_isperiodic)
+
+  # We create the local models:
+  #  - We create an index partition for with the extended cells, and turn OFF the periodicty in 
+  #    all directions (since it is handled by the local models).
+  #  - We create the local models with the extended cells, and periodicity only in the directions
+  #    that are periodic and NOT partitioned.
+  extended_partition = uniform_partition(ranks,parts,_partition,ghost)
+  gcids  = CartesianIndices(_partition)
+  models = map(extended_partition) do extended_partition
+    cmin = gcids[first(extended_partition)]
+    cmax = gcids[last(extended_partition)]
+    remove_boundary = map((p,n)->(p&&n!=1 ? true : false),desc.isperiodic,parts)
+    CartesianDiscreteModel(_desc,cmin,cmax,remove_boundary)
+  end
+  gids = PRange(global_partition)
+  return GenericDistributedDiscreteModel(models,gids)
 end
 
 ## Helpers to partition a serial model
