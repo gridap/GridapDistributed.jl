@@ -65,7 +65,7 @@ function main(ranks)
   writevtk(Ω,"results",cellfields=["uh"=>uh,"grad_uh"=>∇(uh)])
 end
 with_mpi() do distribute 
-	ranks = distribute_with_mpi(LinearIndices((4,)))
+  ranks = distribute_with_mpi(LinearIndices((4,)))
   main(ranks)
 end
 ```
@@ -115,7 +115,7 @@ function main(ranks)
   end
 end
 with_mpi() do distribute 
-	ranks = distribute_with_mpi(LinearIndices((6,)))
+  ranks = distribute_with_mpi(LinearIndices((6,)))
   main(ranks)
 end
 ```
