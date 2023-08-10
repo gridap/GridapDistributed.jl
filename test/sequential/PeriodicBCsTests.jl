@@ -41,6 +41,14 @@ end
 
 with_debug() do distribute 
   PeriodicBCsTests.main(distribute,(2,3))
+end
+
+with_debug() do distribute 
+  PeriodicBCsTests.main(distribute,(4,1))
+end
+
+with_debug() do distribute 
+  PeriodicBCsTests.main(distribute,(1,4))
 end 
 
 end # module
