@@ -241,16 +241,20 @@ function _cartesian_model_with_periodic_bcs(ranks,parts,desc)
   global_partition = uniform_partition(ranks,parts,desc.partition,ghost,global_isperiodic)
 
   # We create the local models:
-  #  - We create an index partition for with the extended cells, and turn OFF the periodicty in 
-  #    all directions (since it is handled by the local models).
+  #  - We create the cartesian ranges for the extended partition, taking into account the periodicity
+  #    in the directions that are periodic and partitioned.
   #  - We create the local models with the extended cells, and periodicity only in the directions
   #    that are periodic and NOT partitioned.
-  extended_partition = uniform_partition(ranks,parts,_partition,ghost)
-  gcids  = CartesianIndices(_partition)
-  models = map(extended_partition) do extended_partition
-    cmin = gcids[first(extended_partition)]
-    cmax = gcids[last(extended_partition)]
-    remove_boundary = map((p,n)->(p&&n!=1 ? true : false),desc.isperiodic,parts)
+  ranges = map(ranks) do rank
+    p = Tuple(CartesianIndices(parts)[rank])
+    ranges = map(PartitionedArrays.local_range,p,parts,desc.partition,ghost,global_isperiodic)
+    return map((r,isp,g,np) -> (isp && g && (np != 1)) ? r .+ 1 : r, ranges,global_isperiodic,ghost,parts)
+  end
+  cgids  = CartesianIndices(_partition)
+  models = map(ranges) do range
+    cmin = cgids[map(first,range)...]
+    cmax = cgids[map(last,range)...]
+    remove_boundary = map((p,n)->((p && (n!=1)) ? true : false),desc.isperiodic,parts)
     CartesianDiscreteModel(_desc,cmin,cmax,remove_boundary)
   end
   gids = PRange(global_partition)
