@@ -96,7 +96,7 @@ using PartitionedArrays
 function main(ranks)
   options = "-ksp_type cg -pc_type gamg -ksp_monitor"
   GridapPETSc.with(args=split(options)) do
-    model = GmshDiscreteModel(parts,"demo.msh")
+    model = GmshDiscreteModel(ranks,"demo.msh")
     order = 1
     dirichlet_tags = ["boundary1","boundary2"]
     u_boundary1(x) = 0.0
