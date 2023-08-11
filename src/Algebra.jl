@@ -16,6 +16,91 @@ function change_axes(a::Algebra.AllocationCOO{T,A}, axes::A) where {T,A}
   Algebra.AllocationCOO(counter,a.I,a.J,a.V)
 end
 
+# This type is required because MPIArray from PArrays 
+# cannot be instantiated with a NULL communicator
+struct MPIVoidVector{T} <: AbstractVector{T}
+  comm::MPI.Comm
+  function MPIVoidVector(::Type{T}) where {T}
+    new{T}(MPI.COMM_NULL)
+  end
+end
+
+Base.size(a::MPIVoidVector) = (0,)
+Base.IndexStyle(::Type{<:MPIVoidVector}) = IndexLinear()
+function Base.getindex(a::MPIVoidVector,i::Int)
+  error("Indexing of MPIVoidVector not possible.")
+end
+function Base.setindex!(a::MPIVoidVector,v,i::Int)
+  error("Indexing of MPIVoidVector not possible.")
+end
+function Base.show(io::IO,k::MIME"text/plain",data::MPIVoidVector)
+  println(io,"MPIVoidVector")
+end
+
+# Subcommunicators
+
+function get_part_id(comm::MPI.Comm)
+  if comm != MPI.COMM_NULL
+    id = MPI.Comm_rank(comm)+1
+  else
+    id = -1
+  end
+  id
+end
+
+function i_am_in(comm::MPI.Comm)
+  get_part_id(comm) >=0
+end
+
+function i_am_in(comm::MPIArray)
+  i_am_in(comm.comm)
+end
+
+function i_am_in(comm::MPIVoidVector)
+  i_am_in(comm.comm)
+end
+
+function change_parts(x::Union{MPIArray,DebugArray,Nothing,MPIVoidVector}, new_parts; default=nothing)
+  x_new = map(new_parts) do _p
+    if isa(x,MPIArray) || isa(x,DebugArray)
+      PartitionedArrays.getany(x)
+    else
+      default
+    end
+  end
+  return x_new
+end
+
+function generate_subparts(parts::MPIArray,new_comm_size)
+  root_comm = parts.comm
+  root_size = MPI.Comm_size(root_comm)
+  rank = MPI.Comm_rank(root_comm)
+
+  @static if isdefined(MPI,:MPI_UNDEFINED)
+    mpi_undefined = MPI.MPI_UNDEFINED[]
+  else
+    mpi_undefined = MPI.API.MPI_UNDEFINED[]
+  end
+  
+  if root_size == new_comm_size
+    return parts
+  else
+    if rank < new_comm_size
+      comm = MPI.Comm_split(root_comm,0,0)
+      return distribute_with_mpi(LinearIndices((new_comm_size,));comm=comm,duplicate_comm=false)
+    else
+      comm = MPI.Comm_split(root_comm,mpi_undefined,mpi_undefined)
+      return MPIVoidVector(eltype(parts))
+    end
+  end
+end
+
+function generate_subparts(parts::DebugArray,new_comm_size)
+  DebugArray(LinearIndices((new_comm_size,)))
+end
+
+# local_views
+
 function local_views(a)
   @abstractmethod
 end

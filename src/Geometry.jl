@@ -194,21 +194,71 @@ function Geometry.CartesianDiscreteModel(
   desc = CartesianDescriptor(args...;isperiodic=isperiodic,kwargs...)
   nc = desc.partition
   msg = """
-  #A CartesianDiscreteModel needs a Cartesian subdomain partition
-  #of the right dimensions.
-  #"""
+    A CartesianDiscreteModel needs a Cartesian subdomain partition
+    of the right dimensions.
+  """
   @assert N == length(nc) msg
 
-  ghost=map(i->true,parts)
-  upartition=uniform_partition(ranks,parts,nc,ghost,isperiodic)
-  gcids=CartesianIndices(nc)
-  models=map(ranks,upartition) do rank, upartition
-     cmin = gcids[first(upartition)]
-     cmax = gcids[last(upartition)]
-     CartesianDiscreteModel(desc,cmin,cmax)  
+  if any(isperiodic)
+    _cartesian_model_with_periodic_bcs(ranks,parts,desc)
+  else
+    ghost = map(i->true,parts)
+    upartition = uniform_partition(ranks,parts,nc,ghost,isperiodic)
+    gcids  = CartesianIndices(nc)
+    models = map(ranks,upartition) do rank, upartition
+      cmin = gcids[first(upartition)]
+      cmax = gcids[last(upartition)]
+      CartesianDiscreteModel(desc,cmin,cmax)  
+    end
+    gids = PRange(upartition)
+    return GenericDistributedDiscreteModel(models,gids)
   end
-  gids=PRange(upartition)
-  GenericDistributedDiscreteModel(models,gids)
+end
+
+function _cartesian_model_with_periodic_bcs(ranks,parts,desc)
+  # We create and extended CartesianDescriptor for the local models: 
+  # If a direction is periodic and partitioned: 
+  #   - we add a ghost cell at either side, which will be made periodic by the index partition.
+  #   - We move the origin to accomodate the new cells. 
+  #   - We turn OFF the periodicity in the local model, since periodicity will be taken care of
+  #     by the global index partition.
+  _map = desc.map #! Important: the map should be periodic if you want to integrate on the ghost cells.
+  _sizes  = desc.sizes
+  _origin, _partition, _isperiodic = map(parts,desc.isperiodic,Tuple(desc.origin),_sizes,desc.partition) do np,isp,o,h,nc
+    if isp && (np != 1)
+      return o-h, nc+2, false
+    else
+      return o, nc, isp
+    end
+  end |> tuple_of_arrays
+  _desc = CartesianDescriptor(Point(_origin),_sizes,_partition;map=_map,isperiodic=_isperiodic)
+
+  # We create the global index partition, which has the original number of cells per direction. 
+  # Globally, the periodicity is turned ON in the directions which are periodic and partitioned
+  # (if a direction is not partitioned, the periodicity is handled locally).
+  ghost = map(i->true,parts)
+  global_isperiodic = map((isp,np) -> (np==1) ? false : isp, desc.isperiodic,parts)
+  global_partition = uniform_partition(ranks,parts,desc.partition,ghost,global_isperiodic)
+
+  # We create the local models:
+  #  - We create the cartesian ranges for the extended partition, taking into account the periodicity
+  #    in the directions that are periodic and partitioned.
+  #  - We create the local models with the extended cells, and periodicity only in the directions
+  #    that are periodic and NOT partitioned.
+  ranges = map(ranks) do rank
+    p = Tuple(CartesianIndices(parts)[rank])
+    ranges = map(PartitionedArrays.local_range,p,parts,desc.partition,ghost,global_isperiodic)
+    return map((r,isp,g,np) -> (isp && g && (np != 1)) ? r .+ 1 : r, ranges,global_isperiodic,ghost,parts)
+  end
+  cgids  = CartesianIndices(_partition)
+  models = map(ranges) do range
+    cmin = cgids[map(first,range)...]
+    cmax = cgids[map(last,range)...]
+    remove_boundary = map((p,n)->((p && (n!=1)) ? true : false),desc.isperiodic,parts)
+    CartesianDiscreteModel(_desc,cmin,cmax,remove_boundary)
+  end
+  gids = PRange(global_partition)
+  return GenericDistributedDiscreteModel(models,gids)
 end
 
 ## Helpers to partition a serial model
@@ -317,67 +367,6 @@ function Geometry.DiscreteModel(
   end
 
   GenericDistributedDiscreteModel(models,gids)
-end
-
-# DistributedAdaptedDiscreteModels
-
-const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:AdaptedDiscreteModel{Dc,Dp}}}
-
-function DistributedAdaptedDiscreteModel(model  ::DistributedDiscreteModel,
-                                         parent ::DistributedDiscreteModel,
-                                         glue   ::AbstractArray{<:AdaptivityGlue})
-  models = map(local_views(model),local_views(parent),glue) do model, parent, glue
-    AdaptedDiscreteModel(model,parent,glue)
-  end
-  return GenericDistributedDiscreteModel(models,get_cell_gids(model))
-end
-
-function Adaptivity.get_adaptivity_glue(model::DistributedAdaptedDiscreteModel)
-  return map(Adaptivity.get_adaptivity_glue,local_views(model))
-end
-
-# RedistributeGlue : Redistributing discrete models
-
-"""
-  RedistributeGlue
-
-  Glue linking two distributions of the same mesh.
-  - `parts_rcv`: Array with the part IDs from which each part receives
-  - `parts_snd`: Array with the part IDs to which each part sends
-  - `lids_rcv` : Local IDs of the entries that are received from each part
-  - `lids_snd` : Local IDs of the entries that are sent to each part
-  - `old2new`  : Mapping of local IDs from the old to the new mesh
-  - `new2old`  : Mapping of local IDs from the new to the old mesh
-"""
-struct RedistributeGlue
-  parts_rcv :: AbstractArray{<:AbstractVector{<:Integer}}
-  parts_snd :: AbstractArray{<:AbstractVector{<:Integer}}
-  lids_rcv  :: AbstractArray{<:JaggedArray{<:Integer}}
-  lids_snd  :: AbstractArray{<:JaggedArray{<:Integer}}
-  old2new   :: AbstractArray{<:AbstractVector{<:Integer}}
-  new2old   :: AbstractArray{<:AbstractVector{<:Integer}}
-end
-
-get_parts(g::RedistributeGlue) = get_parts(g.parts_rcv)
-
-function allocate_rcv_buffer(t::Type{T},g::RedistributeGlue) where T
-  ptrs = local_indices_rcv.ptrs
-  data = zeros(T,ptrs[end]-1)
-  JaggedArray(data,ptrs)
-end 
-function allocate_snd_buffer(t::Type{T},g::RedistributeGlue) where T
-  ptrs = local_indices_snd.ptrs
-  data = zeros(T,ptrs[end]-1)
-  JaggedArray(data,ptrs)
-end
-
-"""
-  Redistributes an DistributedDiscreteModel to optimally 
-  rebalance the loads between the processors. 
-  Returns the rebalanced model and a RedistributeGlue instance. 
-"""
-function redistribute(::DistributedDiscreteModel,args...;kwargs...)
-  @abstractmethod
 end
 
 # Triangulation

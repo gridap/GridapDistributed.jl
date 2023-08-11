@@ -3,6 +3,7 @@
 *.jl.mem
 .DS_Store
 /Manifest.toml
+/LocalPreferences.toml
 /dev/
 /docs/build/
 /docs/site/

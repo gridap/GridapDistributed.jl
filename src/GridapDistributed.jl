@@ -15,6 +15,7 @@ using Gridap.MultiField
 using Gridap.ODEs.TransientFETools
 using Gridap.ODEs.ODETools
 
+using MPI
 using PartitionedArrays
 const PArrays = PartitionedArrays
 
@@ -56,5 +57,7 @@ include("TransientDistributedCellField.jl")
 include("TransientMultiFieldDistributedCellField.jl")
 
 include("TransientFESpaces.jl")
+
+include("Adaptivity.jl")
 
 end # module
