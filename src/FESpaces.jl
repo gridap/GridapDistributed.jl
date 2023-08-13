@@ -600,27 +600,37 @@ FESpaces.get_vector_builder(a::DistributedSparseMatrixAssembler) = a.vector_buil
 FESpaces.get_assembly_strategy(a::DistributedSparseMatrixAssembler) = a.strategy
 
 function FESpaces.symbolic_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
-  map(symbolic_loop_matrix!,local_views(A,a.test_dofs_gids_prange,a.trial_dofs_gids_prange),a.assems,matdata)
+  rows = get_rows(a)
+  cols = get_cols(a)
+  map(symbolic_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
 end
 
 function FESpaces.numeric_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
-  map(numeric_loop_matrix!,local_views(A,a.test_dofs_gids_prange,a.trial_dofs_gids_prange),a.assems,matdata)
+  rows = get_rows(a)
+  cols = get_cols(a)
+  map(numeric_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
 end
 
 function FESpaces.symbolic_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
-  map(symbolic_loop_vector!,local_views(b,a.test_dofs_gids_prange),a.assems,vecdata)
+  rows = get_rows(a)
+  map(symbolic_loop_vector!,local_views(b,rows),local_views(a),vecdata)
 end
 
 function FESpaces.numeric_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
-  map(numeric_loop_vector!,local_views(b,a.test_dofs_gids_prange),a.assems,vecdata)
+  rows = get_rows(a)
+  map(numeric_loop_vector!,local_views(b,rows),local_views(a),vecdata)
 end
 
 function FESpaces.symbolic_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
-  map(symbolic_loop_matrix_and_vector!,local_views(A,a.test_dofs_gids_prange,a.trial_dofs_gids_prange),local_views(b,a.test_dofs_gids_prange),a.assems,data)
+  rows = get_rows(a)
+  cols = get_cols(a)
+  map(symbolic_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
 end
 
 function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
-  map(numeric_loop_matrix_and_vector!,local_views(A,a.test_dofs_gids_prange,a.trial_dofs_gids_prange),local_views(b,a.test_dofs_gids_prange),a.assems,data)
+  rows = get_rows(a)
+  cols = get_cols(a)
+  map(numeric_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
 end
 
 # Parallel Assembly strategies

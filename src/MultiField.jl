@@ -395,6 +395,9 @@ end
 
 # BlockSparseMatrixAssemblers
 
+const DistributedBlockSparseMatrixAssembler{NB,NV,SB,P} = 
+  MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P,<:DistributedSparseMatrixAssembler}
+
 function FESpaces.SparseMatrixAssembler(
   local_mat_type,
   local_vec_type,
@@ -433,7 +436,7 @@ end
 function local_views(a::MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P}) where {NB,NV,SB,P}
   assems = a.block_assemblers
   parts = get_part_ids(local_views(first(assems)))
-  map_parts(parts) do p
+  map(parts) do p
     idx = CartesianIndices(axes(assems))
     block_assems = map(idx) do I
       get_part(local_views(assems[I]),p)
@@ -444,7 +447,7 @@ end
 
 function local_views(a::MatrixBlock,rows,cols)
   parts = get_part_ids(local_views(first(a.array)))
-  map_parts(parts) do p
+  map(parts) do p
     idx = CartesianIndices(axes(a))
     array = map(idx) do I
       get_part(local_views(a[I],rows[I[1]],cols[I[2]]),p)
@@ -455,7 +458,7 @@ end
 
 function local_views(a::VectorBlock,rows)
   parts = get_part_ids(local_views(first(a.array)))
-  map_parts(parts) do p
+  map(parts) do p
     idx = CartesianIndices(axes(a))
     array = map(idx) do I
       get_part(local_views(a[I],rows[I]),p)
@@ -464,48 +467,46 @@ function local_views(a::VectorBlock,rows)
   end
 end
 
-function local_views(a::MultiField.ArrayBlockView,axes...)
+function local_views(a::ArrayBlockView,axes...)
   array = local_views(a.array,axes...)
-  map_parts(array) do array
+  map(array) do array
     MultiField.ArrayBlockView(array,a.block_map)
   end
 end
 
-
-#! The following functions could be avoided if we created an abstract superclass for
-#! DistributedSparseMatrixAssembler
-function FESpaces.symbolic_loop_matrix!(A,a::MultiField.BlockSparseMatrixAssembler,matdata::AbstractPData)
+#! The following could be avoided if DistributedBlockSparseMatrixAssembler <: DistributedSparseMatrixAssembler
+function FESpaces.symbolic_loop_matrix!(A,a::DistributedBlockSparseMatrixAssembler,matdata)
   rows = get_rows(a)
   cols = get_cols(a)
-  map_parts(symbolic_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
+  map(symbolic_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
 end
 
-function FESpaces.numeric_loop_matrix!(A,a::MultiField.BlockSparseMatrixAssembler,matdata::AbstractPData)
+function FESpaces.numeric_loop_matrix!(A,a::DistributedBlockSparseMatrixAssembler,matdata)
   rows = get_rows(a)
   cols = get_cols(a)
-  map_parts(numeric_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
+  map(numeric_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
 end
 
-function FESpaces.symbolic_loop_vector!(b,a::MultiField.BlockSparseMatrixAssembler,vecdata::AbstractPData)
+function FESpaces.symbolic_loop_vector!(b,a::DistributedBlockSparseMatrixAssembler,vecdata)
   rows = get_rows(a)
-  map_parts(symbolic_loop_vector!,local_views(b,rows),local_views(a),vecdata)
+  map(symbolic_loop_vector!,local_views(b,rows),local_views(a),vecdata)
 end
 
-function FESpaces.numeric_loop_vector!(b,a::MultiField.BlockSparseMatrixAssembler,vecdata::AbstractPData)
+function FESpaces.numeric_loop_vector!(b,a::DistributedBlockSparseMatrixAssembler,vecdata)
   rows = get_rows(a)
-  map_parts(numeric_loop_vector!,local_views(b,rows),local_views(a),vecdata)
+  map(numeric_loop_vector!,local_views(b,rows),local_views(a),vecdata)
 end
 
-function FESpaces.symbolic_loop_matrix_and_vector!(A,b,a::MultiField.BlockSparseMatrixAssembler,data::AbstractPData)
-  rows = get_rows(a)
-  cols = get_cols(a)
-  map_parts(symbolic_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
-end
-
-function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::MultiField.BlockSparseMatrixAssembler,data::AbstractPData)
+function FESpaces.symbolic_loop_matrix_and_vector!(A,b,a::DistributedBlockSparseMatrixAssembler,data)
   rows = get_rows(a)
   cols = get_cols(a)
-  map_parts(numeric_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
+  map(symbolic_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
+end
+
+function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedBlockSparseMatrixAssembler,data)
+  rows = get_rows(a)
+  cols = get_cols(a)
+  map(numeric_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
 end
 
 #! The following is horrible (see dicussion in PR) but necessary for the moment. We will be 
@@ -518,21 +519,21 @@ function Algebra.create_from_nz(a::ArrayBlock{<:DistributedAllocationCOO{<:Fully
 end
 
 function _fa_create_from_nz_temporary_fix(a::DistributedAllocationCOO{<:FullyAssembledRows})
-  parts     = get_part_ids(local_views(a))
+  parts = get_part_ids(local_views(a))
 
   rdofs = a.rows # dof ids of the test space
   cdofs = a.cols # dof ids of the trial space
   ngrdofs = length(rdofs)
   ngcdofs = length(cdofs)
-  nordofs = map_parts(num_oids,rdofs.partition)
-  nocdofs = map_parts(num_oids,cdofs.partition)
-  first_grdof = map_parts(first_gdof_from_ids,rdofs.partition)
-  first_gcdof = map_parts(first_gdof_from_ids,cdofs.partition)
+  nordofs = map(num_oids,rdofs.partition)
+  nocdofs = map(num_oids,cdofs.partition)
+  first_grdof = map(first_gdof_from_ids,rdofs.partition)
+  first_gcdof = map(first_gdof_from_ids,cdofs.partition)
   cneigs_snd  = cdofs.exchanger.parts_snd
   cneigs_rcv  = cdofs.exchanger.parts_rcv
 
-  hcol_to_gid  = map_parts(part -> part.lid_to_gid[part.hid_to_lid], cdofs.partition)
-  hcol_to_part = map_parts(part -> part.lid_to_part[part.hid_to_lid], cdofs.partition)
+  hcol_to_gid  = map(part -> part.lid_to_gid[part.hid_to_lid], cdofs.partition)
+  hcol_to_part = map(part -> part.lid_to_part[part.hid_to_lid], cdofs.partition)
   
   rows = PRange(
     parts,
@@ -560,39 +561,7 @@ function _fa_create_from_nz_temporary_fix(a::DistributedAllocationCOO{<:FullyAss
 
   b = change_axes(a,(rows,cols))
   
-  values    = map_parts(Algebra.create_from_nz,local_views(b))
+  values    = map(Algebra.create_from_nz,local_views(b))
   exchanger = empty_exchanger(parts)
   return PSparseMatrix(values,rows,cols,exchanger)
 end
-
-"""
-function Algebra.nz_allocation(a::ArrayBlock{<:DistributedCounterCOO})
-  array = map(Algebra.nz_allocation,a.array)
-  match_block_indexes!(array)
-  return ArrayBlock(array,a.touched)
-end
-
-function match_block_indexes!(allocators::Vector{<:DistributedAllocationCOO})
-  return allocators
-end
-
-function match_block_indexes!(allocators::Matrix{<:DistributedAllocationCOO})
-  s = size(allocators)
-
-  # Get an AbstractPData containing in each part the the matrix of local allocators
-  parts = get_part_ids(local_views(first(allocators)))
-  allocs = map_parts(parts) do p
-    idx = CartesianIndices(s)
-    allocs = map(idx) do I
-      get_part(local_views(a[I],rows[I[1]],cols[I[2]]),p)
-    end
-    return allocs
-  end
-
-  # Accumulate the index sets for each 
-  map_parts()
-  for block_row in 1:s[1]
-
-  end
-end
-"""
