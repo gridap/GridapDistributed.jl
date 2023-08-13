@@ -1,6 +1,6 @@
 """
 """
-struct DistributedVisualizationData{A<:AbstractPData}
+struct DistributedVisualizationData{A<:AbstractArray}
   visdata::A
 end
 
@@ -8,13 +8,17 @@ local_views(d::DistributedVisualizationData) = d.visdata
 
 function Base.getproperty(x::DistributedVisualizationData, sym::Symbol)
   if sym == :grid
-    map_parts(i->i.grid,x.visdata)
+    map(i->i.grid,x.visdata)
   elseif sym == :filebase
-    get_part(x.visdata).filebase
+    r=nothing
+    map(x.visdata) do visdata
+      r = visdata.filebase
+    end
+    r
   elseif sym == :celldata
-    map_parts(i->i.celldata,x.visdata)
+    map(i->i.celldata,x.visdata)
   elseif sym == :nodaldata
-    map_parts(i->i.nodaldata,x.visdata)
+    map(i->i.nodaldata,x.visdata)
   else
     getfield(x, sym)
   end
@@ -31,21 +35,18 @@ function Visualization.visualization_data(
   filebase::AbstractString;
   labels=get_face_labeling(model)) where Dc
 
-  parts  = get_parts(model)
-  nparts = length(parts)
   cell_gids = get_cell_gids(model)
-  vd = map_parts(
-    parts,local_views(model),cell_gids.partition,labels.labels) do part,model,gids,labels
-
+  vd = map(local_views(model),partition(cell_gids),labels.labels) do model,gids,labels
+    part = part_id(gids)
     vd = visualization_data(model,filebase;labels=labels)
     vd_cells = vd[end]
-    push!(vd_cells.celldata, "gid" => gids.lid_to_gid)
-    push!(vd_cells.celldata, "part" => gids.lid_to_part)
+    push!(vd_cells.celldata, "gid" => local_to_global(gids))
+    push!(vd_cells.celldata, "part" => local_to_owner(gids))
     vd
   end
   r = []
   for i in 0:Dc
-    push!(r,DistributedVisualizationData(map_parts(x->x[i+1],vd)))
+    push!(r,DistributedVisualizationData(map(x->x[i+1],vd)))
   end
   r
 end
@@ -58,15 +59,15 @@ function Visualization.visualization_data(
   celldata=nothing,
   cellfields=nothing)
 
-  trians = trian.trians
-  parts = get_part_ids(trians)
-  nparts = length(trians)
+  trians    = trian.trians
+  cell_gids = get_cell_gids(trian.model)
 
   cdat = _prepare_cdata(trians,celldata)
   fdat = _prepare_fdata(trians,cellfields)
 
-  vd = map_parts(
-    parts,trians,cdat,fdat) do part,trian,celldata,cellfields
+  vd = map(
+    partition(cell_gids),trians,cdat,fdat) do lindices,trian,celldata,cellfields
+    part = part_id(lindices)
     _celldata = Dict{Any,Any}(celldata)
     # we do not use "part" since it is likely to be used by the user
     if haskey(_celldata,"piece")
@@ -84,14 +85,14 @@ function Visualization.visualization_data(
 end
 
 function _prepare_cdata(trians,a::Nothing)
-  map_parts(trians) do t
+  map(trians) do t
     Dict()
   end
 end
 
 function _prepare_cdata(trians,a)
   if length(a) == 0
-    return map_parts(trians) do t
+    return map(trians) do t
       Dict()
     end
   end
@@ -101,7 +102,7 @@ function _prepare_cdata(trians,a)
     push!(ks,k)
     push!(vs,v)
   end
-  map_parts(vs...) do vs...
+  map(vs...) do vs...
     b = []
     for i in 1:length(vs)
       push!(b,ks[i]=>vs[i])
@@ -111,17 +112,17 @@ function _prepare_cdata(trians,a)
 end
 
 function _prepare_fdata(trians,a::Nothing)
-  map_parts(trians) do t
+  map(trians) do t
     Dict()
   end
 end
 
 function _prepare_fdata(trians,a)
   _fdata(v::DistributedCellField,trians) = v.fields
-  _fdata(v::AbstractPData,trians) = v
-  _fdata(v,trians) = map_parts(ti->v,trians)
+  _fdata(v::AbstractArray,trians) = v
+  _fdata(v,trians) = map(ti->v,trians)
   if length(a) == 0
-    return map_parts(trians) do t
+    return map(trians) do t
       Dict()
     end
   end
@@ -131,7 +132,7 @@ function _prepare_fdata(trians,a)
     push!(ks,k)
     push!(vs,_fdata(v,trians))
   end
-  map_parts(vs...) do vs...
+  map(vs...) do vs...
     b = []
     for i in 1:length(vs)
       push!(b,ks[i]=>vs[i])
@@ -143,16 +144,19 @@ end
 # Vtk related
 
 function Visualization.write_vtk_file(
-  grid::AbstractPData{<:Grid}, filebase; celldata, nodaldata)
-  pvtk = Visualization.create_vtk_file(grid,filebase;celldata=celldata,nodaldata=nodaldata)
-  map_parts(vtk_save,pvtk)
+  parts::AbstractArray,
+  grid::AbstractArray{<:Grid}, filebase; celldata, nodaldata)
+  pvtk = Visualization.create_vtk_file(parts,grid,filebase;celldata=celldata,nodaldata=nodaldata)
+  map(vtk_save,pvtk)
 end
 
 function Visualization.create_vtk_file(
-  grid::AbstractPData{<:Grid}, filebase; celldata, nodaldata)
-  parts = get_part_ids(grid)
+  parts::AbstractArray,
+  grid::AbstractArray{<:Grid}, 
+  filebase; 
+  celldata, nodaldata)
   nparts = length(parts)
-  map_parts(parts,grid,celldata,nodaldata) do part,g,c,n
+  map(parts,grid,celldata,nodaldata) do part,g,c,n
     Visualization.create_pvtk_file(
       g,filebase;
       part=part,nparts=nparts,
@@ -160,18 +164,37 @@ function Visualization.create_vtk_file(
   end
 end
 
-struct DistributedPvd{T<:AbstractPData}
+const DistributedModelOrTriangulation = Union{DistributedDiscreteModel,DistributedTriangulation}
+
+function Visualization.writevtk(arg::DistributedModelOrTriangulation,args...;kwargs...)
+  parts=get_parts(arg)
+  map(visualization_data(arg,args...;kwargs...)) do visdata
+    write_vtk_file(
+    parts,visdata.grid,visdata.filebase,celldata=visdata.celldata,nodaldata=visdata.nodaldata)
+  end
+end
+
+function Visualization.createvtk(arg::DistributedModelOrTriangulation,args...;kwargs...)
+  v = visualization_data(arg,args...;kwargs...)
+  parts=get_parts(arg)
+  @notimplementedif length(v) != 1
+  visdata = first(v)
+  Visualization.create_vtk_file(
+    parts,visdata.grid,visdata.filebase,celldata=visdata.celldata,nodaldata=visdata.nodaldata)
+end
+
+struct DistributedPvd{T<:AbstractArray}
   pvds::T
 end
 
-function Visualization.createpvd(parts::AbstractPData,args...;kwargs...)
+function Visualization.createpvd(parts::AbstractArray,args...;kwargs...)
   pvds = map_main(parts) do part
     paraview_collection(args...;kwargs...)
   end
   DistributedPvd(pvds)
 end
 
-function Visualization.createpvd(f,parts::AbstractPData,args...;kwargs...)
+function Visualization.createpvd(f,parts::AbstractArray,args...;kwargs...)
   pvd = createpvd(parts,args...;kwargs...)
   try
     f(pvd)
@@ -186,8 +209,8 @@ function Visualization.savepvd(pvd::DistributedPvd)
   end
 end
 
-function Base.setindex!(pvd::DistributedPvd,pvtk::AbstractPData,time::Real)
-  map_parts(vtk_save,pvtk)
+function Base.setindex!(pvd::DistributedPvd,pvtk::AbstractArray,time::Real)
+  map(vtk_save,pvtk)
   map_main(pvtk,pvd.pvds) do pvtk,pvd
     pvd[time] = pvtk
   end

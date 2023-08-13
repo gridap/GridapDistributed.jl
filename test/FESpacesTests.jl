@@ -26,8 +26,8 @@ function assemble_tests(das,dΩ,dΩass,U,V)
   eh1 = u - uh1
   @test sqrt(sum(∫( abs2(eh1) )dΩ)) < 1.0e-9
 
-  map_parts(A1.values, A1.rows.partition, A1.cols.partition) do mat, rows, cols
-     @test size(mat) == (num_lids(rows),num_lids(cols))
+  map(A1.matrix_partition, A1.row_partition, A1.col_partition) do mat, rows, cols
+     @test size(mat) == (local_length(rows),local_length(cols))
   end
 
   A2,b2 = allocate_matrix_and_vector(assem,data)
@@ -70,18 +70,19 @@ function assemble_tests(das,dΩ,dΩass,U,V)
   @test abs(sum(b2)-length(b2)) < 1.0e-12
 end
 
-
-function main(parts)
-  main(parts,SubAssembledRows())
-  main(parts,FullyAssembledRows())
+function main(distribute,parts)
+  main(distribute,parts,SubAssembledRows())
+  main(distribute,parts,FullyAssembledRows())
 end
 
-function main(parts,das)
+function main(distribute,parts,das)
+  ranks = distribute(LinearIndices((prod(parts),)))
+  
   output = mkpath(joinpath(@__DIR__,"output"))
 
   domain = (0,4,0,4)
   cells = (4,4)
-  model = CartesianDiscreteModel(parts,domain,cells)
+  model = CartesianDiscreteModel(ranks,parts,domain,cells)
   Ω = Triangulation(model)
   Γ = Boundary(model)
 
@@ -94,7 +95,11 @@ function main(parts,das)
   @test get_vector_type(U) <: PVector
   @test get_vector_type(V2) <: PVector
 
-  free_values = PVector(1.0,V.gids)
+  free_values_partition=map(partition(V.gids)) do indices 
+    ones(Float64,local_length(indices))
+  end 
+
+  free_values = PVector(free_values_partition,partition(V.gids))
   fh = FEFunction(U,free_values)
   zh = zero(U)
   uh = interpolate(u,U)
@@ -165,7 +170,7 @@ function main(parts,das)
   # become one.
   domain = (0,2,0,2)
   cells = (4,4)
-  model = CartesianDiscreteModel(parts,domain,cells)
+  model = CartesianDiscreteModel(ranks,parts,domain,cells)
   D     = num_cell_dims(model)
   Γ     = Triangulation(ReferenceFE{D-1},model)
   Γass  = Triangulation(das,ReferenceFE{D-1},model)

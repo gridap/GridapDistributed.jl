@@ -1,5 +1,7 @@
 module TransientDistributedCellFieldTestsSeq
 using PartitionedArrays
 include("../TransientDistributedCellFieldTests.jl")
-with_backend(TransientDistributedCellFieldTests.main,SequentialBackend(),(2,2))
+with_debug() do distribute
+    TransientDistributedCellFieldTests.main(distribute,(2,2))
+end
 end # module

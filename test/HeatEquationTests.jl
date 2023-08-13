@@ -6,7 +6,8 @@ using GridapDistributed
 using PartitionedArrays
 using Test
 
-function main(parts)
+function main(distribute,parts)
+  ranks = distribute(LinearIndices((prod(parts),)))
   θ = 0.2
 
   u(x,t) = (1.0-x[1])*x[1]*(1.0-x[2])*x[2]*t
@@ -15,7 +16,7 @@ function main(parts)
 
   domain = (0,1,0,1)
   partition = (4,4)
-  model = CartesianDiscreteModel(parts,domain,partition)
+  model = CartesianDiscreteModel(ranks,parts,domain,partition)
 
   order = 2
 

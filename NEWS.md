@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed 
+
+- Porting the whole library to PartitionedArrays v0.3.x. Since PR [114](https://github.com/gridap/GridapDistributed.jl/pull/114)
+
+### Added 
+
+- Tools for redistributing FE functions among meshes; added mock tests for `RedistributeGlue`. Since PR [114](https://github.com/gridap/GridapDistributed.jl/pull/114). This functionality was already somewhere else in the Gridap ecosystem of packages (in GridapSolvers.jl in particular).
+
+
+## [0.2.8] - 2023-07-31
+
 ### Added
+- Reverted some changes introduced in PR [98](https://github.com/gridap/GridapDistributed.jl/pull/98). Eliminated `DistributedGridapType`. Functions `local_views` and `get_parts` now take argument of type `Any`. Since PR [117](https://github.com/gridap/GridapDistributed.jl/pull/117).
 
 ### Fixed
 

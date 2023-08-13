@@ -1,4 +1,3 @@
-
 # This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.ArrayCounter,axes)
   @notimplemented
@@ -17,6 +16,99 @@ function change_axes(a::Algebra.AllocationCOO{T,A}, axes::A) where {T,A}
   Algebra.AllocationCOO(counter,a.I,a.J,a.V)
 end
 
+# This type is required because MPIArray from PArrays 
+# cannot be instantiated with a NULL communicator
+struct MPIVoidVector{T} <: AbstractVector{T}
+  comm::MPI.Comm
+  function MPIVoidVector(::Type{T}) where {T}
+    new{T}(MPI.COMM_NULL)
+  end
+end
+
+Base.size(a::MPIVoidVector) = (0,)
+Base.IndexStyle(::Type{<:MPIVoidVector}) = IndexLinear()
+function Base.getindex(a::MPIVoidVector,i::Int)
+  error("Indexing of MPIVoidVector not possible.")
+end
+function Base.setindex!(a::MPIVoidVector,v,i::Int)
+  error("Indexing of MPIVoidVector not possible.")
+end
+function Base.show(io::IO,k::MIME"text/plain",data::MPIVoidVector)
+  println(io,"MPIVoidVector")
+end
+
+# Subcommunicators
+
+function get_part_id(comm::MPI.Comm)
+  if comm != MPI.COMM_NULL
+    id = MPI.Comm_rank(comm)+1
+  else
+    id = -1
+  end
+  id
+end
+
+function i_am_in(comm::MPI.Comm)
+  get_part_id(comm) >=0
+end
+
+function i_am_in(comm::MPIArray)
+  i_am_in(comm.comm)
+end
+
+function i_am_in(comm::MPIVoidVector)
+  i_am_in(comm.comm)
+end
+
+function change_parts(x::Union{MPIArray,DebugArray,Nothing,MPIVoidVector}, new_parts; default=nothing)
+  x_new = map(new_parts) do _p
+    if isa(x,MPIArray) || isa(x,DebugArray)
+      PartitionedArrays.getany(x)
+    else
+      default
+    end
+  end
+  return x_new
+end
+
+function generate_subparts(parts::MPIArray,new_comm_size)
+  root_comm = parts.comm
+  root_size = MPI.Comm_size(root_comm)
+  rank = MPI.Comm_rank(root_comm)
+
+  @static if isdefined(MPI,:MPI_UNDEFINED)
+    mpi_undefined = MPI.MPI_UNDEFINED[]
+  else
+    mpi_undefined = MPI.API.MPI_UNDEFINED[]
+  end
+  
+  if root_size == new_comm_size
+    return parts
+  else
+    if rank < new_comm_size
+      comm = MPI.Comm_split(root_comm,0,0)
+      return distribute_with_mpi(LinearIndices((new_comm_size,));comm=comm,duplicate_comm=false)
+    else
+      comm = MPI.Comm_split(root_comm,mpi_undefined,mpi_undefined)
+      return MPIVoidVector(eltype(parts))
+    end
+  end
+end
+
+function generate_subparts(parts::DebugArray,new_comm_size)
+  DebugArray(LinearIndices((new_comm_size,)))
+end
+
+# local_views
+
+function local_views(a)
+  @abstractmethod
+end
+
+function get_parts(x)
+  return linear_indices(local_views(x))
+end
+
 function local_views(a::AbstractVector,rows)
   @notimplemented
 end
@@ -29,54 +121,140 @@ function consistent_local_views(a,ids,isconsistent)
   @abstractmethod
 end
 
-function local_views(a::AbstractPData)
+function local_views(a::AbstractArray)
   a
 end
 
 function local_views(a::PRange)
-  a.partition
+  partition(a)
 end
 
 function local_views(a::PVector)
-  a.values
-end
-
-function local_views(a::PVector,rows::PRange)
-  PArrays.local_view(a,rows)
+  partition(a)
 end
 
 function local_views(a::PSparseMatrix)
-  a.values
+  partition(a)
 end
 
-function local_views(a::PSparseMatrix,rows::PRange,cols::PRange)
-  PArrays.local_view(a,rows,cols)
+# This function computes a mapping among the local identifiers of a and b
+# for which the corresponding global identifiers are both in a and b. 
+# Note that the haskey check is necessary because in the general case 
+# there might be gids in b which are not present in a
+function find_local_to_local_map(a::AbstractLocalIndices,b::AbstractLocalIndices)
+  a_local_to_b_local = fill(Int32(-1),local_length(a))
+  b_local_to_global  = local_to_global(b)
+  a_global_to_local  = global_to_local(a)
+  for blid in 1:local_length(b)
+    gid = b_local_to_global[blid]
+    if a_global_to_local[gid] != zero(eltype(a_global_to_local))
+      alid = a_global_to_local[gid]
+      a_local_to_b_local[alid] = blid
+    end  
+  end
+  a_local_to_b_local
+end
+
+# This type is required in order to be able to access the local portion 
+# of distributed sparse matrices and vectors using local indices from the 
+# distributed test and trial spaces
+struct LocalView{T,N,A,B} <:AbstractArray{T,N}
+  plids_to_value::A
+  d_to_lid_to_plid::B
+  local_size::NTuple{N,Int}
+  function LocalView(
+    plids_to_value::AbstractArray{T,N},d_to_lid_to_plid::NTuple{N}) where {T,N}
+    A = typeof(plids_to_value)
+    B = typeof(d_to_lid_to_plid)
+    local_size = map(length,d_to_lid_to_plid)
+    new{T,N,A,B}(plids_to_value,d_to_lid_to_plid,local_size)
+  end
+end
+
+Base.size(a::LocalView) = a.local_size
+Base.IndexStyle(::Type{<:LocalView}) = IndexCartesian()
+function Base.getindex(a::LocalView{T,N},lids::Vararg{Integer,N}) where {T,N}
+  plids = map(_lid_to_plid,lids,a.d_to_lid_to_plid)
+  if all(i->i>0,plids)
+    a.plids_to_value[plids...]
+  else
+    zero(T)
+  end
+end
+function Base.setindex!(a::LocalView{T,N},v,lids::Vararg{Integer,N}) where {T,N}
+  plids = map(_lid_to_plid,lids,a.d_to_lid_to_plid)
+  @check all(i->i>0,plids) "You are trying to set a value that is not stored in the local portion"
+  a.plids_to_value[plids...] = v
+end
+
+function _lid_to_plid(lid,lid_to_plid)
+  plid = lid_to_plid[lid]
+  plid
+end
+
+function local_views(row_partitioned_vector::PVector,test_dofs_partition::PRange)
+  if row_partitioned_vector.index_partition === partition(test_dofs_partition)
+    @assert false
+  else
+    map(partition(row_partitioned_vector),
+        partition(test_dofs_partition),
+        row_partitioned_vector.index_partition) do vector_partition,dofs_partition,row_partition
+      LocalView(vector_partition,(find_local_to_local_map(dofs_partition,row_partition),))
+    end
+  end
+end
+
+function local_views(row_col_partitioned_matrix::PSparseMatrix,
+                     test_dofs_partition::PRange,
+                     trial_dofs_partition::PRange)
+    if (row_col_partitioned_matrix.row_partition === partition(test_dofs_partition) || 
+      row_col_partitioned_matrix.col_partition === partition(trial_dofs_partition) )
+      @assert false                 
+    else 
+      map(
+        partition(row_col_partitioned_matrix),
+        partition(test_dofs_partition),
+        partition(trial_dofs_partition),
+        row_col_partitioned_matrix.row_partition,
+        row_col_partitioned_matrix.col_partition) do matrix_partition,
+                                                                test_dof_partition,
+                                                                trial_dof_partition,
+                                                                row_partition,
+                                                                col_partition
+        rl2lmap = find_local_to_local_map(test_dof_partition,row_partition)
+        cl2lmap = find_local_to_local_map(trial_dof_partition,col_partition)
+        LocalView(matrix_partition,(rl2lmap,cl2lmap))
+      end
+    end
 end
 
 function change_ghost(a::PVector,ids_fespace::PRange)
-  if a.rows === ids_fespace
+  if a.index_partition === partition(ids_fespace)
     a_fespace = a
   else
-    a_fespace = similar(a,eltype(a),ids_fespace)
+    a_fespace = similar(a,eltype(a),(ids_fespace,))
     a_fespace .= a
   end
   a_fespace
 end
 
-function consistent_local_views(a::PVector,ids_fespace::PRange,isconsistent)
+function consistent_local_views(a::PVector,
+                                ids_fespace::PRange,
+                                isconsistent)
   a_fespace = change_ghost(a,ids_fespace)
   if ! isconsistent
-    exchange!(a_fespace)
+    fetch_vector_ghost_values!(partition(a_fespace),
+                               map(reverse,a_fespace.cache)) |> wait
   end
-  a_fespace.values
+  partition(a_fespace)
 end
 
-function Algebra.allocate_vector(::Type{<:PVector{T,A}},ids::PRange) where {T,A}
-  values = map_parts(ids.partition) do ids
+function Algebra.allocate_vector(::Type{<:PVector{V,A}},ids::PRange) where {V,A}
+  values = map(partition(ids)) do ids
     Tv = eltype(A)
-    Tv(undef,num_lids(ids))
+    Tv(undef,length(local_to_owner(ids)))
   end
-  PVector(values,ids)
+  PVector(values,partition(ids))
 end
 
 struct FullyAssembledRows end
@@ -94,12 +272,12 @@ end
 
 function Algebra.nz_counter(
   builder::PSparseMatrixBuilderCOO{A}, axs::Tuple{<:PRange,<:PRange}) where A
-  rows, cols = axs
-  counters = map_parts(rows.partition,cols.partition) do r,c
-    axs = (Base.OneTo(num_lids(r)),Base.OneTo(num_lids(c)))
+  test_dofs_gids_prange, trial_dofs_gids_prange = axs
+  counters = map(partition(test_dofs_gids_prange),partition(trial_dofs_gids_prange)) do r,c
+    axs = (Base.OneTo(local_length(r)),Base.OneTo(local_length(c)))
     Algebra.CounterCOO{A}(axs)
   end
-  DistributedCounterCOO(builder.par_strategy,counters,rows,cols)
+  DistributedCounterCOO(builder.par_strategy,counters,test_dofs_gids_prange,trial_dofs_gids_prange)
 end
 
 function Algebra.get_array_type(::PSparseMatrixBuilderCOO{Tv}) where Tv
@@ -110,21 +288,21 @@ end
 
 """
 """
-struct DistributedCounterCOO{A,B,C,D} <: DistributedGridapType
+struct DistributedCounterCOO{A,B,C,D} <: GridapType
   par_strategy::A
   counters::B
-  rows::C
-  cols::D
+  test_dofs_gids_prange::C
+  trial_dofs_gids_prange::D
   function DistributedCounterCOO(
     par_strategy,
-    counters::AbstractPData{<:Algebra.CounterCOO},
-    rows::PRange,
-    cols::PRange)
+    counters::AbstractArray{<:Algebra.CounterCOO},
+    test_dofs_gids_prange::PRange,
+    trial_dofs_gids_prange::PRange)
     A = typeof(par_strategy)
     B = typeof(counters)
-    C = typeof(rows)
-    D = typeof(cols)
-    new{A,B,C,D}(par_strategy,counters,rows,cols)
+    C = typeof(test_dofs_gids_prange)
+    D = typeof(trial_dofs_gids_prange)
+    new{A,B,C,D}(par_strategy,counters,test_dofs_gids_prange,trial_dofs_gids_prange)
   end
 end
 
@@ -132,41 +310,41 @@ function local_views(a::DistributedCounterCOO)
   a.counters
 end
 
-function local_views(a::DistributedCounterCOO,rows,cols)
-  @check rows === a.rows
-  @check cols === a.cols
+function local_views(a::DistributedCounterCOO,test_dofs_gids_prange,trial_dofs_gids_prange)
+  @check test_dofs_gids_prange === a.test_dofs_gids_prange
+  @check trial_dofs_gids_prange === a.trial_dofs_gids_prange
   a.counters
 end
 
 function Algebra.nz_allocation(a::DistributedCounterCOO)
-  allocs = map_parts(nz_allocation,a.counters)
-  DistributedAllocationCOO(a.par_strategy,allocs,a.rows,a.cols)
+  allocs = map(nz_allocation,a.counters)
+  DistributedAllocationCOO(a.par_strategy,allocs,a.test_dofs_gids_prange,a.trial_dofs_gids_prange)
 end
 
-struct DistributedAllocationCOO{A,B,C,D} <:DistributedGridapType
+struct DistributedAllocationCOO{A,B,C,D} <:GridapType
   par_strategy::A
   allocs::B
-  rows::C
-  cols::D
+  test_dofs_gids_prange::C
+  trial_dofs_gids_prange::D
   function DistributedAllocationCOO(
     par_strategy,
-    allocs::AbstractPData{<:Algebra.AllocationCOO},
-    rows::PRange,
-    cols::PRange)
+    allocs::AbstractArray{<:Algebra.AllocationCOO},
+    test_dofs_gids_prange::PRange,
+    trial_dofs_gids_prange::PRange)
     A = typeof(par_strategy)
     B = typeof(allocs)
-    C = typeof(rows)
-    D = typeof(cols)
-    new{A,B,C,D}(par_strategy,allocs,rows,cols)
+    C = typeof(test_dofs_gids_prange)
+    D = typeof(trial_dofs_gids_prange)
+    new{A,B,C,D}(par_strategy,allocs,test_dofs_gids_prange,trial_dofs_gids_prange)
   end
 end
 
 function change_axes(a::DistributedAllocationCOO{A,B,<:PRange,<:PRange},
                      axes::Tuple{<:PRange,<:PRange}) where {A,B}
-  local_axes=map_parts(axes[1].partition,axes[2].partition) do rows,cols
-    (Base.OneTo(num_lids(rows)), Base.OneTo(num_lids(cols)))
+  local_axes=map(partition(axes[1]),partition(axes[2])) do rows,cols
+    (Base.OneTo(local_length(rows)), Base.OneTo(local_length(cols)))
   end
-  allocs=map_parts(change_axes,a.allocs,local_axes)
+  allocs=map(change_axes,a.allocs,local_axes)
   DistributedAllocationCOO(a.par_strategy,allocs,axes[1],axes[2])
 end
 
@@ -174,27 +352,33 @@ function local_views(a::DistributedAllocationCOO)
   a.allocs
 end
 
-function local_views(a::DistributedAllocationCOO,rows,cols)
-  @check rows === a.rows
-  @check cols === a.cols
+function local_views(a::DistributedAllocationCOO,test_dofs_gids_prange,trial_dofs_gids_prange)
+  @check test_dofs_gids_prange === a.test_dofs_gids_prange
+  @check trial_dofs_gids_prange === a.trial_dofs_gids_prange
   a.allocs
 end
 
 function first_gdof_from_ids(ids)
-  num_oids(ids)>0 ? Int(ids.lid_to_gid[ids.oid_to_lid[1]]) : 1
+  lid_to_gid=local_to_global(ids) 
+  owner_to_lid=own_to_local(ids)
+  own_length(ids)>0 ? Int(lid_to_gid[first(owner_to_lid)]) : 1
 end
 
-function find_gid_and_part(hid_to_hdof,dofs)
-  hid_to_ldof = view(dofs.hid_to_lid,hid_to_hdof)
-  hid_to_gid = dofs.lid_to_gid[hid_to_ldof]
-  hid_to_part = dofs.lid_to_part[hid_to_ldof]
-  hid_to_gid, hid_to_part
+function find_gid_and_owner(ighost_to_jghost,jindices)
+  jghost_to_local=ghost_to_local(jindices)
+  jlocal_to_global=local_to_global(jindices)
+  jlocal_to_owner=local_to_owner(jindices)
+  ighost_to_jlocal = view(jghost_to_local,ighost_to_jghost)
+
+  ighost_to_global = jlocal_to_global[ighost_to_jlocal]
+  ighost_to_owner = jlocal_to_owner[ighost_to_jlocal]
+  ighost_to_global, ighost_to_owner
 end
 
 function Algebra.create_from_nz(a::PSparseMatrix)
   # For FullyAssembledRows the underlying Exchanger should
   # not have ghost layer making assemble! do nothing (TODO check)
-  assemble!(a)
+  assemble!(a) |> wait
   a
 end
 
@@ -204,70 +388,82 @@ function Algebra.create_from_nz(a::DistributedAllocationCOO{<:FullyAssembledRows
   A
 end
 
+# The given ids are assumed to be a sub-set of the lids
+function ghost_lids_touched(a::AbstractLocalIndices,gids::AbstractVector{<:Integer})
+  i = 0
+  ghost_lids_touched = fill(false,ghost_length(a))
+  glo_to_loc=global_to_local(a)
+  loc_to_gho=local_to_ghost(a)
+  for gid in gids
+    lid = glo_to_loc[gid]
+    ghost_lid = loc_to_gho[lid]
+    if ghost_lid > 0 && !ghost_lids_touched[ghost_lid]
+      ghost_lids_touched[ghost_lid] = true
+      i += 1
+    end
+  end
+  gids_ghost_lid_to_ghost_lid = Vector{Int32}(undef,i)
+  i = 0
+  ghost_lids_touched .= false
+  for gid in gids
+    lid = glo_to_loc[gid]
+    ghost_lid = loc_to_gho[lid]
+    if ghost_lid > 0 && !ghost_lids_touched[ghost_lid]
+      ghost_lids_touched[ghost_lid] = true
+      i += 1
+      gids_ghost_lid_to_ghost_lid[i] = ghost_lid
+    end
+  end
+  gids_ghost_lid_to_ghost_lid
+end
+
+# Find the neighbours of partition1 trying 
+# to use those in partition2 as a hint 
+function _find_neighbours!(partition1, partition2)
+  partition2_snd, partition2_rcv = assembly_neighbors(partition2)
+  partition2_graph = ExchangeGraph(partition2_snd, partition2_rcv)
+  assembly_neighbors(partition1; neighbors=partition2_graph)
+end 
+
 function _fa_create_from_nz_with_callback(callback,a)
 
   # Recover some data
-  I,J,C = map_parts(a.allocs) do alloc
+  I,J,V = map(a.allocs) do alloc
     alloc.I, alloc.J, alloc.V
-  end
-  parts = get_part_ids(a.allocs)
-  rdofs = a.rows # dof ids of the test space
-  cdofs = a.cols # dof ids of the trial space
-  ngrdofs = length(rdofs)
-  ngcdofs = length(cdofs)
-  nordofs = map_parts(num_oids,rdofs.partition)
-  nocdofs = map_parts(num_oids,cdofs.partition)
-  first_grdof = map_parts(first_gdof_from_ids,rdofs.partition)
-  first_gcdof = map_parts(first_gdof_from_ids,cdofs.partition)
-  cneigs_snd = cdofs.exchanger.parts_snd
-  cneigs_rcv = cdofs.exchanger.parts_rcv
+  end |> tuple_of_arrays
+  test_dofs_gids_prange = a.test_dofs_gids_prange
+  trial_dofs_gids_prange = a.trial_dofs_gids_prange
+  test_dofs_gids_partition = partition(test_dofs_gids_prange)
+  trial_dofs_gids_partition = partition(trial_dofs_gids_prange)
+  ngcdofs = length(trial_dofs_gids_prange)
+  nocdofs = map(own_length,trial_dofs_gids_partition)
 
-  # This one has not ghost rows
-  rows = PRange(
-    parts,
-    ngrdofs,
-    nordofs,
-    first_grdof)
+  rows = _setup_prange_rows_without_ghosts(test_dofs_gids_prange)
 
-  callback_output = callback(rows)
+  b = callback(rows)
 
   # convert I and J to global dof ids
-  to_gids!(I,rdofs)
-  to_gids!(J,cdofs)
-
-  # Find the ghost cols
-  hcol_to_hcdof = touched_hids(cdofs,J)
-  hcol_to_gid, hcol_to_part = map_parts(
-    find_gid_and_part,hcol_to_hcdof,cdofs.partition)
+  map(to_global!,I,test_dofs_gids_partition)
+  map(to_global!,J,trial_dofs_gids_partition)
 
   # Create the range for cols
-  cols = PRange(
-    parts,
-    ngcdofs,
-    nocdofs,
-    first_gcdof,
-    hcol_to_gid,
-    hcol_to_part,
-    cneigs_snd,
-    cneigs_rcv)
+  cols = _setup_prange(trial_dofs_gids_prange,J)
+
 
   # Convert again I,J to local numeration
-  to_lids!(I,rows)
-  to_lids!(J,cols)
+  map(to_local!,I,partition(rows))
+  map(to_local!,J,partition(cols))
 
   # Adjust local matrix size to linear system's index sets
-  b=change_axes(a,(rows,cols))
+  asys=change_axes(a,(rows,cols))
 
   # Compress local portions
-  values = map_parts(create_from_nz,b.allocs)
-
-  # Build the matrix exchanger. This can be empty since no ghost rows
-  exchanger = empty_exchanger(parts)
+  values = map(create_from_nz,asys.allocs)
 
   # Finally build the matrix
-  A = PSparseMatrix(values,rows,cols,exchanger)
+  A = PSparseMatrix(values,partition(rows),partition(cols))
 
-  A, callback_output
+  A, b
 end
 
 function Algebra.create_from_nz(a::DistributedAllocationCOO{<:SubAssembledRows})
@@ -277,105 +473,62 @@ function Algebra.create_from_nz(a::DistributedAllocationCOO{<:SubAssembledRows})
 end
 
 function _sa_create_from_nz_with_callback(callback,async_callback,a)
-
   # Recover some data
-  I,J,C = map_parts(a.allocs) do alloc
+  I,J,V = map(a.allocs) do alloc
     alloc.I, alloc.J, alloc.V
-  end
-  parts = get_part_ids(a.allocs)
-  rdofs = a.rows # dof ids of the test space
-  cdofs = a.cols # dof ids of the trial space
-  ngrdofs = length(rdofs)
-  ngcdofs = length(cdofs)
-  nordofs = map_parts(num_oids,rdofs.partition)
-  nocdofs = map_parts(num_oids,cdofs.partition)
-  first_grdof = map_parts(first_gdof_from_ids,rdofs.partition)
-  first_gcdof = map_parts(first_gdof_from_ids,cdofs.partition)
-  rneigs_snd = rdofs.exchanger.parts_snd
-  rneigs_rcv = rdofs.exchanger.parts_rcv
-  cneigs_snd = cdofs.exchanger.parts_snd
-  cneigs_rcv = cdofs.exchanger.parts_rcv
+  end |> tuple_of_arrays
+  test_dofs_gids_prange = a.test_dofs_gids_prange
+  trial_dofs_gids_prange = a.trial_dofs_gids_prange
+  test_dofs_gids_partition = partition(test_dofs_gids_prange)
+  trial_dofs_gids_partition = partition(trial_dofs_gids_prange)
+  ngrdofs = length(test_dofs_gids_prange)
+  ngcdofs = length(test_dofs_gids_prange)
 
   # convert I and J to global dof ids
-  to_gids!(I,rdofs)
-  to_gids!(J,cdofs)
+  map(to_global!,I,test_dofs_gids_partition)
+  map(to_global!,J,trial_dofs_gids_partition)
 
-  # Find the ghost rows
-  hrow_to_hrdof = touched_hids(rdofs,I)
-  hrow_to_gid, hrow_to_part = map_parts(
-    find_gid_and_part,hrow_to_hrdof,rdofs.partition)
-
-  # Create the range for rows
-  rows = PRange(
-    parts,
-    ngrdofs,
-    nordofs,
-    first_grdof,
-    hrow_to_gid,
-    hrow_to_part,
-    rneigs_snd,
-    rneigs_rcv)
-
+  # Create the Prange for the rows
+  rows = _setup_prange(test_dofs_gids_prange,I)
+  
   # Move values to the owner part
   # since we have integrated only over owned cells
-  t = async_assemble!(I,J,C,rows)
+  t = PArrays.assemble_coo!(I,J,V,partition(rows))
 
   # Here we can overlap computations
   # This is a good place to overlap since
   # sending the matrix rows is a lot of data
-  callback_output = callback(rows)
+  b = callback(rows)
 
   # Wait the transfer to finish
-  map_parts(schedule,t)
-  map_parts(wait,t)
+  wait(t)
 
-  # Find the ghost cols
-  hcol_to_hcdof = touched_hids(cdofs,J)
-  hcol_to_gid, hcol_to_part = map_parts(
-    find_gid_and_part,hcol_to_hcdof,cdofs.partition)
-
-  # Create the range for cols
-  cols = PRange(
-    parts,
-    ngcdofs,
-    nocdofs,
-    first_gcdof,
-    hcol_to_gid,
-    hcol_to_part,
-    cneigs_snd,
-    cneigs_rcv)
+  # Create the Prange for the cols
+  cols = _setup_prange(trial_dofs_gids_prange,J)
 
   # Overlap rhs communications with CSC compression
-  t2 = async_callback(callback_output)
+  t2 = async_callback(b)
 
   # Convert again I,J to local numeration
-  to_lids!(I,rows)
-  to_lids!(J,cols)
+  map(to_local!,I,partition(rows))
+  map(to_local!,J,partition(cols))
 
   # Adjust local matrix size to linear system's index sets
-  b=change_axes(a,(rows,cols))
+  asys=change_axes(a,(rows,cols))
 
   # Compress the local matrices
-  values = map_parts(create_from_nz,b.allocs)
+  values = map(create_from_nz,asys.allocs)
 
   # Wait the transfer to finish
   if t2 !== nothing
-    map_parts(schedule,t2)
-    map_parts(wait,t2)
+    wait(t2)
   end
 
   # Finally build the matrix
-  # A matrix exchanger will be created under the hood.
-  # Building a exchanger can be costly and not always needed.
-  # TODO add a more lazy initzialization of this inside PSparseMatrix
-  A = PSparseMatrix(values,rows,cols)
+  A = PSparseMatrix(values,partition(rows),partition(cols))
 
-  A, callback_output
+  A, b
 end
-
-
-
-
 
 struct PVectorBuilder{T,B}
   local_vector_type::Type{T}
@@ -385,8 +538,8 @@ end
 function Algebra.nz_counter(builder::PVectorBuilder,axs::Tuple{<:PRange})
   T = builder.local_vector_type
   rows, = axs
-  counters = map_parts(rows.partition) do rows
-    axs = (Base.OneTo(num_lids(rows)),)
+  counters = map(partition(rows)) do rows
+    axs = (Base.OneTo(local_length(rows)),)
     nz_counter(ArrayBuilder(T),axs)
   end
   PVectorCounter(builder.par_strategy,counters,rows)
@@ -400,7 +553,7 @@ end
 struct PVectorCounter{A,B,C}
   par_strategy::A
   counters::B
-  rows::C
+  test_dofs_gids_prange::C
 end
 
 Algebra.LoopStyle(::Type{<:PVectorCounter}) = DoNotLoop()
@@ -410,20 +563,20 @@ function local_views(a::PVectorCounter)
 end
 
 function local_views(a::PVectorCounter,rows)
-  @check rows === a.rows
+  @check rows === a.test_dofs_gids_prange
   a.counters
 end
 
 function Arrays.nz_allocation(a::PVectorCounter{<:FullyAssembledRows})
-  dofs = a.rows
-  values = map_parts(nz_allocation,a.counters)
+  dofs = a.test_dofs_gids_prange
+  values = map(nz_allocation,a.counters)
   PVectorAllocationTrackOnlyValues(a.par_strategy,values,dofs)
 end
 
 struct PVectorAllocationTrackOnlyValues{A,B,C}
   par_strategy::A
   values::B
-  rows::C
+  test_dofs_gids_prange::C
 end
 
 function local_views(a::PVectorAllocationTrackOnlyValues)
@@ -431,20 +584,54 @@ function local_views(a::PVectorAllocationTrackOnlyValues)
 end
 
 function local_views(a::PVectorAllocationTrackOnlyValues,rows)
-  @check rows === a.rows
+  @check rows === a.test_dofs_gids_prange
   a.values
 end
 
+# Create PRange for the rows of the linear system
+# without local ghost dofs as per required in the 
+# FullyAssembledRows() parallel assembly strategy 
+function _setup_prange_rows_without_ghosts(test_dofs_gids_prange)
+  ngdofs = length(test_dofs_gids_prange)
+  test_dofs_gids_partition = partition(test_dofs_gids_prange)
+  nodofs = map(own_length,test_dofs_gids_partition)
+  rindices=map(test_dofs_gids_partition) do dofs_indices 
+    owner = part_id(dofs_indices)
+    own_indices=OwnIndices(ngdofs,owner,own_to_global(dofs_indices))
+    ghost_indices=GhostIndices(ngdofs,Int64[],Int32[])
+    OwnAndGhostIndices(own_indices,ghost_indices)
+  end
+  PRange(rindices)
+end
+
+# dofs_gids_prange can be either test_dofs_gids_prange or trial_dofs_gids_prange
+# In the former case, gids is a vector of global test dof identifiers, while in the 
+# latter, a vector of global trial dof identifiers
+function _setup_prange(dofs_gids_prange,gids)
+  ngdofs = length(dofs_gids_prange)
+  dofs_gids_partition = partition(dofs_gids_prange)
+  gids_ghost_lids_to_dofs_ghost_lids = map(ghost_lids_touched,dofs_gids_partition,gids)
+  _setup_prange_impl_(ngdofs,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition)
+end
+
+function _setup_prange_impl_(ngdofs,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition)
+  gids_ghost_to_global, gids_ghost_to_owner = map(
+    find_gid_and_owner,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition) |> tuple_of_arrays
+
+  indices=map(dofs_gids_partition, 
+               gids_ghost_to_global, 
+               gids_ghost_to_owner) do dofs_indices, ghost_to_global, ghost_to_owner 
+     owner = part_id(dofs_indices)
+     own_indices=OwnIndices(ngdofs,owner,own_to_global(dofs_indices))
+     ghost_indices=GhostIndices(ngdofs,ghost_to_global,ghost_to_owner)
+     OwnAndGhostIndices(own_indices,ghost_indices)
+  end
+  _find_neighbours!(indices, dofs_gids_partition)
+  PRange(indices)
+end 
+
 function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues{<:FullyAssembledRows})
-  # Create PRange for the rows of the linear system
-  parts = get_part_ids(a.values)
-  ngdofs = length(a.rows)
-  nodofs = map_parts(num_oids,a.rows.partition)
-  first_grdof = map_parts(first_gdof_from_ids,a.rows.partition)
-
-  # This one has no ghost rows
-  rows = PRange(parts,ngdofs,nodofs,first_grdof)
-
+  rows = _setup_prange_rows_without_ghosts(a.test_dofs_gids_prange)
   _rhs_callback(a,rows)
 end
 
@@ -454,10 +641,11 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues{<:SubAssembl
   @assert false
 end
 
-function _rhs_callback(c_fespace,rows)
-  # The ghost values in b_fespace are aligned with the FESpace
-  # but not with the ghost values in the rows of A
-  b_fespace = PVector(c_fespace.values,c_fespace.rows)
+function _rhs_callback(row_partitioned_vector_partition,rows)
+  # The ghost values in row_partitioned_vector_partition are 
+  # aligned with the FESpace but not with the ghost values in the rows of A
+  b_fespace = PVector(row_partitioned_vector_partition.values,
+                      partition(row_partitioned_vector_partition.test_dofs_gids_prange))
 
   # This one is aligned with the rows of A
   b = similar(b_fespace,eltype(b_fespace),(rows,))
@@ -467,27 +655,29 @@ function _rhs_callback(c_fespace,rows)
 
   # Now transfer ghost
   function transfer_ghost(b,b_fespace,ids,ids_fespace)
-    for hid in 1:num_hids(ids)
-      lid = ids.hid_to_lid[hid]
-      gid = ids.lid_to_gid[lid]
-      lid_fespace = ids_fespace.gid_to_lid[gid]
-      b[lid] = b_fespace[lid_fespace]
+    num_ghosts_vec = ghost_length(ids)
+    gho_to_loc_vec = ghost_to_local(ids)
+    loc_to_glo_vec = local_to_global(ids)
+    gid_to_lid_fe  = global_to_local(ids_fespace)
+    for ghost_lid_vec in 1:num_ghosts_vec
+      lid_vec     = gho_to_loc_vec[ghost_lid_vec]
+      gid         = loc_to_glo_vec[lid_vec]
+      lid_fespace = gid_to_lid_fe[gid]
+      b[lid_vec] = b_fespace[lid_fespace]
     end
   end
-  map_parts(
+  map(
     transfer_ghost,
-    b.values,
-    b_fespace.values,
-    b.rows.partition,
-    b_fespace.rows.partition)
+    partition(b),
+    partition(b_fespace),
+    b.index_partition,
+    b_fespace.index_partition)
 
   return b
 end
 
 function Algebra.create_from_nz(a::PVector)
-  # For FullyAssembledRows the underlying Exchanger should
-  # not have ghost layer making assemble! do nothing (TODO check)
-  assemble!(a)
+  assemble!(a) |> wait
   a
 end
 
@@ -506,7 +696,7 @@ end
 struct PVectorAllocationTrackTouchedAndValues{A,B,C}
   allocations::A
   values::B
-  rows::C
+  test_dofs_gids_prange::C
 end
 
 function Algebra.create_from_nz(
@@ -519,7 +709,7 @@ function Algebra.create_from_nz(
 
   function async_callback(b)
     # now we can assemble contributions
-    async_assemble!(b)
+    assemble!(b)
   end
 
   A,b = _sa_create_from_nz_with_callback(callback,async_callback,a)
@@ -535,7 +725,7 @@ Gridap.Algebra.LoopStyle(::Type{<:ArrayAllocationTrackTouchedAndValues}) = Grida
 
 
 function local_views(a::PVectorAllocationTrackTouchedAndValues,rows)
-  @check rows === a.rows
+  @check rows === a.test_dofs_gids_prange
   a.allocations
 end
 
@@ -572,19 +762,19 @@ end
 function Arrays.nz_allocation(a::DistributedCounterCOO{<:SubAssembledRows},
                               b::PVectorCounter{<:SubAssembledRows})
   A = nz_allocation(a)
-  dofs = b.rows
-  values = map_parts(nz_allocation,b.counters)
+  dofs = b.test_dofs_gids_prange
+  values = map(nz_allocation,b.counters)
   B=PVectorAllocationTrackOnlyValues(b.par_strategy,values,dofs)
   A,B
 end
 
 function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
-  dofs = a.rows
-  values = map_parts(nz_allocation,a.counters)
-  touched = map_parts(values) do values
+  dofs = a.test_dofs_gids_prange
+  values = map(nz_allocation,a.counters)
+  touched = map(values) do values
      fill!(Vector{Bool}(undef,length(values)),false)
   end
-  allocations=map_parts(values,touched) do values,touched
+  allocations=map(values,touched) do values,touched
     ArrayAllocationTrackTouchedAndValues(touched,values)
   end
   PVectorAllocationTrackTouchedAndValues(allocations,values,dofs)
@@ -595,50 +785,37 @@ function local_views(a::PVectorAllocationTrackTouchedAndValues)
 end
 
 function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
-   parts = get_part_ids(a.values)
-   rdofs = a.rows # dof ids of the test space
-   ngrdofs = length(rdofs)
-   nordofs = map_parts(num_oids,rdofs.partition)
-   first_grdof = map_parts(first_gdof_from_ids,rdofs.partition)
-   rneigs_snd = rdofs.exchanger.parts_snd
-   rneigs_rcv = rdofs.exchanger.parts_rcv
-
-   # Find the ghost rows
-   hrow_to_hrdof=map_parts(local_views(a.allocations),rdofs.partition) do allocation, indices
-    lids_touched=findall(allocation.touched)
-    nhlids = count((x)->indices.lid_to_ohid[x]<0,lids_touched)
-    hlids = Vector{Int32}(undef,nhlids)
+  test_dofs_prange = a.test_dofs_gids_prange # dof ids of the test space
+  test_dofs_prange_partition = partition(test_dofs_prange)
+  ngrdofs = length(test_dofs_prange)
+   
+  # Find the ghost rows
+  I_ghost_lids_to_dofs_ghost_lids=map(local_views(a.allocations),test_dofs_prange_partition) do allocation, indices
+    dofs_lids_touched=findall(allocation.touched)
+    loc_to_gho = local_to_ghost(indices)
+    n_I_ghost_lids = count((x)->loc_to_gho[x]!=0,dofs_lids_touched)
+    I_ghost_lids = Vector{Int32}(undef,n_I_ghost_lids)
     cur=1
-    for lid in lids_touched
-      hlid=indices.lid_to_ohid[lid]
-      if hlid<0
-        hlids[cur]=-hlid
+    for lid in dofs_lids_touched
+      dof_lid=loc_to_gho[lid]
+      if dof_lid!=0
+        I_ghost_lids[cur]=dof_lid
         cur=cur+1
       end
     end
-    hlids
-   end
-   hrow_to_gid, hrow_to_part = map_parts(
-       find_gid_and_part,hrow_to_hrdof,rdofs.partition)
+    I_ghost_lids
+  end
 
-   # Create the range for rows
-   rows = PRange(
-           parts,
-           ngrdofs,
-           nordofs,
-           first_grdof,
-           hrow_to_gid,
-           hrow_to_part,
-           rneigs_snd,
-           rneigs_rcv)
+  rows = _setup_prange_impl_(ngrdofs,
+                             I_ghost_lids_to_dofs_ghost_lids,
+                             test_dofs_prange_partition)
 
-   b = _rhs_callback(a,rows)
-   t2 = async_assemble!(b)
+  b = _rhs_callback(a,rows)
+  t2 = assemble!(b)
 
    # Wait the transfer to finish
    if t2 !== nothing
-     map_parts(schedule,t2)
-     map_parts(wait,t2)
+     wait(t2)
    end
    b
 end

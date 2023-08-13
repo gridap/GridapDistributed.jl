@@ -1,5 +1,7 @@
 module PoissonTestsSeq
 using PartitionedArrays
 include("../PoissonTests.jl")
-with_backend(PoissonTests.main,SequentialBackend(),(2,2))
+with_debug() do distribute
+    PoissonTests.main(distribute,(2,2))
+end 
 end # module

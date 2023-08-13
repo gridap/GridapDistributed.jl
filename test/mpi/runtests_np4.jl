@@ -13,9 +13,13 @@ end
 include("runtests_np4_body.jl")
 
 if MPI.Comm_size(MPI.COMM_WORLD) == 4
-  with_backend(all_tests,MPIBackend(),(2,2))
+  with_mpi() do distribute 
+    all_tests(distribute,(2,2))
+  end
 elseif MPI.Comm_size(MPI.COMM_WORLD) == 1
-  with_backend(all_tests,MPIBackend(),(1,1))
+  with_mpi() do distribute 
+    all_tests(distribute,(1,1))
+  end
 else
   MPI.Abort(MPI.COMM_WORLD,0)
 end

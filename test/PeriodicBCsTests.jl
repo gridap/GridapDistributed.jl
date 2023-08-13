@@ -5,14 +5,14 @@ using GridapDistributed
 using PartitionedArrays
 using Test
 
-function main(parts)
-
+function main(distribute,parts)
+  ranks  = distribute(LinearIndices((prod(parts),)))
   output = mkpath(joinpath(@__DIR__,"output"))
 
   domain = (0,4,0,2π)
   cells = (20,20)
   isperiodic = (false,true)
-  model = CartesianDiscreteModel(parts,domain,cells,isperiodic=isperiodic)
+  model = CartesianDiscreteModel(ranks,parts,domain,cells,isperiodic=isperiodic)
 
   u((x,y)) = sin(y+π/6)*x
   f(x) = -Δ(u,x)

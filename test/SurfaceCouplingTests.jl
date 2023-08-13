@@ -18,13 +18,13 @@ g(x) = tr(∇u(x))
 ∇(::typeof(u)) = ∇u
 ∇(::typeof(p)) = ∇p
 
-function main(parts)
+function main(distribute,parts)
+  ranks  = distribute(LinearIndices((prod(parts),)))
 
   # Mesh
-  parts = get_part_ids(SequentialBackend(),(2,2))
   cells = (10,10)
   domain = (0,1,0,1)
-  model = CartesianDiscreteModel(parts,domain,cells)
+  model = CartesianDiscreteModel(ranks,parts,domain,cells)
   function is_in(coords)
     R = 0.4
     n = length(coords)
@@ -32,7 +32,7 @@ function main(parts)
     d = x[1]^2 + x[2]^2 - R^2
     d < 0
   end
-  cell_to_entity = map_parts(local_views(model)) do model
+  cell_to_entity = map(local_views(model)) do model
     grid = get_grid(model)
     cell_to_coords = get_cell_coordinates(grid)
     cell_to_is_solid = lazy_map(is_in,cell_to_coords)
@@ -50,8 +50,10 @@ function main(parts)
     cell_to_entity
   end
   cell_gids=get_cell_gids(model)
-  exchange!(cell_to_entity,cell_gids.exchanger) # Make tags consistent
-
+  # Make tags consistent
+  cache=GridapDistributed.fetch_vector_ghost_values_cache(cell_to_entity,partition(cell_gids))
+  GridapDistributed.fetch_vector_ghost_values!(cell_to_entity,cache)
+  
   # Domains and measures
   Ω = Interior(model)
   Ωs = Interior(model,tags="solid")

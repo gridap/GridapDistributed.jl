@@ -4,7 +4,7 @@ function FESpaces.FESpace(model::DistributedDiscreteModel,
                           reffe::Tuple{RaviartThomas,Any,Any};
                           conformity=nothing,kwargs...)
 
-  cell_reffes = map_parts(local_views(model)) do m
+  cell_reffes = map(local_views(model)) do m
     basis,reffe_args,reffe_kwargs = reffe
     cell_reffe = ReferenceFE(m,basis,reffe_args...;reffe_kwargs...)
   end
@@ -14,7 +14,7 @@ end
 function FESpace(model::DistributedDiscreteModel,
                  reffe::GenericRefFE{RaviartThomas};
                  conformity=nothing, kwargs...)
-  cell_reffes = map_parts(local_views(model)) do m
+  cell_reffes = map(local_views(model)) do m
     Fill(reffe,num_cells(m))
   end
   _common_fe_space_constructor(model,cell_reffes;conformity,kwargs...)
@@ -22,7 +22,7 @@ end
 
 function _common_fe_space_constructor(model,cell_reffes;conformity,kwargs...)
   sign_flips=_generate_sign_flips(model,cell_reffes)
-  spaces = map_parts(local_views(model),sign_flips,cell_reffes) do m,sign_flip,cell_reffe
+  spaces = map(local_views(model),sign_flips,cell_reffes) do m,sign_flip,cell_reffe
      conf = Conformity(testitem(cell_reffe),conformity)
      cell_fe = CellFE(m,cell_reffe,conf,sign_flip)
      FESpace(m, cell_fe; kwargs...)
@@ -32,11 +32,9 @@ function _common_fe_space_constructor(model,cell_reffes;conformity,kwargs...)
   DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
 
-
-
 function _generate_sign_flips(model,cell_reffes)
   cell_gids  = get_cell_gids(model)
-  sign_flips = map_parts(local_views(model),cell_gids.partition,cell_reffes) do m, p, cell_reffe
+  sign_flips = map(local_views(model),partition(cell_gids),cell_reffes) do m, p, cell_reffe
     D = num_cell_dims(model)
 
     gtopo = get_grid_topology(m)
@@ -60,7 +58,8 @@ function _generate_sign_flips(model,cell_reffes)
     data  = Vector{Bool}(undef,ndata)
     data .= false
 
-    for cell in p.oid_to_lid
+    loc_to_glo=local_to_global(p)
+    for cell in own_to_local(p)
       sign_flip = view(data,ptrs[cell]:ptrs[cell+1]-1)
       reffe = cell_reffe[cell]
       D = num_dims(reffe)
@@ -77,8 +76,8 @@ function _generate_sign_flips(model,cell_reffes)
           if (length(facet_cells_around)==1)
             is_slave == false
           else
-            mx=maximum(p.lid_to_gid[facet_cells_around])
-            is_slave = (p.lid_to_gid[cell] == mx)
+            mx=maximum(loc_to_glo[facet_cells_around])
+            is_slave = (loc_to_glo[cell] == mx)
           end
           if is_slave
               for dof in face_own_dofs[facet_lid]
@@ -88,8 +87,9 @@ function _generate_sign_flips(model,cell_reffes)
           facet_lid = facet_lid + 1
       end
     end
-    PArrays.Table(data,ptrs)
+    JaggedArray(data,ptrs)
   end
-  exchange!(sign_flips,cell_gids.exchanger)
+  cache = fetch_vector_ghost_values_cache(sign_flips,partition(cell_gids))
+  fetch_vector_ghost_values!(sign_flips,cache) |> wait
   sign_flips
 end

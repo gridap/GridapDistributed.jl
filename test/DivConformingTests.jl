@@ -76,10 +76,10 @@ function f(model,reffe)
     assem = SparseMatrixAssembler(U,V,das)
     data = collect_cell_matrix(U,V,a(u,v))
     A = assemble_matrix(assem,data)
-    t1  = trian.trians.parts[1]
-    t2  = trian.trians.parts[2]
-    dc1 = dc.contribs.parts[1]
-    dc2 = dc.contribs.parts[2]
+    t1  = trian.trians.items[1]
+    t2  = trian.trians.items[2]
+    dc1 = dc.contribs.items[1]
+    dc2 = dc.contribs.items[2]
     c1  = Gridap.CellData.get_contribution(dc1,t1)
     c2  = Gridap.CellData.get_contribution(dc2,t2)
     tol = 1.0e-12
@@ -87,32 +87,38 @@ function f(model,reffe)
     @test norm(c1[2]-c2[1]) < tol
 end
 
-function main(parts)
-    @assert isa(parts,SequentialData)
+function main(distribute,nranks)
+   ranks = distribute(LinearIndices((prod(nranks),)))
+   @assert isa(ranks,DebugArray)
+   @assert length(ranks)==2
 
-    models=map_parts(parts) do part
-      if (part==1)
+   models=map(ranks) do rank
+      if (rank==1)
         setup_p1_model()
       else
         setup_p2_model()
       end
     end
 
-    noids,firstgid,hid_to_gid,hid_to_part=map_parts(parts) do part
-      if (part==1)
-        1,1,[2],Int32[2]
+    num_owners,owner_to_global,ghost_to_global,ghost_to_owner=map(ranks) do rank
+      if (rank==1)
+        1,[1],[2],Int32[2]
       else
-        1,2,[1],Int32[1]
+        1,[2],[1],Int32[1]
       end
-    end
+    end |> tuple_of_arrays
 
-    gids=PRange(
-      parts,
-      2,
-      noids,
-      firstgid,
-      hid_to_gid,
-      hid_to_part)
+    indices=map(ranks, owner_to_global, ghost_to_global, ghost_to_owner) do rank, 
+                                                                            owner_to_global,
+                                                                            ghost_to_global,
+                                                                            ghost_to_owner
+      owner = rank
+      ngdofs = 2
+      own_indices=OwnIndices(ngdofs,owner,owner_to_global)
+      ghost_indices=GhostIndices(ngdofs,ghost_to_global,ghost_to_owner)
+      OwnAndGhostIndices(own_indices,ghost_indices)
+    end
+    gids=PRange(indices)
 
     model = GridapDistributed.DistributedDiscreteModel(models,gids)
 

@@ -1,5 +1,7 @@
 module CellDataTestsSeq
 using PartitionedArrays
 include("../CellDataTests.jl")
-with_backend(CellDataTests.main,SequentialBackend(),(2,2))
+with_debug() do distribute
+    CellDataTests.main(distribute,(2,2))
+end
 end # module
