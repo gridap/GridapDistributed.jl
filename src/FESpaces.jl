@@ -489,7 +489,7 @@ function _find_vector_type(spaces,gids)
   # TODO Now the user can select the local vector type but not the global one
   # new kw-arg global_vector_type ?
   # we use PVector for the moment
-  local_vector_type = get_vector_type(PartitonedArrays.getany(spaces))
+  local_vector_type = get_vector_type(PartitionedArrays.getany(spaces))
 
   if local_vector_type <: BlockVector
     T = eltype(local_vector_type)

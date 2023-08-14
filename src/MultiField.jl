@@ -37,11 +37,7 @@ struct DistributedMultiFieldFESpace{MS,A,B,C,D} <: DistributedFESpace
   vector_type::Type{D}
   function DistributedMultiFieldFESpace(
     field_fe_space::AbstractVector{<:DistributedSingleFieldFESpace},
-<<<<<<< HEAD
-    part_fe_space::AbstractPData{<:MultiFieldFESpace{MS}},
-=======
-    part_fe_space::AbstractArray{<:MultiFieldFESpace},
->>>>>>> 38b02ee2811f5a28d66359dd085b826041f9ee07
+    part_fe_space::AbstractArray{<:MultiFieldFESpace{MS}},
     gids::PRange,
     vector_type::Type{D}) where {D,MS}
     A = typeof(field_fe_space)
@@ -425,52 +421,59 @@ end
 
 function FESpaces.SparseMatrixAssembler(
   trial::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
-  test::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
+  test ::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
   par_strategy=SubAssembledRows())
-  Tv = get_vector_type(get_part(local_views(first(trial))))
+  Tv = get_vector_type(PartitionedArrays.getany(local_views(first(trial))))
   T  = eltype(Tv)
   Tm = SparseMatrixCSC{T,Int}
   SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)
 end
 
+# Array of PArrays -> PArray of Arrays 
+function to_parray_of_arrays(a::AbstractArray{<:MPIArray})
+  indices = linear_indices(first(a))
+  map(indices) do i
+    map(a) do aj
+      PartitionedArrays.getany(aj)
+    end
+  end
+end
+
+function to_parray_of_arrays(a::AbstractArray{<:DebugArray})
+  indices = linear_indices(first(a))
+  map(indices) do i
+    map(a) do aj
+      aj.items[i]
+    end
+  end
+end
+
 function local_views(a::MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P}) where {NB,NV,SB,P}
   assems = a.block_assemblers
-  parts = get_part_ids(local_views(first(assems)))
-  map(parts) do p
-    idx = CartesianIndices(axes(assems))
-    block_assems = map(idx) do I
-      get_part(local_views(assems[I]),p)
-    end
-    return MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P}(block_assems)
-  end
+  array = to_parray_of_arrays(map(local_views,assems))
+  return map(MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P},array)
 end
 
 function local_views(a::MatrixBlock,rows,cols)
-  parts = get_part_ids(local_views(first(a.array)))
-  map(parts) do p
-    idx = CartesianIndices(axes(a))
-    array = map(idx) do I
-      get_part(local_views(a[I],rows[I[1]],cols[I[2]]),p)
-    end
-    ArrayBlock(array,a.touched)
+  idx = CartesianIndices(axes(a))
+  array = map(idx) do I
+    local_views(a[I],rows[I[1]],cols[I[2]])
   end
+  return map(b -> ArrayBlock(b,a.touched), to_parray_of_arrays(array))
 end
 
 function local_views(a::VectorBlock,rows)
-  parts = get_part_ids(local_views(first(a.array)))
-  map(parts) do p
-    idx = CartesianIndices(axes(a))
-    array = map(idx) do I
-      get_part(local_views(a[I],rows[I]),p)
-    end
-    ArrayBlock(array,a.touched)
+  idx = CartesianIndices(axes(a))
+  array = map(idx) do I
+    local_views(a[I],rows[I])
   end
+  return map(b -> ArrayBlock(b,a.touched), to_parray_of_arrays(array))
 end
 
 function local_views(a::ArrayBlockView,axes...)
   array = local_views(a.array,axes...)
   map(array) do array
-    MultiField.ArrayBlockView(array,a.block_map)
+    ArrayBlockView(array,a.block_map)
   end
 end
 
@@ -514,10 +517,12 @@ end
 #! but requires a little bit of refactoring of the assembly code. Postponed until GridapDistributed v0.3.
 
 function Algebra.create_from_nz(a::ArrayBlock{<:DistributedAllocationCOO{<:FullyAssembledRows}})
-  array = map(_fa_create_from_nz_temporary_fix,a.array)
+  #array = map(_fa_create_from_nz_temporary_fix,a.array)
+  array = map(Algebra.create_from_nz,a.array)
   return mortar(array)
 end
 
+"""
 function _fa_create_from_nz_temporary_fix(a::DistributedAllocationCOO{<:FullyAssembledRows})
   parts = get_part_ids(local_views(a))
 
@@ -565,3 +570,4 @@ function _fa_create_from_nz_temporary_fix(a::DistributedAllocationCOO{<:FullyAss
   exchanger = empty_exchanger(parts)
   return PSparseMatrix(values,rows,cols,exchanger)
 end
+"""

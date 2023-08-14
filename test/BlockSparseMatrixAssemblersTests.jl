@@ -1,3 +1,5 @@
+module BlockSparseMatrixAssemblersTests
+
 using Test, LinearAlgebra, BlockArrays, SparseArrays
 
 using Gridap
@@ -6,11 +8,14 @@ using Gridap.FESpaces, Gridap.ReferenceFEs, Gridap.MultiField
 using GridapDistributed
 using PartitionedArrays
 
-parts = get_part_ids(SequentialBackend(),(2,2))
+nparts = (2,2)
+parts = with_debug() do distribute
+  distribute(LinearIndices((prod(nparts),)))
+end
 
 sol(x) = sum(x)
 
-model = CartesianDiscreteModel(parts,(0.0,1.0,0.0,1.0),(12,12))
+model = CartesianDiscreteModel(parts,nparts,(0.0,1.0,0.0,1.0),(12,12))
 Ω = Triangulation(model)
 
 reffe = LagrangianRefFE(Float64,QUAD,1)
@@ -106,6 +111,11 @@ block_trials = map(range -> get_block_fespace(X.field_fe_space,range),block_rang
 
 assem_blocks = SparseMatrixAssembler(Xb,Yb,FullyAssembledRows())
 
+local_views(assem_blocks)
+
+ab = assem_blocks.block_assemblers
+map(local_views,ab)
+
 A1_blocks = assemble_matrix(assem_blocks,bmatdata);
 b1_blocks = assemble_vector(assem_blocks,bvecdata);
 
@@ -131,3 +141,4 @@ A11 = A1_blocks.blocks[1,1]
 A12 = A1_blocks.blocks[1,2]
 A22 = A1_blocks.blocks[2,2]
 
+end
