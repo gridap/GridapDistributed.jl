@@ -321,7 +321,7 @@ function Algebra.nz_allocation(a::DistributedCounterCOO)
   DistributedAllocationCOO(a.par_strategy,allocs,a.test_dofs_gids_prange,a.trial_dofs_gids_prange)
 end
 
-struct DistributedAllocationCOO{A,B,C,D} <:GridapType
+struct DistributedAllocationCOO{A,B,C,D} <: GridapType
   par_strategy::A
   allocs::B
   test_dofs_gids_prange::C
@@ -341,10 +341,10 @@ end
 
 function change_axes(a::DistributedAllocationCOO{A,B,<:PRange,<:PRange},
                      axes::Tuple{<:PRange,<:PRange}) where {A,B}
-  local_axes=map(partition(axes[1]),partition(axes[2])) do rows,cols
+  local_axes = map(partition(axes[1]),partition(axes[2])) do rows,cols
     (Base.OneTo(local_length(rows)), Base.OneTo(local_length(cols)))
   end
-  allocs=map(change_axes,a.allocs,local_axes)
+  allocs = map(change_axes,a.allocs,local_axes)
   DistributedAllocationCOO(a.par_strategy,allocs,axes[1],axes[2])
 end
 
@@ -358,21 +358,31 @@ function local_views(a::DistributedAllocationCOO,test_dofs_gids_prange,trial_dof
   a.allocs
 end
 
+function get_allocations(a::DistributedAllocationCOO)
+  I,J,V = map(local_views(a)) do alloc
+    alloc.I, alloc.J, alloc.V
+  end |> tuple_of_arrays
+  return I,J,V
+end
+
+get_test_gids(a::DistributedAllocationCOO) = a.test_dofs_gids_prange
+get_trial_gids(a::DistributedAllocationCOO) = a.trial_dofs_gids_prange
+
 function first_gdof_from_ids(ids)
-  lid_to_gid=local_to_global(ids) 
-  owner_to_lid=own_to_local(ids)
-  own_length(ids)>0 ? Int(lid_to_gid[first(owner_to_lid)]) : 1
+  lid_to_gid   = local_to_global(ids) 
+  owner_to_lid = own_to_local(ids)
+  return (own_length(ids) > 0) ? Int(lid_to_gid[first(owner_to_lid)]) : 1
 end
 
 function find_gid_and_owner(ighost_to_jghost,jindices)
-  jghost_to_local=ghost_to_local(jindices)
-  jlocal_to_global=local_to_global(jindices)
-  jlocal_to_owner=local_to_owner(jindices)
+  jghost_to_local  = ghost_to_local(jindices)
+  jlocal_to_global = local_to_global(jindices)
+  jlocal_to_owner  = local_to_owner(jindices)
   ighost_to_jlocal = view(jghost_to_local,ighost_to_jghost)
 
   ighost_to_global = jlocal_to_global[ighost_to_jlocal]
   ighost_to_owner = jlocal_to_owner[ighost_to_jlocal]
-  ighost_to_global, ighost_to_owner
+  return ighost_to_global, ighost_to_owner
 end
 
 function Algebra.create_from_nz(a::PSparseMatrix)
@@ -385,15 +395,17 @@ end
 function Algebra.create_from_nz(a::DistributedAllocationCOO{<:FullyAssembledRows})
   f(x) = nothing
   A, = _fa_create_from_nz_with_callback(f,a)
-  A
+  return A
 end
 
 # The given ids are assumed to be a sub-set of the lids
 function ghost_lids_touched(a::AbstractLocalIndices,gids::AbstractVector{<:Integer})
+  glo_to_loc = global_to_local(a)
+  loc_to_gho = local_to_ghost(a)
+  
+  # First pass: Allocate
   i = 0
   ghost_lids_touched = fill(false,ghost_length(a))
-  glo_to_loc=global_to_local(a)
-  loc_to_gho=local_to_ghost(a)
   for gid in gids
     lid = glo_to_loc[gid]
     ghost_lid = loc_to_gho[lid]
@@ -403,18 +415,21 @@ function ghost_lids_touched(a::AbstractLocalIndices,gids::AbstractVector{<:Integ
     end
   end
   gids_ghost_lid_to_ghost_lid = Vector{Int32}(undef,i)
-  i = 0
-  ghost_lids_touched .= false
+
+  # Second pass: fill 
+  i = 1
+  fill!(ghost_lids_touched,false)
   for gid in gids
     lid = glo_to_loc[gid]
     ghost_lid = loc_to_gho[lid]
     if ghost_lid > 0 && !ghost_lids_touched[ghost_lid]
       ghost_lids_touched[ghost_lid] = true
-      i += 1
       gids_ghost_lid_to_ghost_lid[i] = ghost_lid
+      i += 1
     end
   end
-  gids_ghost_lid_to_ghost_lid
+
+  return gids_ghost_lid_to_ghost_lid
 end
 
 # Find the neighbours of partition1 trying 
@@ -422,74 +437,59 @@ end
 function _find_neighbours!(partition1, partition2)
   partition2_snd, partition2_rcv = assembly_neighbors(partition2)
   partition2_graph = ExchangeGraph(partition2_snd, partition2_rcv)
-  assembly_neighbors(partition1; neighbors=partition2_graph)
+  return assembly_neighbors(partition1; neighbors=partition2_graph)
 end 
 
 function _fa_create_from_nz_with_callback(callback,a)
 
   # Recover some data
-  I,J,V = map(a.allocs) do alloc
-    alloc.I, alloc.J, alloc.V
-  end |> tuple_of_arrays
-  test_dofs_gids_prange = a.test_dofs_gids_prange
-  trial_dofs_gids_prange = a.trial_dofs_gids_prange
-  test_dofs_gids_partition = partition(test_dofs_gids_prange)
-  trial_dofs_gids_partition = partition(trial_dofs_gids_prange)
-  ngcdofs = length(trial_dofs_gids_prange)
-  nocdofs = map(own_length,trial_dofs_gids_partition)
+  I,J,V = get_allocations(a)
+  test_dofs_gids_prange  = get_test_gids(a)
+  trial_dofs_gids_prange = get_trial_gids(a)
 
-  rows = _setup_prange_rows_without_ghosts(test_dofs_gids_prange)
-
+  rows = _setup_prange(test_dofs_gids_prange,I;ghost=false,ax=:rows)
   b = callback(rows)
 
   # convert I and J to global dof ids
-  map(to_global!,I,test_dofs_gids_partition)
-  map(to_global!,J,trial_dofs_gids_partition)
+  to_global_indices!(I,test_dofs_gids_prange)
+  to_global_indices!(J,trial_dofs_gids_prange)
 
   # Create the range for cols
-  cols = _setup_prange(trial_dofs_gids_prange,J)
-
+  cols = _setup_prange(trial_dofs_gids_prange,J;ax=:cols)
 
   # Convert again I,J to local numeration
-  map(to_local!,I,partition(rows))
-  map(to_local!,J,partition(cols))
+  to_local_indices!(I,rows)
+  to_local_indices!(J,cols)
 
   # Adjust local matrix size to linear system's index sets
-  asys=change_axes(a,(rows,cols))
+  asys = change_axes(a,(rows,cols))
 
   # Compress local portions
-  values = map(create_from_nz,asys.allocs)
+  values = map(create_from_nz,local_views(asys))
 
   # Finally build the matrix
   A = PSparseMatrix(values,partition(rows),partition(cols))
-
-  A, b
+  return A, b
 end
 
 function Algebra.create_from_nz(a::DistributedAllocationCOO{<:SubAssembledRows})
   f(x) = nothing
   A, = _sa_create_from_nz_with_callback(f,f,a)
-  A
+  return A
 end
 
 function _sa_create_from_nz_with_callback(callback,async_callback,a)
   # Recover some data
-  I,J,V = map(a.allocs) do alloc
-    alloc.I, alloc.J, alloc.V
-  end |> tuple_of_arrays
-  test_dofs_gids_prange = a.test_dofs_gids_prange
-  trial_dofs_gids_prange = a.trial_dofs_gids_prange
-  test_dofs_gids_partition = partition(test_dofs_gids_prange)
-  trial_dofs_gids_partition = partition(trial_dofs_gids_prange)
-  ngrdofs = length(test_dofs_gids_prange)
-  ngcdofs = length(test_dofs_gids_prange)
+  I,J,V = get_allocations(a)
+  test_dofs_gids_prange = get_test_gids(a)
+  trial_dofs_gids_prange = get_trial_gids(a)
 
   # convert I and J to global dof ids
-  map(to_global!,I,test_dofs_gids_partition)
-  map(to_global!,J,trial_dofs_gids_partition)
+  to_global_indices!(I,test_dofs_gids_prange)
+  to_global_indices!(J,trial_dofs_gids_prange)
 
   # Create the Prange for the rows
-  rows = _setup_prange(test_dofs_gids_prange,I)
+  rows = _setup_prange(test_dofs_gids_prange,I;ax=:rows)
   
   # Move values to the owner part
   # since we have integrated only over owned cells
@@ -504,20 +504,20 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   wait(t)
 
   # Create the Prange for the cols
-  cols = _setup_prange(trial_dofs_gids_prange,J)
+  cols = _setup_prange(trial_dofs_gids_prange,J;ax=:cols)
 
   # Overlap rhs communications with CSC compression
   t2 = async_callback(b)
 
   # Convert again I,J to local numeration
-  map(to_local!,I,partition(rows))
-  map(to_local!,J,partition(cols))
+  to_local_indices!(I,rows)
+  to_local_indices!(J,cols)
 
   # Adjust local matrix size to linear system's index sets
-  asys=change_axes(a,(rows,cols))
+  asys = change_axes(a,(rows,cols))
 
   # Compress the local matrices
-  values = map(create_from_nz,asys.allocs)
+  values = map(create_from_nz,local_views(asys))
 
   # Wait the transfer to finish
   if t2 !== nothing
@@ -526,8 +526,7 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
 
   # Finally build the matrix
   A = PSparseMatrix(values,partition(rows),partition(cols))
-
-  A, b
+  return A, b
 end
 
 struct PVectorBuilder{T,B}
@@ -588,50 +587,71 @@ function local_views(a::PVectorAllocationTrackOnlyValues,rows)
   a.values
 end
 
-# Create PRange for the rows of the linear system
-# without local ghost dofs as per required in the 
-# FullyAssembledRows() parallel assembly strategy 
-function _setup_prange_rows_without_ghosts(test_dofs_gids_prange)
-  ngdofs = length(test_dofs_gids_prange)
-  test_dofs_gids_partition = partition(test_dofs_gids_prange)
-  nodofs = map(own_length,test_dofs_gids_partition)
-  rindices=map(test_dofs_gids_partition) do dofs_indices 
-    owner = part_id(dofs_indices)
-    own_indices=OwnIndices(ngdofs,owner,own_to_global(dofs_indices))
-    ghost_indices=GhostIndices(ngdofs,Int64[],Int32[])
-    OwnAndGhostIndices(own_indices,ghost_indices)
-  end
-  PRange(rindices)
+# to_global! & to_local! analogs, for dispatching
+
+function to_local_indices!(I,ids::PRange)
+  map(to_local!,I,partition(ids))
+end
+
+function to_local_indices!(I,ids::AbstractVector{<:PRange})
+  map(to_local_indices!,I,ids)
+end
+
+function to_global_indices!(I,ids::PRange)
+  map(to_global!,I,partition(ids))
+end
+
+function to_global_indices!(I,ids::AbstractVector{<:PRange})
+  map(to_global_indices!,I,ids)
 end
 
 # dofs_gids_prange can be either test_dofs_gids_prange or trial_dofs_gids_prange
 # In the former case, gids is a vector of global test dof identifiers, while in the 
 # latter, a vector of global trial dof identifiers
-function _setup_prange(dofs_gids_prange,gids)
-  ngdofs = length(dofs_gids_prange)
-  dofs_gids_partition = partition(dofs_gids_prange)
-  gids_ghost_lids_to_dofs_ghost_lids = map(ghost_lids_touched,dofs_gids_partition,gids)
-  _setup_prange_impl_(ngdofs,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition)
+function _setup_prange(dofs_gids_prange,gids;ghost=true,kwargs...)
+  if ghost
+    _setup_prange_with_ghosts(dofs_gids_prange,gids)
+  else
+    _setup_prange_without_ghosts(dofs_gids_prange)
+  end
 end
 
-function _setup_prange_impl_(ngdofs,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition)
+# Create PRange for the rows of the linear system
+# without local ghost dofs as per required in the 
+# FullyAssembledRows() parallel assembly strategy 
+function _setup_prange_without_ghosts(dofs_gids_prange)
+  ngdofs = length(dofs_gids_prange)
+  indices = map(partition(dofs_gids_prange)) do dofs_indices 
+    owner = part_id(dofs_indices)
+    own_indices = OwnIndices(ngdofs,owner,own_to_global(dofs_indices))
+    ghost_indices = GhostIndices(ngdofs,Int64[],Int32[])
+    OwnAndGhostIndices(own_indices,ghost_indices)
+  end
+  return PRange(indices)
+end
+
+function _setup_prange_with_ghosts(dofs_gids_prange,gids)
+  ngdofs = length(dofs_gids_prange)
+  dofs_gids_partition = partition(dofs_gids_prange)
+
+  gids_ghost_lids_to_dofs_ghost_lids = map(ghost_lids_touched,dofs_gids_partition,gids)
   gids_ghost_to_global, gids_ghost_to_owner = map(
     find_gid_and_owner,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition) |> tuple_of_arrays
 
-  indices=map(dofs_gids_partition, 
-               gids_ghost_to_global, 
-               gids_ghost_to_owner) do dofs_indices, ghost_to_global, ghost_to_owner 
+  indices = map(dofs_gids_partition, 
+                gids_ghost_to_global, 
+                gids_ghost_to_owner) do dofs_indices, ghost_to_global, ghost_to_owner 
      owner = part_id(dofs_indices)
-     own_indices=OwnIndices(ngdofs,owner,own_to_global(dofs_indices))
-     ghost_indices=GhostIndices(ngdofs,ghost_to_global,ghost_to_owner)
+     own_indices   = OwnIndices(ngdofs,owner,own_to_global(dofs_indices))
+     ghost_indices = GhostIndices(ngdofs,ghost_to_global,ghost_to_owner)
      OwnAndGhostIndices(own_indices,ghost_indices)
   end
   _find_neighbours!(indices, dofs_gids_partition)
-  PRange(indices)
+  return PRange(indices)
 end 
 
 function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues{<:FullyAssembledRows})
-  rows = _setup_prange_rows_without_ghosts(a.test_dofs_gids_prange)
+  rows = _setup_prange_without_ghosts(a.test_dofs_gids_prange)
   _rhs_callback(a,rows)
 end
 
@@ -764,8 +784,8 @@ function Arrays.nz_allocation(a::DistributedCounterCOO{<:SubAssembledRows},
   A = nz_allocation(a)
   dofs = b.test_dofs_gids_prange
   values = map(nz_allocation,b.counters)
-  B=PVectorAllocationTrackOnlyValues(b.par_strategy,values,dofs)
-  A,B
+  B = PVectorAllocationTrackOnlyValues(b.par_strategy,values,dofs)
+  return A,B
 end
 
 function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
@@ -777,7 +797,7 @@ function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
   allocations=map(values,touched) do values,touched
     ArrayAllocationTrackTouchedAndValues(touched,values)
   end
-  PVectorAllocationTrackTouchedAndValues(allocations,values,dofs)
+  return PVectorAllocationTrackTouchedAndValues(allocations,values,dofs)
 end
 
 function local_views(a::PVectorAllocationTrackTouchedAndValues)
@@ -795,12 +815,12 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
     loc_to_gho = local_to_ghost(indices)
     n_I_ghost_lids = count((x)->loc_to_gho[x]!=0,dofs_lids_touched)
     I_ghost_lids = Vector{Int32}(undef,n_I_ghost_lids)
-    cur=1
+    cur = 1
     for lid in dofs_lids_touched
       dof_lid=loc_to_gho[lid]
-      if dof_lid!=0
-        I_ghost_lids[cur]=dof_lid
-        cur=cur+1
+      if dof_lid != 0
+        I_ghost_lids[cur] = dof_lid
+        cur = cur+1
       end
     end
     I_ghost_lids
@@ -813,9 +833,9 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
   b = _rhs_callback(a,rows)
   t2 = assemble!(b)
 
-   # Wait the transfer to finish
-   if t2 !== nothing
-     wait(t2)
-   end
-   b
+  # Wait the transfer to finish
+  if t2 !== nothing
+    wait(t2)
+  end
+  b
 end

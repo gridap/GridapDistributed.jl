@@ -401,11 +401,10 @@ function FESpaces.SparseMatrixAssembler(
   test::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}},
   par_strategy=SubAssembledRows()) where {NB,SB,P}
 
-  # Build block spaces #! TODO: Eliminate this, build the PRANGES directly
+  # Build block spaces
   function get_block_fespace(spaces,range)
     (length(range) == 1) ? spaces[range[1]] : MultiFieldFESpace(spaces[range])
   end
-  NV = length(trial.field_fe_space)
   block_ranges = MultiField.get_block_ranges(NB,SB,P)
   block_tests  = map(range -> get_block_fespace(test.field_fe_space,range),block_ranges)
   block_trials = map(range -> get_block_fespace(trial.field_fe_space,range),block_ranges)
@@ -416,6 +415,7 @@ function FESpaces.SparseMatrixAssembler(
     return SparseMatrixAssembler(local_mat_type,local_vec_type,Xj,Yi,par_strategy)
   end
 
+  NV = length(trial.field_fe_space)
   return MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P}(block_assemblers)
 end
 
@@ -477,6 +477,8 @@ function local_views(a::ArrayBlockView,axes...)
   end
 end
 
+# SparseMatrixAssembler API
+
 #! The following could be avoided if DistributedBlockSparseMatrixAssembler <: DistributedSparseMatrixAssembler
 function FESpaces.symbolic_loop_matrix!(A,a::DistributedBlockSparseMatrixAssembler,matdata)
   rows = get_rows(a)
@@ -512,62 +514,48 @@ function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedBlockSparseM
   map(numeric_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
 end
 
-#! The following is horrible (see dicussion in PR) but necessary for the moment. We will be 
-#! bringing potentially too many ghosts from other procs. This will be dealt with in teh future, 
-#! but requires a little bit of refactoring of the assembly code. Postponed until GridapDistributed v0.3.
+# Assembly 
+
+function get_allocations(a::ArrayBlock{<:DistributedAllocationCOO})
+  tuple_of_array_of_parrays = map(get_allocations,a.array) |> tuple_of_arrays
+  #tuple_of_parray_of_arrays = map(to_parray_of_arrays,tuple_of_array_of_parrays)
+  return tuple_of_array_of_parrays
+end
+
+function get_test_gids(a::ArrayBlock{<:DistributedAllocationCOO})
+  return map(get_test_gids,a.array[:,1])
+end
+
+function get_trial_gids(a::ArrayBlock{<:DistributedAllocationCOO})
+  return map(get_trial_gids,a.array[1,:])
+end
+
+function change_axes(a::ArrayBlock{<:DistributedAllocationCOO},axes)
+  array = map(ai -> change_axes(ai,axes),a.array)
+  return ArrayBlock(array,a.touched)
+end
+
+function _setup_prange(dofs_gids_prange::AbstractVector{<:PRange},gids::AbstractMatrix;ghost=true,ax=:rows)
+  @check ax ∈ (:rows,:cols)
+  block_ids = LinearIndices(dofs_gids_prange)
+  gids_ax_slice = map(block_ids) do id
+    gids_ax_slice = (ax == :rows) ? gids[id,:] : gids[:,id]
+    if ghost
+      gids_ax_slice = map(x -> union(x...), to_parray_of_arrays(gids_ax_slice))
+    end
+    return gids_ax_slice
+  end
+  return map((p,g) -> _setup_prange(p,g;ghost=ghost), dofs_gids_prange, gids_ax_slice)
+end
 
 function Algebra.create_from_nz(a::ArrayBlock{<:DistributedAllocationCOO{<:FullyAssembledRows}})
-  #array = map(_fa_create_from_nz_temporary_fix,a.array)
-  array = map(Algebra.create_from_nz,a.array)
-  return mortar(array)
+  f(x) = nothing
+  A, = _fa_create_from_nz_with_callback(f,a)
+  return A
 end
 
-"""
-function _fa_create_from_nz_temporary_fix(a::DistributedAllocationCOO{<:FullyAssembledRows})
-  parts = get_part_ids(local_views(a))
-
-  rdofs = a.rows # dof ids of the test space
-  cdofs = a.cols # dof ids of the trial space
-  ngrdofs = length(rdofs)
-  ngcdofs = length(cdofs)
-  nordofs = map(num_oids,rdofs.partition)
-  nocdofs = map(num_oids,cdofs.partition)
-  first_grdof = map(first_gdof_from_ids,rdofs.partition)
-  first_gcdof = map(first_gdof_from_ids,cdofs.partition)
-  cneigs_snd  = cdofs.exchanger.parts_snd
-  cneigs_rcv  = cdofs.exchanger.parts_rcv
-
-  hcol_to_gid  = map(part -> part.lid_to_gid[part.hid_to_lid], cdofs.partition)
-  hcol_to_part = map(part -> part.lid_to_part[part.hid_to_lid], cdofs.partition)
-  
-  rows = PRange(
-    parts,
-    ngrdofs,
-    nordofs,
-    first_grdof)
-
-  cols = PRange(
-    parts,
-    ngcdofs,
-    nocdofs,
-    first_gcdof,
-    hcol_to_gid,
-    hcol_to_part,
-    cneigs_snd,
-    cneigs_rcv)
-
-  I,J,C = map_parts(a.allocs) do alloc
-    alloc.I, alloc.J, alloc.V
-  end
-  to_gids!(I,rdofs)
-  to_gids!(J,cdofs)
-  to_lids!(I,rows)
-  to_lids!(J,cols)
-
-  b = change_axes(a,(rows,cols))
-  
-  values    = map(Algebra.create_from_nz,local_views(b))
-  exchanger = empty_exchanger(parts)
-  return PSparseMatrix(values,rows,cols,exchanger)
+function Algebra.create_from_nz(a::ArrayBlock{<:DistributedAllocationCOO{<:SubAssembledRows}})
+  f(x) = nothing
+  A, = _sa_create_from_nz_with_callback(f,f,a)
+  return A
 end
-"""

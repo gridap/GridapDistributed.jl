@@ -111,11 +111,6 @@ block_trials = map(range -> get_block_fespace(X.field_fe_space,range),block_rang
 
 assem_blocks = SparseMatrixAssembler(Xb,Yb,FullyAssembledRows())
 
-local_views(assem_blocks)
-
-ab = assem_blocks.block_assemblers
-map(local_views,ab)
-
 A1_blocks = assemble_matrix(assem_blocks,bmatdata);
 b1_blocks = assemble_vector(assem_blocks,bvecdata);
 
