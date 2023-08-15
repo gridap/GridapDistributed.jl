@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added 
 
 - Tools for redistributing FE functions among meshes; added mock tests for `RedistributeGlue`. Since PR [114](https://github.com/gridap/GridapDistributed.jl/pull/114). This functionality was already somewhere else in the Gridap ecosystem of packages (in GridapSolvers.jl in particular).
+- A variant of the PArrays `assemble_coo!` function named `assemble_coo_with_column_owner!` which also exchanges processor column owners of the entries. This variant is required to circumvent the current limitation of GridapDistributed.jl assembly for the case in which the following is not fullfilled: "each processor can determine locally with a single layer of ghost cells the global indices and associated processor owners of the rows that it touches after assembly of integration terms posed on locally-owned entities." Since PR [115](https://github.com/gridap/GridapDistributed.jl/pull/115).
 
 
 ## [0.2.8] - 2023-07-31
