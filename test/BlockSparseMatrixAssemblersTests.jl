@@ -8,14 +8,14 @@ using Gridap.FESpaces, Gridap.ReferenceFEs, Gridap.MultiField
 using GridapDistributed
 using PartitionedArrays
 
-nparts = (2,1)
+nparts = (2,2)
 parts = with_debug() do distribute
   distribute(LinearIndices((prod(nparts),)))
 end
 
 sol(x) = sum(x)
 
-model = CartesianDiscreteModel(parts,nparts,(0.0,1.0,0.0,1.0),(4,1))
+model = CartesianDiscreteModel(parts,nparts,(0.0,1.0,0.0,1.0),(4,4))
 Ω = Triangulation(model)
 
 reffe = LagrangianRefFE(Float64,QUAD,1)
@@ -68,17 +68,6 @@ bvecdata = collect_cell_vector(Yb,liform(vb))
 ############################################################################################
 # Block Assembly
 
-function same_solution(x1::PVector,x2::BlockVector,X,Xi,dΩ)
-  u1 = [FEFunction(X,x1)...]
-  u2 = map(i->FEFunction(Xi[i],x2[Block(i)]),1:blocklength(x2))
-
-  err = map(u1,u2) do u1,u2
-    eh = u1-u2
-    return sum(∫(eh⋅eh)dΩ)
-  end
-  return err
-end
-
 function LinearAlgebra.mul!(y::BlockVector,A::BlockMatrix,x::BlockVector)
   o = one(eltype(A))
   for i in blockaxes(A,2)
@@ -89,48 +78,32 @@ function LinearAlgebra.mul!(y::BlockVector,A::BlockMatrix,x::BlockVector)
   end
 end
 
-function test_axes(c::BlockVector,a::BlockMatrix,b::BlockVector)
-  res = Matrix(undef,blocksize(a)...)
-  for i in blockaxes(a,1)
-    for j in blockaxes(a,2)
-      res[i.n[1],j.n[1]] = Tuple([oids_are_equal(c[i].rows,a[i,j].rows),
-      oids_are_equal(a[i,j].cols,b[j].rows),
-      hids_are_equal(a[i,j].cols,b[j].rows)])
-    end
+function is_same_vector(x::BlockVector,y::PVector,Ub,U)
+  y_fespace = GridapDistributed.change_ghost(y,U.gids)
+  x_fespace = mortar(map((xi,Ui) -> GridapDistributed.change_ghost(xi,Ui.gids),blocks(x),Ub.field_fe_space))
+
+  res = map(1:num_fields(Ub)) do i
+    xi = restrict_to_field(Ub,x_fespace,i)
+    yi = restrict_to_field(U,y_fespace,i)
+    xi ≈ yi
   end
-  return res
+  return all(res)
 end
 
-#! TODO: Does not work if there are empty blocks due to PRange checks when multiplying. 
-#! Maybe we should change to MatrixBlocks?  
-
 assem_blocks = SparseMatrixAssembler(Xb,Yb,FullyAssembledRows())
-
-rows = get_rows(assem_blocks)
-cols = get_cols(assem_blocks)
-mat_builder = get_matrix_builder(assem_blocks)
-
-m1 = Gridap.FESpaces.nz_counter(mat_builder,(rows,cols))
-Gridap.FESpaces.symbolic_loop_matrix!(m1,assem_blocks,bmatdata)
-m2 = Gridap.FESpaces.nz_allocation(m1)
-Gridap.FESpaces.numeric_loop_matrix!(m2,assem_blocks,bmatdata)
-
-m3 = Gridap.FESpaces.create_from_nz(m2)
 
 A1_blocks = assemble_matrix(assem_blocks,bmatdata);
 b1_blocks = assemble_vector(assem_blocks,bvecdata);
 
-y1_blocks = mortar(map(Aii->PVector(0.0,Aii.rows),diag(A1_blocks.blocks)));
-x1_blocks = mortar(map(Aii->PVector(1.0,Aii.cols),diag(A1_blocks.blocks)));
-test_axes(y1_blocks,A1_blocks,x1_blocks)
-
+y1_blocks = mortar(map(Aii->pfill(0.0,partition(axes(Aii,1))),diag(blocks(A1_blocks))));
+x1_blocks = mortar(map(Aii->pfill(1.0,partition(axes(Aii,2))),diag(blocks(A1_blocks))));
 mul!(y1_blocks,A1_blocks,x1_blocks)
 
-y1 = PVector(0.0,A1.rows)
-x1 = PVector(1.0,A1.cols)
+y1 = pfill(0.0,partition(axes(A1)[1]))
+x1 = pfill(1.0,partition(axes(A1)[2]))
 mul!(y1,A1,x1)
 
-@test all(same_solution(y1,y1_blocks,X,block_trials,dΩ) .< 1e-5)
+is_same_vector(y1_blocks,y1,Yb,Y)
 
 ############################################################################################
 

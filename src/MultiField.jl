@@ -71,6 +71,20 @@ function MultiField.restrict_to_field(
   PVector(values,partition(gids))
 end
 
+function MultiField.restrict_to_field(
+  f::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},free_values::BlockVector,field::Integer)
+
+  # BlockVector{PVector} -> PVector{BlockVector}
+  fv1 = map(partition,blocks(free_values)) |> to_parray_of_arrays
+  fv2 = map(mortar,fv1)
+
+  values = map(f.part_fe_space,fv2) do u,x
+    restrict_to_field(u,x,field)
+  end
+  gids = f.field_fe_space[field].gids
+  PVector(values,partition(gids))
+end
+
 #function FESpaces.zero_free_values(f::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle})
 #  return mortar(map(zero_free_values,f.field_fe_space))
 #end
