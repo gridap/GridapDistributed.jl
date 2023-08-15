@@ -7,19 +7,25 @@ using PartitionedArrays
 using Test
 using SparseArrays
 
-
-function main(parts)
-  main(parts,FullyAssembledRows(),SparseMatrixCSR{0,Float64,Int})
-  main(parts,SubAssembledRows(),SparseMatrixCSC{Float64,Int})
+# Overload required for the tests below
+function Base.copy(a::PSparseMatrix)
+  a_matrix_partition = similar(a.matrix_partition)
+  copy!(a_matrix_partition, a.matrix_partition)
+  PSparseMatrix(a_matrix_partition,a.row_partition,a.col_partition)
 end
 
-function main(parts,strategy,local_matrix_type)
+function main(distribute,parts)
+  main(distribute,parts,FullyAssembledRows(),SparseMatrixCSR{0,Float64,Int})
+  main(distribute,parts,SubAssembledRows(),SparseMatrixCSC{Float64,Int})
+end
 
+function main(distribute,parts,strategy,local_matrix_type)
+  ranks  = distribute(LinearIndices((prod(parts),)))
   output = mkpath(joinpath(@__DIR__,"output"))
 
   domain = (0,4,0,4)
   cells = (4,4)
-  model = CartesianDiscreteModel(parts,domain,cells)
+  model = CartesianDiscreteModel(ranks,parts,domain,cells)
 
   k = 1
   u((x,y)) = (x+y)^k

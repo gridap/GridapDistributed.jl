@@ -6,19 +6,22 @@ using PartitionedArrays
 using LinearAlgebra
 using Test
 
-function main(parts)
+function main(distribute,parts)
 
   output = mkpath(joinpath(@__DIR__,"output"))
 
-  if length(size(parts)) == 2
+  if length(parts) == 2
     domain = (0,4,0,4)
     cells = (4,4)
-  elseif length(size(parts)) == 3
+  elseif length(parts) == 3
     domain = (0,4,0,4,0,4)
     cells = (4,4,4)
   end
 
-  model = CartesianDiscreteModel(parts,domain,cells)
+  ranks = distribute(LinearIndices((prod(parts),)))
+
+
+  model = CartesianDiscreteModel(ranks,parts,domain,cells)
   writevtk(model,joinpath(output,"model"))
 
   @test num_cells(model)==prod(cells)
@@ -42,12 +45,12 @@ function main(parts)
     cell_graph = GridapDistributed.compute_cell_graph(smodel)
     @test LinearAlgebra.issymmetric(cell_graph)
     @test LinearAlgebra.ishermitian(cell_graph)
-    dmodel = DiscreteModel(parts,smodel,cell_to_part)
+    dmodel = DiscreteModel(ranks,smodel,cell_to_part)
     writevtk(dmodel,joinpath(output,"dmodel"))
   end
 
   cell_gids = get_cell_gids(model)
-  map_parts(local_views(model),cell_gids.partition) do lmodel,gids
+  map(local_views(model),partition(cell_gids)) do lmodel,gids
     @test test_local_part_face_labelings_consistency(lmodel,gids,gmodel)
   end
 
@@ -74,7 +77,7 @@ function main(parts)
     d < 0
   end
 
-  cell_to_entity = map_parts(local_views(model)) do model
+  cell_to_entity = map(local_views(model)) do model
     grid = get_grid(model)
     cell_to_coords = get_cell_coordinates(grid)
     cell_to_is_solid = lazy_map(is_in,cell_to_coords)
@@ -90,7 +93,8 @@ function main(parts)
     cell_to_entity
   end
   cell_gids=get_cell_gids(model)
-  exchange!(cell_to_entity,cell_gids.exchanger) # Make tags consistent
+  vcache=PartitionedArrays.p_vector_cache(cell_to_entity,partition(cell_gids))
+  assemble!((a,b)->b, cell_to_entity, map(reverse,vcache) ) |> wait # Make tags consistent
 
   Ωs = Interior(model,tags="solid")
   Ωf = Interior(model,tags="fluid")
@@ -105,9 +109,10 @@ function test_local_part_face_labelings_consistency(lmodel::CartesianDiscreteMod
    global_labelings       = gmodel.face_labeling
    l_d_to_dface_to_entity = local_labelings.d_to_dface_to_entity
    g_d_to_dface_to_entity = global_labelings.d_to_dface_to_entity
+   loc_to_glo             = local_to_global(gids)
    #traverse local cells
    for cell_lid=1:num_cells(lmodel)
-        cell_gid=gids.lid_to_gid[cell_lid]
+        cell_gid=loc_to_glo[cell_lid]
         for d=0:D-1
              local_cell_to_faces = local_topology.n_m_to_nface_to_mfaces[D+1,d+1]
              global_cell_to_faces = global_topology.n_m_to_nface_to_mfaces[D+1,d+1]

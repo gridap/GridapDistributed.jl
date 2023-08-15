@@ -1,5 +1,7 @@
 module FESpacesTestsSeq
 using PartitionedArrays
 include("../FESpacesTests.jl")
-with_backend(FESpacesTests.main,SequentialBackend(),(2,2))
+with_debug() do distribute
+  FESpacesTests.main(distribute,(2,2))
+end
 end # module

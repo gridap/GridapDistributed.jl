@@ -1,5 +1,9 @@
 module HeatEquationTestsSeq
 using PartitionedArrays
 include("../HeatEquationTests.jl")
-with_backend(HeatEquationTests.main,SequentialBackend(),(2,2))
+
+with_debug() do distribute
+    HeatEquationTests.main(distribute,(2,2))
+end
+
 end # module

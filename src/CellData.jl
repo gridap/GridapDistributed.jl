@@ -4,7 +4,7 @@ abstract type DistributedCellDatum <: GridapType end
 # DistributedCellPoint
 """
 """
-struct DistributedCellPoint{A<:AbstractPData{<:CellPoint}} <: DistributedCellDatum
+struct DistributedCellPoint{A<:AbstractArray{<:CellPoint}} <: DistributedCellDatum
   points::A
 end
 
@@ -17,7 +17,7 @@ struct DistributedCellField{A,B} <: DistributedCellDatum
   fields::A
   metadata::B
   function DistributedCellField(
-    fields::AbstractPData{<:CellField},
+    fields::AbstractArray{<:CellField},
     metadata=nothing)
 
     A = typeof(fields)
@@ -31,22 +31,22 @@ local_views(a::DistributedCellField) = a.fields
 # Constructors
 
 function CellData.CellField(f::Function,trian::DistributedTriangulation)
-  fields = map_parts(trian.trians) do t
+  fields = map(trian.trians) do t
     CellField(f,t)
   end
   DistributedCellField(fields)
 end
 
 function CellData.CellField(f::Number,trian::DistributedTriangulation)
-  fields = map_parts(trian.trians) do t
+  fields = map(trian.trians) do t
     CellField(f,t)
   end
   DistributedCellField(fields)
 end
 
 function CellData.CellField(
-  f::AbstractPData{<:AbstractArray{<:Number}},trian::DistributedTriangulation)
-  fields = map_parts(f,trian.trians) do f,t
+  f::AbstractArray{<:AbstractArray{<:Number}},trian::DistributedTriangulation)
+  fields = map(f,trian.trians) do f,t
     CellField(f,t)
   end
   DistributedCellField(fields)
@@ -59,7 +59,7 @@ function (f::DistributedCellField)(x::DistributedCellPoint)
 end
 
 function Arrays.evaluate!(cache,f::DistributedCellField,x::DistributedCellPoint)
-  map_parts(f.fields,x.points) do f,x
+  map(f.fields,x.points) do f,x
     evaluate!(nothing,f,x)
   end
 end
@@ -67,7 +67,7 @@ end
 # Operations
 
 function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField)
-  fields = map_parts(a.fields) do f
+  fields = map(a.fields) do f
     evaluate!(nothing,k,f)
   end
   DistributedCellField(fields)
@@ -75,42 +75,42 @@ end
 
 function Arrays.evaluate!(
   cache,k::Operation,a::DistributedCellField,b::DistributedCellField)
-  fields = map_parts(a.fields,b.fields) do f,g
+  fields = map(a.fields,b.fields) do f,g
     evaluate!(nothing,k,f,g)
   end
   DistributedCellField(fields)
 end
 
 function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField,b::Number)
-  fields = map_parts(a.fields) do f
+  fields = map(a.fields) do f
     evaluate!(nothing,k,f,b)
   end
   DistributedCellField(fields)
 end
 
 function Arrays.evaluate!(cache,k::Operation,b::Number,a::DistributedCellField)
-  fields = map_parts(a.fields) do f
+  fields = map(a.fields) do f
     evaluate!(nothing,k,b,f)
   end
   DistributedCellField(fields)
 end
 
 function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField,b::Function)
-  fields = map_parts(a.fields) do f
+  fields = map(a.fields) do f
     evaluate!(nothing,k,f,b)
   end
   DistributedCellField(fields)
 end
 
 function Arrays.evaluate!(cache,k::Operation,b::Function,a::DistributedCellField)
-  fields = map_parts(a.fields) do f
+  fields = map(a.fields) do f
     evaluate!(nothing,k,b,f)
   end
   DistributedCellField(fields)
 end
 
 function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField...)
-  fields = map_parts(map(i->i.fields,a)...) do f...
+  fields = map(map(i->i.fields,a)...) do f...
     evaluate!(nothing,k,f...)
   end
   DistributedCellField(fields)
@@ -164,80 +164,80 @@ cross(::typeof(∇),f::DistributedCellField) = curl(f)
 # Differential ops
 
 function Fields.gradient(a::DistributedCellField)
-  DistributedCellField(map_parts(gradient,a.fields))
+  DistributedCellField(map(gradient,a.fields))
 end
 
 function Fields.divergence(a::DistributedCellField)
-  DistributedCellField(map_parts(divergence,a.fields))
+  DistributedCellField(map(divergence,a.fields))
 end
 
 function Fields.DIV(a::DistributedCellField)
-  DistributedCellField(map_parts(DIV,a.fields))
+  DistributedCellField(map(DIV,a.fields))
 end
 
 function Fields.∇∇(a::DistributedCellField)
-  DistributedCellField(map_parts(∇∇,a.fields))
+  DistributedCellField(map(∇∇,a.fields))
 end
 
 function Fields.curl(a::DistributedCellField)
-  DistributedCellField(map_parts(curl,a.fields))
+  DistributedCellField(map(curl,a.fields))
 end
 
 # Integration related
 """
 """
-struct DistributedMeasure{A<:AbstractPData{<:Measure}} <: GridapType
+struct DistributedMeasure{A<:AbstractArray{<:Measure}} <: GridapType
   measures::A
 end
 
 local_views(a::DistributedMeasure) = a.measures
 
 function CellData.Measure(t::DistributedTriangulation,args...)
-  measures = map_parts(t.trians) do trian
+  measures = map(t.trians) do trian
     Measure(trian,args...)
   end
   DistributedMeasure(measures)
 end
 
 function CellData.Measure(tt::DistributedTriangulation{Dc,Dp},it::DistributedTriangulation{Dc,Dp},args...) where {Dc,Dp}
-  measures = map_parts(local_views(tt),local_views(it)) do ttrian, itrian
+  measures = map(local_views(tt),local_views(it)) do ttrian, itrian
     Measure(ttrian,itrian,args...)
   end
   return DistributedMeasure(measures)
 end
 
 function CellData.get_cell_points(a::DistributedMeasure)
-  DistributedCellPoint(map_parts(get_cell_points,a.measures))
+  DistributedCellPoint(map(get_cell_points,a.measures))
 end
 
 """
 """
-struct DistributedDomainContribution{A<:AbstractPData{<:DomainContribution}} <: GridapType
+struct DistributedDomainContribution{A<:AbstractArray{<:DomainContribution}} <: GridapType
   contribs::A
 end
 
 local_views(a::DistributedDomainContribution) = a.contribs
 
 function Base.getindex(c::DistributedDomainContribution,t::DistributedTriangulation)
-  map_parts(getindex,c.contribs,t.trians)
+  map(getindex,c.contribs,t.trians)
 end
 
 function Fields.integrate(f::DistributedCellField,b::DistributedMeasure)
-  contribs = map_parts(f.fields,b.measures) do f,m
+  contribs = map(f.fields,b.measures) do f,m
     integrate(f,m)
   end
   DistributedDomainContribution(contribs)
 end
 
 function Fields.integrate(f::Function,b::DistributedMeasure)
-  contribs = map_parts(b.measures) do m
+  contribs = map(b.measures) do m
     integrate(f,m)
   end
   DistributedDomainContribution(contribs)
 end
 
 function Fields.integrate(f::Number,b::DistributedMeasure)
-  contribs = map_parts(b.measures) do m
+  contribs = map(b.measures) do m
     integrate(f,m)
   end
   DistributedDomainContribution(contribs)
@@ -250,21 +250,21 @@ end
 (*)(b::DistributedMeasure,a::Integrand) = a*b
 
 function Base.sum(a::DistributedDomainContribution)
-  sum(map_parts(sum,a.contribs))
+  sum(map(sum,a.contribs))
 end
 
 function (+)(a::DistributedDomainContribution,b::DistributedDomainContribution)
-  contribs = map_parts(+,a.contribs,b.contribs)
+  contribs = map(+,a.contribs,b.contribs)
   DistributedDomainContribution(contribs)
 end
 
 function (-)(a::DistributedDomainContribution,b::DistributedDomainContribution)
-  contribs = map_parts(-,a.contribs,b.contribs)
+  contribs = map(-,a.contribs,b.contribs)
   DistributedDomainContribution(contribs)
 end
 
 function (*)(a::Number,b::DistributedDomainContribution)
-  contribs = map_parts(b.contribs) do b
+  contribs = map(b.contribs) do b
     a*b
   end
   DistributedDomainContribution(contribs)
@@ -275,18 +275,18 @@ end
 # Triangulation related
 
 function CellData.get_cell_points(a::DistributedTriangulation)
-  DistributedCellPoint(map_parts(get_cell_points,a.trians))
+  DistributedCellPoint(map(get_cell_points,a.trians))
 end
 
 function CellData.get_normal_vector(a::DistributedTriangulation)
-  fields = map_parts(get_normal_vector,a.trians)
+  fields = map(get_normal_vector,a.trians)
   DistributedCellField(fields)
 end
 
 # Skeleton related
 
-function DistributedCellField(a::AbstractPData{<:SkeletonPair})
-  plus, minus = map_parts(s->(s.plus,s.minus),a)
+function DistributedCellField(a::AbstractArray{<:SkeletonPair})
+  plus, minus = map(s->(s.plus,s.minus),a) |> tuple_of_arrays
   dplus = DistributedCellField(plus)
   dminus = DistributedCellField(minus)
   SkeletonPair(dplus,dminus)
@@ -294,9 +294,9 @@ end
 
 function Base.getproperty(x::DistributedCellField, sym::Symbol)
   if sym in (:⁺,:plus)
-    DistributedCellField(map_parts(i->i.plus,x.fields))
+    DistributedCellField(map(i->i.plus,x.fields))
   elseif sym in (:⁻, :minus)
-    DistributedCellField(map_parts(i->i.minus,x.fields))
+    DistributedCellField(map(i->i.minus,x.fields))
   else
     getfield(x, sym)
   end
@@ -325,16 +325,16 @@ function Arrays.evaluate!(cache,k::Operation,a::SkeletonPair{<:DistributedCellFi
   SkeletonPair(plus,minus)
 end
 
-CellData.jump(a::DistributedCellField) = DistributedCellField(map_parts(jump,a.fields))
+CellData.jump(a::DistributedCellField) = DistributedCellField(map(jump,a.fields))
 CellData.jump(a::SkeletonPair{<:DistributedCellField}) = a.⁺ + a.⁻
-CellData.mean(a::DistributedCellField) = DistributedCellField(map_parts(mean,a.fields))
+CellData.mean(a::DistributedCellField) = DistributedCellField(map(mean,a.fields))
 
 
 # DistributedCellDof
 
 struct DistributedCellDof{A} <: DistributedCellDatum
   dofs::A
-  function DistributedCellDof(dofs::AbstractPData{<:CellDof})
+  function DistributedCellDof(dofs::AbstractArray{<:CellDof})
       A = typeof(dofs)
       new{A}(dofs)
   end
@@ -345,7 +345,7 @@ local_views(s::DistributedCellDof) = s.dofs
 (a::DistributedCellDof)(f) = evaluate(a,f)
 
 function Gridap.Arrays.evaluate!(cache,s::DistributedCellDof,f::DistributedCellField)
-  map_parts(local_views(s),local_views(f)) do s, f
+  map(local_views(s),local_views(f)) do s, f
       evaluate!(nothing,s,f)
   end
 end

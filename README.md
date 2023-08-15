@@ -20,9 +20,9 @@ At present, `GridapDistributed.jl` provides scalable parallel data structures fo
 
 ## Execution modes and how to execute the program in each mode
 
-`GridapDistributed.jl` driver programs can be either run in sequential execution mode (very useful for developing/debugging parallel programs, see `test/sequential/` folder for examples) or in message-passing (MPI) execution mode (when you want to deploy the code in the actual parallel computer and perform a fast simulation, see `test/mpi/` folder for examples). In any case, even if you do no have access to a parallel machine, you should be able to run in both modes in your local desktop/laptop. 
+`GridapDistributed.jl` driver programs can be either run in debug execution mode (very useful for developing/debugging parallel programs, see `test/sequential/` folder for examples) or in message-passing (MPI) execution mode (when you want to deploy the code in the actual parallel computer and perform a fast simulation, see `test/mpi/` folder for examples). In any case, even if you do no have access to a parallel machine, you should be able to run in both modes in your local desktop/laptop. 
 
-A `GridapDistributed.jl` driver program written in sequential execution mode as, e.g., the one available at `test/sequential/PoissonTests.jl`, is executed from the terminal just as any other Julia script:
+A `GridapDistributed.jl` driver program written in debug execution mode as, e.g., the one available at `test/sequential/PoissonTests.jl`, is executed from the terminal just as any other Julia script:
 
 ```bash
 julia test/sequential/PoissonTests.jl
@@ -38,17 +38,18 @@ with the appropriate number of MPI tasks, `-n 4` in this particular example.
 
 ## Simple example (MPI-parallel execution mode)
 
-The following Julia code snippet solves a 2D Poisson problem in parallel on the unit square. The example follows the MPI-parallel execution mode (note the `MPIBackend()` argument to the `with_backend` function call) and thus it must be executed on 4 MPI tasks (note the mesh is partitioned into 4 parts) using the instructions [below](https://github.com/gridap/GridapDistributed.jl#mpi-parallel-julia-script-execution-instructions). If a user wants to use the sequential execution mode, one just replaces `MPIBackend()` by `SequentialBackend()` in the call to `with_backend`. `GridapDistributed.jl` sequential execution mode scripts are executed as any other julia sequential script.
+The following Julia code snippet solves a 2D Poisson problem in parallel on the unit square. The example follows the MPI-parallel execution mode (note the `with_mpi()` function call) and thus it must be executed on 4 MPI tasks (note the mesh is partitioned into 4 parts) using the instructions [below](https://github.com/gridap/GridapDistributed.jl#mpi-parallel-julia-script-execution-instructions). If a user wants to use the debug execution mode, one just replaces `with_mpi()` by `with_debug()`. 
+`GridapDistributed.jl` debug execution mode scripts are executed as any other julia sequential script.
 
 ```julia
 using Gridap
 using GridapDistributed
 using PartitionedArrays
-partition = (2,2)
-with_backend(MPIBackend(),partition) do parts
+function main(ranks)
   domain = (0,1,0,1)
-  mesh_partition = (4,4)
-  model = CartesianDiscreteModel(parts,domain,mesh_partition)
+  mesh_partition = (2,2) 
+  mesh_cells = (4,4)
+  model = CartesianDiscreteModel(ranks,mesh_partition,domain,mesh_cells)
   order = 2
   u((x,y)) = (x+y)^order
   f(x) = -Δ(u,x)
@@ -63,8 +64,12 @@ with_backend(MPIBackend(),partition) do parts
   uh = solve(op)
   writevtk(Ω,"results",cellfields=["uh"=>uh,"grad_uh"=>∇(uh)])
 end
+with_mpi() do distribute 
+  ranks = distribute_with_mpi(LinearIndices((4,)))
+  main(ranks)
+end
 ```
-The domain is discretized using the parallel Cartesian-like mesh generator built-in in `GridapDistributed`. The only minimal difference with respect to the sequential `Gridap` script is a call to the `with_backend` function of [`PartitionedArrays.jl`](https://github.com/fverdugo/PartitionedArrays.jl) right at the beginning of the program. With this function, the programer sets up the `PartitionedArrays.jl` communication backend (i.e., MPI in the example), specifies the number of parts and their layout (i.e., 2x2 partition in the example), and provides a function (using Julia do-block syntax for function arguments in the example) to be run on each part. The function body is equivalent to a sequential `Gridap` script, except for the `CartesianDiscreteModel` call, which in `GridapDistributed` also requires the `parts` argument passed back by the `with_backend` function.
+The domain is discretized using the parallel Cartesian-like mesh generator built-in in `GridapDistributed`. The only minimal difference with respect to the sequential `Gridap` script is a call to the `with_mpi` function of [`PartitionedArrays.jl`](https://github.com/fverdugo/PartitionedArrays.jl) right at the beginning of the program. With this function, the programmer sets up the `PartitionedArrays.jl` communication backend (i.e., MPI in the example), specifies, and provides a function to be run on each part (using Julia do-block syntax in the example). The function body is equivalent to a sequential `Gridap` script, except for the `CartesianDiscreteModel` call, which in `GridapDistributed` also requires the `ranks` and `mesh_partition` arguments to this function.
 
 ## Using parallel solvers
 
@@ -88,11 +93,10 @@ using GridapGmsh
 using GridapPETSc
 using GridapDistributed
 using PartitionedArrays
-n = 6
-with_backend(MPIBackend(),n) do parts
+function main(ranks)
   options = "-ksp_type cg -pc_type gamg -ksp_monitor"
   GridapPETSc.with(args=split(options)) do
-    model = GmshDiscreteModel(parts,"demo.msh")
+    model = GmshDiscreteModel(ranks,"demo.msh")
     order = 1
     dirichlet_tags = ["boundary1","boundary2"]
     u_boundary1(x) = 0.0
@@ -110,6 +114,10 @@ with_backend(MPIBackend(),n) do parts
     writevtk(Ω,"demo",cellfields=["uh"=>uh])
   end
 end
+with_mpi() do distribute 
+  ranks = distribute_with_mpi(LinearIndices((6,)))
+  main(ranks)
+end
 ```
 
 ## Build 
@@ -118,8 +126,8 @@ Before using `GridapDistributed.jl` package, one needs to build the [`MPI.jl`](h
 
 ## MPI-parallel Julia script execution instructions
 
-In order to execute a MPI-parallel `GridapDistributed.jl` driver, we can leverage the `mpiexecjl` script provided by `MPI.jl`. (Click [here](https://juliaparallel.github.io/MPI.jl/stable/configuration/#Julia-wrapper-for-mpiexec) for installation instructions). As an example, assuming that we are located on the root directory of `GridapDistributed.jl`,
-an hypothetic MPI-parallel `GridapDistributed.jl` driver named `driver.jl` can be executed on 4 MPI tasks as:
+In order to execute a MPI-parallel `GridapDistributed.jl` driver, we can leverage the `mpiexecjl` script provided by `MPI.jl`. (Click [here](https://juliaparallel.org/MPI.jl/stable/usage/#Julia-wrapper-for-mpiexec) for installation instructions). As an example, assuming that we are located on the root directory of `GridapDistributed.jl`,
+an hypothetical MPI-parallel `GridapDistributed.jl` driver named `driver.jl` can be executed on 4 MPI tasks as:
 
 ```
 mpiexecjl --project=. -n 4 julia -J sys-image.so driver.jl

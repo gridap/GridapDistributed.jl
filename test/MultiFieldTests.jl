@@ -6,13 +6,13 @@ using GridapDistributed
 using PartitionedArrays
 using Test
 
-function main(parts)
-
+function main(distribute, parts)
+  ranks  = distribute(LinearIndices((prod(parts),)))
   output = mkpath(joinpath(@__DIR__,"output"))
 
   domain = (0,4,0,4)
   cells = (4,4)
-  model = CartesianDiscreteModel(parts,domain,cells)
+  model = CartesianDiscreteModel(ranks,parts,domain,cells)
   Ω = Triangulation(model)
 
   k = 2

@@ -7,7 +7,8 @@ using Gridap.ODEs
 using GridapDistributed
 using PartitionedArrays
 
-function main(parts)
+function main(distribute,parts)
+  ranks = distribute(LinearIndices((prod(parts),)))
 
   θ = 0.5
 
@@ -22,10 +23,9 @@ function main(parts)
   g(t) = x -> (∇⋅u(t))(x)
   h(t) = x -> ∇(u(t))(x)⋅VectorValue(0.0,1.0) - p(t)(x)*VectorValue(0.0,1.0)
 
-  parts = get_part_ids(SequentialBackend(),(2,2))
   domain = (0,1,0,1)
   partition = (4,4)
-  model = CartesianDiscreteModel(parts,domain,partition)
+  model = CartesianDiscreteModel(ranks,parts,domain,partition)
   labels = get_face_labeling(model)
   add_tag_from_tags!(labels,"neumann",6)
   add_tag_from_tags!(labels,"dirichlet",[1,2,3,4,5,7,8])

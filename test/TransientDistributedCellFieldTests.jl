@@ -7,10 +7,11 @@ using Gridap.ODEs.TransientFETools: TransientCellField
 using PartitionedArrays
 using Test
 
-function main(parts)
+function main(distribute,parts)
+  ranks = distribute(LinearIndices((prod(parts),)))
   domain = (0,1,0,1)
   cells = (4,4)
-  𝒯 = CartesianDiscreteModel(parts,domain,cells)
+  𝒯 = CartesianDiscreteModel(ranks,parts,domain,cells)
   Ω = Interior(𝒯)
   dΩ = Measure(Ω,2)
 
