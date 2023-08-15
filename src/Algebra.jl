@@ -493,7 +493,7 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   
   # Move values to the owner part
   # since we have integrated only over owned cells
-  t = PArrays.assemble_coo!(I,J,V,partition(rows))
+  t = _assemble_coo!(I,J,V,rows)
 
   # Here we can overlap computations
   # This is a good place to overlap since
@@ -631,6 +631,20 @@ function _setup_matrix(values,rows::Vector{<:PRange},cols::Vector{<:PRange})
   return mortar(block_mats)
 end
 
+function _assemble_coo!(I,J,V,rows::PRange)
+  PArrays.assemble_coo!(I,J,V,partition(rows))
+end
+
+function _assemble_coo!(I,J,V,rows::Vector{<:PRange})
+  block_ids = CartesianIndices(I)
+  map(block_ids) do id
+    i = id[1]; j = id[2];
+    _assemble_coo!(I[i,j],J[i,j],V[i,j],rows[i])
+  end
+end
+
+Base.wait(t::Matrix) = map(wait,t)
+
 # dofs_gids_prange can be either test_dofs_gids_prange or trial_dofs_gids_prange
 # In the former case, gids is a vector of global test dof identifiers, while in the 
 # latter, a vector of global trial dof identifiers
@@ -659,8 +673,11 @@ end
 function _setup_prange_with_ghosts(dofs_gids_prange,gids)
   ngdofs = length(dofs_gids_prange)
   dofs_gids_partition = partition(dofs_gids_prange)
-
   gids_ghost_lids_to_dofs_ghost_lids = map(ghost_lids_touched,dofs_gids_partition,gids)
+  return _setup_prange_impl_(ngdofs,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition)
+end
+
+function _setup_prange_impl_(ngdofs,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition)
   gids_ghost_to_global, gids_ghost_to_owner = map(
     find_gid_and_owner,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition) |> tuple_of_arrays
 
@@ -674,7 +691,7 @@ function _setup_prange_with_ghosts(dofs_gids_prange,gids)
   end
   _find_neighbours!(indices, dofs_gids_partition)
   return PRange(indices)
-end 
+end
 
 function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues{<:FullyAssembledRows})
   rows = _setup_prange_without_ghosts(a.test_dofs_gids_prange)
@@ -832,18 +849,19 @@ end
 
 function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
   test_dofs_prange = a.test_dofs_gids_prange # dof ids of the test space
-  test_dofs_prange_partition = partition(test_dofs_prange)
   ngrdofs = length(test_dofs_prange)
-   
+  
   # Find the ghost rows
-  I_ghost_lids_to_dofs_ghost_lids=map(local_views(a.allocations),test_dofs_prange_partition) do allocation, indices
-    dofs_lids_touched=findall(allocation.touched)
+  allocations = local_views(a.allocations)
+  indices = partition(test_dofs_prange)
+  I_ghost_lids_to_dofs_ghost_lids = map(allocations, indices) do allocation, indices
+    dofs_lids_touched = findall(allocation.touched)
     loc_to_gho = local_to_ghost(indices)
     n_I_ghost_lids = count((x)->loc_to_gho[x]!=0,dofs_lids_touched)
     I_ghost_lids = Vector{Int32}(undef,n_I_ghost_lids)
     cur = 1
     for lid in dofs_lids_touched
-      dof_lid=loc_to_gho[lid]
+      dof_lid = loc_to_gho[lid]
       if dof_lid != 0
         I_ghost_lids[cur] = dof_lid
         cur = cur+1
@@ -854,7 +872,7 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
 
   rows = _setup_prange_impl_(ngrdofs,
                              I_ghost_lids_to_dofs_ghost_lids,
-                             test_dofs_prange_partition)
+                             indices)
 
   b = _rhs_callback(a,rows)
   t2 = assemble!(b)
@@ -863,5 +881,5 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
   if t2 !== nothing
     wait(t2)
   end
-  b
+  return b
 end

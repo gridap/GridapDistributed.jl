@@ -90,29 +90,29 @@ function is_same_vector(x::BlockVector,y::PVector,Ub,U)
   return all(res)
 end
 
+function is_same_matrix(Ab::BlockMatrix,A::PSparseMatrix,Xb,X)
+  yb = mortar(map(Aii->pfill(0.0,partition(axes(Aii,1))),diag(blocks(Ab))));
+  xb = mortar(map(Aii->pfill(1.0,partition(axes(Aii,2))),diag(blocks(Ab))));
+  mul!(yb,Ab,xb)
+
+  y = pfill(0.0,partition(axes(A)[1]))
+  x = pfill(1.0,partition(axes(A)[2]))
+  mul!(y,A,x)
+
+  return is_same_vector(yb,y,Xb,X)
+end
+
 assem_blocks = SparseMatrixAssembler(Xb,Yb,FullyAssembledRows())
 
 A1_blocks = assemble_matrix(assem_blocks,bmatdata);
 b1_blocks = assemble_vector(assem_blocks,bvecdata);
-
-y1_blocks = mortar(map(Aii->pfill(0.0,partition(axes(Aii,1))),diag(blocks(A1_blocks))));
-x1_blocks = mortar(map(Aii->pfill(1.0,partition(axes(Aii,2))),diag(blocks(A1_blocks))));
-mul!(y1_blocks,A1_blocks,x1_blocks)
-
-y1 = pfill(0.0,partition(axes(A1)[1]))
-x1 = pfill(1.0,partition(axes(A1)[2]))
-mul!(y1,A1,x1)
-
-is_same_vector(y1_blocks,y1,Yb,Y)
+is_same_matrix(A1_blocks,A1,Xb,X)
 
 ############################################################################################
 
 op = AffineFEOperator(biform,liform,X,Y)
 block_op = AffineFEOperator(biform,liform,Xb,Yb)
-
-
-A11 = A1_blocks.blocks[1,1]
-A12 = A1_blocks.blocks[1,2]
-A22 = A1_blocks.blocks[2,2]
+is_same_vector(get_vector(block_op),get_vector(op),Yb,Y)
+is_same_matrix(get_matrix(block_op),get_matrix(op),Xb,X)
 
 end
