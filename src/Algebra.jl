@@ -37,7 +37,14 @@ function Base.show(io::IO,k::MIME"text/plain",data::MPIVoidVector)
   println(io,"MPIVoidVector")
 end
 
-# Subcommunicators
+function num_parts(comm::MPI.Comm)
+  if comm != MPI.COMM_NULL
+    nparts = MPI.Comm_size(comm)
+  else
+    nparts = -1
+  end
+  nparts
+end
 
 function get_part_id(comm::MPI.Comm)
   if comm != MPI.COMM_NULL
