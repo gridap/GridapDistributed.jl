@@ -8,14 +8,14 @@ using Gridap.FESpaces, Gridap.ReferenceFEs, Gridap.MultiField
 using GridapDistributed
 using PartitionedArrays
 
-nparts = (2,2)
+nparts = (2,1)
 parts = with_debug() do distribute
   distribute(LinearIndices((prod(nparts),)))
 end
 
 sol(x) = sum(x)
 
-model = CartesianDiscreteModel(parts,nparts,(0.0,1.0,0.0,1.0),(12,12))
+model = CartesianDiscreteModel(parts,nparts,(0.0,1.0,0.0,1.0),(4,1))
 Ω = Triangulation(model)
 
 reffe = LagrangianRefFE(Float64,QUAD,1)
@@ -23,14 +23,16 @@ V = FESpace(Ω, reffe)
 U = TrialFESpace(sol,V)
 
 dΩ = Measure(Ω, 4)
-biform((u1,u2,u3),(v1,v2,v3)) = ∫(∇(u1)⋅∇(v1) + u2⋅v2 + u1⋅v2 - u2⋅v1 - v3⋅u3)*dΩ # + v3⋅u1 - v1⋅u3)*dΩ
-liform((v1,v2,v3)) = ∫(v1 + v2 - v3)*dΩ
+#biform((u1,u2,u3),(v1,v2,v3)) = ∫(∇(u1)⋅∇(v1) + u2⋅v2 + u1⋅v2 - u2⋅v1 - v3⋅u3)*dΩ # + v3⋅u1 - v1⋅u3)*dΩ
+#liform((v1,v2,v3)) = ∫(v1 + v2 - v3)*dΩ
+biform((u1,u2),(v1,v2)) = ∫(∇(u1)⋅∇(v1) + u2⋅v2 + u1⋅v2 - u2⋅v1)*dΩ
+liform((v1,v2)) = ∫(v1 + v2)*dΩ
 
 ############################################################################################
 # Normal assembly 
 
-Y = MultiFieldFESpace([V,V,V])
-X = MultiFieldFESpace([U,U,U])
+Y = MultiFieldFESpace([V,V])
+X = MultiFieldFESpace([U,U])
 
 u = get_trial_fe_basis(X)
 v = get_fe_basis(Y)
@@ -51,10 +53,10 @@ A11 = assemble_matrix((u1,v1)->∫(∇(u1)⋅∇(v1))*dΩ,assem11,U,V)
 # Block MultiFieldStyle
 
 #mfs = BlockMultiFieldStyle()
-mfs = BlockMultiFieldStyle(2,(1,2))
+mfs = BlockMultiFieldStyle()#2,(1,2))
 
-Yb  = MultiFieldFESpace([V,V,V];style=mfs)
-Xb  = MultiFieldFESpace([U,U,U];style=mfs)
+Yb  = MultiFieldFESpace([V,V];style=mfs)
+Xb  = MultiFieldFESpace([U,U];style=mfs)
 
 ub = get_trial_fe_basis(Xb)
 vb = get_fe_basis(Yb)
@@ -99,17 +101,21 @@ function test_axes(c::BlockVector,a::BlockMatrix,b::BlockVector)
   return res
 end
 
-function get_block_fespace(spaces,range)
-  (length(range) == 1) ? spaces[range[1]] : MultiFieldFESpace(spaces[range])
-end
-
-block_ranges = Gridap.MultiField.get_block_ranges(2,(1,2),(1,2,3))
-block_trials = map(range -> get_block_fespace(X.field_fe_space,range),block_ranges)
-
 #! TODO: Does not work if there are empty blocks due to PRange checks when multiplying. 
 #! Maybe we should change to MatrixBlocks?  
 
 assem_blocks = SparseMatrixAssembler(Xb,Yb,FullyAssembledRows())
+
+rows = get_rows(assem_blocks)
+cols = get_cols(assem_blocks)
+mat_builder = get_matrix_builder(assem_blocks)
+
+m1 = Gridap.FESpaces.nz_counter(mat_builder,(rows,cols))
+Gridap.FESpaces.symbolic_loop_matrix!(m1,assem_blocks,bmatdata)
+m2 = Gridap.FESpaces.nz_allocation(m1)
+Gridap.FESpaces.numeric_loop_matrix!(m2,assem_blocks,bmatdata)
+
+m3 = Gridap.FESpaces.create_from_nz(m2)
 
 A1_blocks = assemble_matrix(assem_blocks,bmatdata);
 b1_blocks = assemble_vector(assem_blocks,bvecdata);

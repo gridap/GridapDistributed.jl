@@ -25,7 +25,7 @@ using FillArrays
 using BlockArrays
 
 import Gridap.TensorValues: inner, outer, double_contraction, symmetric_part
-import LinearAlgebra: det, tr, cross, dot, ⋅
+import LinearAlgebra: det, tr, cross, dot, ⋅, diag
 import Base: inv, abs, abs2, *, +, -, /, adjoint, transpose, real, imag, conj, getproperty, propertynames
 import Gridap.Fields: grad2curl
 import Gridap.ODEs.ODETools: ∂t, ∂tt

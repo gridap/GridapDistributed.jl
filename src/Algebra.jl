@@ -451,15 +451,15 @@ function _fa_create_from_nz_with_callback(callback,a)
   b = callback(rows)
 
   # convert I and J to global dof ids
-  to_global_indices!(I,test_dofs_gids_prange)
-  to_global_indices!(J,trial_dofs_gids_prange)
+  to_global_indices!(I,test_dofs_gids_prange;ax=:rows)
+  to_global_indices!(J,trial_dofs_gids_prange;ax=:cols)
 
   # Create the range for cols
   cols = _setup_prange(trial_dofs_gids_prange,J;ax=:cols)
 
   # Convert again I,J to local numeration
-  to_local_indices!(I,rows)
-  to_local_indices!(J,cols)
+  to_local_indices!(I,rows;ax=:rows)
+  to_local_indices!(J,cols;ax=:cols)
 
   # Adjust local matrix size to linear system's index sets
   asys = change_axes(a,(rows,cols))
@@ -468,7 +468,7 @@ function _fa_create_from_nz_with_callback(callback,a)
   values = map(create_from_nz,local_views(asys))
 
   # Finally build the matrix
-  A = PSparseMatrix(values,partition(rows),partition(cols))
+  A = _setup_matrix(values,rows,cols)
   return A, b
 end
 
@@ -485,8 +485,8 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   trial_dofs_gids_prange = get_trial_gids(a)
 
   # convert I and J to global dof ids
-  to_global_indices!(I,test_dofs_gids_prange)
-  to_global_indices!(J,trial_dofs_gids_prange)
+  to_global_indices!(I,test_dofs_gids_prange;ax=:rows)
+  to_global_indices!(J,trial_dofs_gids_prange;ax=:cols)
 
   # Create the Prange for the rows
   rows = _setup_prange(test_dofs_gids_prange,I;ax=:rows)
@@ -510,8 +510,8 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   t2 = async_callback(b)
 
   # Convert again I,J to local numeration
-  to_local_indices!(I,rows)
-  to_local_indices!(J,cols)
+  to_local_indices!(I,rows;ax=:rows)
+  to_local_indices!(J,cols;ax=:cols)
 
   # Adjust local matrix size to linear system's index sets
   asys = change_axes(a,(rows,cols))
@@ -525,7 +525,7 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   end
 
   # Finally build the matrix
-  A = PSparseMatrix(values,partition(rows),partition(cols))
+  A = _setup_matrix(values,rows,cols)
   return A, b
 end
 
@@ -587,22 +587,48 @@ function local_views(a::PVectorAllocationTrackOnlyValues,rows)
   a.values
 end
 
-# to_global! & to_local! analogs, for dispatching
+# to_global! & to_local! analogs, for dispatching in block assembly
 
-function to_local_indices!(I,ids::PRange)
+function to_local_indices!(I,ids::PRange;kwargs...)
   map(to_local!,I,partition(ids))
 end
 
-function to_local_indices!(I,ids::AbstractVector{<:PRange})
-  map(to_local_indices!,I,ids)
-end
-
-function to_global_indices!(I,ids::PRange)
+function to_global_indices!(I,ids::PRange;kwargs...)
   map(to_global!,I,partition(ids))
 end
 
-function to_global_indices!(I,ids::AbstractVector{<:PRange})
-  map(to_global_indices!,I,ids)
+for f in [:to_local_indices!, :to_global_indices!]
+  @eval begin
+    function $f(I::Vector,ids::AbstractVector{<:PRange};kwargs...)
+      map($f,I,ids)
+    end
+
+    function $f(I::Matrix,ids::AbstractVector{<:PRange};ax=:rows)
+      @check ax ∈ [:rows,:cols]
+      block_ids = CartesianIndices(I)
+      map(block_ids) do id
+        i = id[1]; j = id[2];
+        if ax == :rows
+          $f(I[i,j],ids[i])
+        else
+          $f(I[i,j],ids[j])
+        end
+      end
+    end
+  end
+end
+
+function _setup_matrix(values,rows::PRange,cols::PRange)
+  return PSparseMatrix(values,partition(rows),partition(cols))
+end
+
+function _setup_matrix(values,rows::Vector{<:PRange},cols::Vector{<:PRange})
+  block_ids  = CartesianIndices((length(rows),length(cols)))
+  block_mats = map(block_ids) do I
+    block_values = map(v -> blocks(v)[I],values)
+    return _setup_matrix(block_values,rows[I[1]],cols[I[2]])
+  end
+  return mortar(block_mats)
 end
 
 # dofs_gids_prange can be either test_dofs_gids_prange or trial_dofs_gids_prange

@@ -523,21 +523,32 @@ function get_allocations(a::ArrayBlock{<:DistributedAllocationCOO})
 end
 
 function get_test_gids(a::ArrayBlock{<:DistributedAllocationCOO})
-  return map(get_test_gids,a.array[:,1])
+  return map(get_test_gids,diag(a.array))
 end
 
 function get_trial_gids(a::ArrayBlock{<:DistributedAllocationCOO})
-  return map(get_trial_gids,a.array[1,:])
+  return map(get_trial_gids,diag(a.array))
 end
 
-function change_axes(a::ArrayBlock{<:DistributedAllocationCOO},axes)
-  array = map(ai -> change_axes(ai,axes),a.array)
+function change_axes(a::MatrixBlock{<:DistributedAllocationCOO},axes::Tuple{<:Vector,<:Vector})
+  block_ids  = CartesianIndices(a.array)
+  rows, cols = axes
+
+  array = map(block_ids) do I
+    change_axes(a[I],(rows[I[1]],cols[I[2]]))
+  end
   return ArrayBlock(array,a.touched)
+end
+
+function local_views(a::MatrixBlock{<:DistributedAllocationCOO})
+  array = map(local_views,a.array) |> to_parray_of_arrays
+  return map(ai -> ArrayBlock(ai,a.touched),array)
 end
 
 function _setup_prange(dofs_gids_prange::AbstractVector{<:PRange},gids::AbstractMatrix;ghost=true,ax=:rows)
   @check ax ∈ (:rows,:cols)
   block_ids = LinearIndices(dofs_gids_prange)
+
   gids_ax_slice = map(block_ids) do id
     gids_ax_slice = (ax == :rows) ? gids[id,:] : gids[:,id]
     if ghost
