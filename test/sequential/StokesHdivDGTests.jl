@@ -1,4 +1,4 @@
-module StokesHdivDGTests
+module StokesHdivDGTestsSeq
 using PartitionedArrays
 include("../StokesHdivDGTests.jl")
 with_debug() do distribute
