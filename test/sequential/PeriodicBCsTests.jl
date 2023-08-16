@@ -13,7 +13,6 @@ ndofss = [25,20,20,16]
 for np in nps
   for (ndofs, isperiodic) in zip(ndofss,isperiodics)
     parts = DebugArray(LinearIndices((prod(np),)))
-    println(isperiodic)
     model = CartesianDiscreteModel(parts,np,domain,cells;isperiodic=isperiodic)
     V = FESpace(model,reffe)
     @test ndofs == num_free_dofs(V)
