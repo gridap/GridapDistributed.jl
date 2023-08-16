@@ -17,18 +17,10 @@ end
 
 function ODETools.allocate_jacobian(
   op::TransientFETools.TransientFEOperatorFromWeakForm,
-  duh::DistributedCellField,
+  t0::Real,
+  duh::Union{DistributedCellField,DistributedMultiFieldFEFunction},
   cache)
-  _matdata_jacobians = TransientFETools.fill_initial_jacobians(op,duh)
-  matdata = _vcat_distributed_matdata(_matdata_jacobians)
-  allocate_matrix(op.assem_t,matdata)
-end
-
-function ODETools.allocate_jacobian(
-  op::TransientFETools.TransientFEOperatorFromWeakForm,
-  duh::DistributedMultiFieldFEFunction,
-  cache)
-  _matdata_jacobians = TransientFETools.fill_initial_jacobians(op,duh)
+  _matdata_jacobians = TransientFETools.fill_initial_jacobians(op,t0,duh)
   matdata = _vcat_distributed_matdata(_matdata_jacobians)
   allocate_matrix(op.assem_t,matdata)
 end
