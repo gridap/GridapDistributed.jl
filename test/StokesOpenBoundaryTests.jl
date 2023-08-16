@@ -103,7 +103,7 @@ function main(distribute,parts)
   for (xh_tn, tn) in sol_t
     uh_tn = xh_tn[1]
     ph_tn = xh_tn[2]
-    writevtk(Ω,"output/tmp_stokes_OB_sol_$tn",cellfields=["u"=>uh_tn,"p"=>ph_tn])
+    writevtk(Ω,"output/tmp_stokes_OB_sol_$tn.vtu",cellfields=["u"=>uh_tn,"p"=>ph_tn])
     e = u(tn) - uh_tn
     el2 = sqrt(sum( ∫(l2(e))dΩ ))
     e = p(tn) - ph_tn
