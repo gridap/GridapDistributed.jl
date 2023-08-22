@@ -94,8 +94,8 @@ A2,b2 = assemble_matrix_and_vector(assem,data);
 ############################################################################################
 # Block MultiFieldStyle
 
-mfs = BlockMultiFieldStyle()
-#mfs = BlockMultiFieldStyle(2,(1,2))
+#mfs = BlockMultiFieldStyle()
+mfs = BlockMultiFieldStyle(2,(1,2))
 
 Yb  = MultiFieldFESpace([V,V,V];style=mfs)
 Xb  = MultiFieldFESpace([U,U,U];style=mfs)

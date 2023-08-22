@@ -662,7 +662,7 @@ function _assemble_coo!(I,J,V,rows::Vector{<:PRange};owners=nothing)
     if isa(owners,Nothing)
       _assemble_coo!(I[i,j],J[i,j],V[i,j],rows[i])
     else
-      _assemble_coo!(I[i,j],J[i,j],V[i,j],rows[i],owners=owners[j])
+      _assemble_coo!(I[i,j],J[i,j],V[i,j],rows[i],owners=owners[i,j])
     end
   end
 end
