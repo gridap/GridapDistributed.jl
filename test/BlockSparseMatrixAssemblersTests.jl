@@ -94,8 +94,8 @@ A2,b2 = assemble_matrix_and_vector(assem,data);
 ############################################################################################
 # Block MultiFieldStyle
 
-#mfs = BlockMultiFieldStyle()
-mfs = BlockMultiFieldStyle(2,(1,2))
+mfs = BlockMultiFieldStyle()
+#mfs = BlockMultiFieldStyle(2,(1,2))
 
 Yb  = MultiFieldFESpace([V,V,V];style=mfs)
 Xb  = MultiFieldFESpace([U,U,U];style=mfs)
@@ -113,6 +113,7 @@ bvecdata = collect_cell_vector(Yb,liform(vb))
 assem_blocks = SparseMatrixAssembler(Xb,Yb,FullyAssembledRows())
 A1_blocks = assemble_matrix(assem_blocks,bmatdata);
 b1_blocks = assemble_vector(assem_blocks,bvecdata);
+is_same_vector(b1_blocks,b1,Yb,Y)
 is_same_matrix(A1_blocks,A1,Xb,X)
 
 op = AffineFEOperator(biform,liform,X,Y)

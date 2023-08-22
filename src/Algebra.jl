@@ -501,7 +501,7 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   # Move (I,J,V) triplets to the owner process of each row I.
   # The triplets are accompanyed which Jo which is the process column owner
   Jo = get_gid_owners(J,trial_dofs_gids_prange;ax=:cols)
-  t  = _assemble_coo!(I,J,V,partition(rows);owners=Jo)
+  t  = _assemble_coo!(I,J,V,rows;owners=Jo)
 
   # Here we can overlap computations
   # This is a good place to overlap since
@@ -757,7 +757,7 @@ Base.wait(t::Matrix) = map(wait,t)
 # dofs_gids_prange can be either test_dofs_gids_prange or trial_dofs_gids_prange
 # In the former case, gids is a vector of global test dof identifiers, while in the 
 # latter, a vector of global trial dof identifiers
-function _setup_prange(dofs_gids_prange::PRange,gids;ghost=true,owners=nothing;kwargs...)
+function _setup_prange(dofs_gids_prange::PRange,gids;ghost=true,owners=nothing,kwargs...)
   if !ghost
     _setup_prange_without_ghosts(dofs_gids_prange)
   elseif isa(owners,Nothing)
@@ -784,7 +784,8 @@ function _setup_prange(dofs_gids_prange::AbstractVector{<:PRange},
     end
     return gids_ax_slice, _owners
   end |> tuple_of_arrays
-  return map((p,g) -> _setup_prange(p,g;ghost=ghost,owners=_owners), dofs_gids_prange, gids_ax_slice)
+  
+  return map((p,g,o) -> _setup_prange(p,g;ghost=ghost,owners=o),dofs_gids_prange,gids_ax_slice,_owners)
 end
 
 # Create PRange for the rows of the linear system
