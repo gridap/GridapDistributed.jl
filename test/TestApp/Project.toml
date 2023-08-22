@@ -3,6 +3,7 @@ uuid = "3ba29202-0f57-4e69-8cbd-5c57d4c4860a"
 version = "0.1.0"
 
 [deps]
+BlockArrays = "8e7c35d0-a365-5155-bbbb-fb81a777f24e"
 Gridap = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
 GridapDistributed = "f9701e48-63b3-45aa-9a63-9bc6c271f355"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
