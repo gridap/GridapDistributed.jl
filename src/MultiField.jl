@@ -559,20 +559,6 @@ function local_views(a::MatrixBlock{<:DistributedAllocationCOO})
   return map(ai -> ArrayBlock(ai,a.touched),array)
 end
 
-function _setup_prange(dofs_gids_prange::AbstractVector{<:PRange},gids::AbstractMatrix;ghost=true,ax=:rows)
-  @check ax ∈ (:rows,:cols)
-  block_ids = LinearIndices(dofs_gids_prange)
-
-  gids_ax_slice = map(block_ids) do id
-    gids_ax_slice = (ax == :rows) ? gids[id,:] : gids[:,id]
-    if ghost
-      gids_ax_slice = map(x -> union(x...), to_parray_of_arrays(gids_ax_slice))
-    end
-    return gids_ax_slice
-  end
-  return map((p,g) -> _setup_prange(p,g;ghost=ghost), dofs_gids_prange, gids_ax_slice)
-end
-
 function Algebra.create_from_nz(a::ArrayBlock{<:DistributedAllocationCOO{<:FullyAssembledRows}})
   f(x) = nothing
   A, = _fa_create_from_nz_with_callback(f,a)

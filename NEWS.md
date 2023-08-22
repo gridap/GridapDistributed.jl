@@ -5,20 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.3.0] - 2023-08-16
 
-### Changed 
+### Changed
 
 - Porting the whole library to PartitionedArrays v0.3.x. Since PR [114](https://github.com/gridap/GridapDistributed.jl/pull/114)
 
-### Added 
+### Added
 
 - Tools for redistributing FE functions among meshes; added mock tests for `RedistributeGlue`. Since PR [114](https://github.com/gridap/GridapDistributed.jl/pull/114). This functionality was already somewhere else in the Gridap ecosystem of packages (in GridapSolvers.jl in particular).
+- A variant of the PArrays `assemble_coo!` function named `assemble_coo_with_column_owner!` which also exchanges processor column owners of the entries. This variant is required to circumvent the current limitation of GridapDistributed.jl assembly for the case in which the following is not fullfilled: "each processor can determine locally with a single layer of ghost cells the global indices and associated processor owners of the rows that it touches after assembly of integration terms posed on locally-owned entities." Since PR [115](https://github.com/gridap/GridapDistributed.jl/pull/115).
 
+### Fixed
+
+- Added missing parameter to `allocate_jacobian`, needed after Gridap v0.17.18. Since PR [126](https://github.com/gridap/GridapDistributed.jl/pull/126). 
 
 ## [0.2.8] - 2023-07-31
 
 ### Added
+
 - Reverted some changes introduced in PR [98](https://github.com/gridap/GridapDistributed.jl/pull/98). Eliminated `DistributedGridapType`. Functions `local_views` and `get_parts` now take argument of type `Any`. Since PR [117](https://github.com/gridap/GridapDistributed.jl/pull/117).
 
 ### Fixed

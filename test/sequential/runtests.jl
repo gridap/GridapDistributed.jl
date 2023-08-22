@@ -32,4 +32,7 @@ end
 
 @time @testset "StokesOpenBoundary" begin include("StokesOpenBoundaryTests.jl") end
 
+@time @testset "StokesHdivDGTests.jl" begin include("StokesHdivDGTests.jl") end
+
+
 end # module

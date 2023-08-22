@@ -37,7 +37,14 @@ function Base.show(io::IO,k::MIME"text/plain",data::MPIVoidVector)
   println(io,"MPIVoidVector")
 end
 
-# Subcommunicators
+function num_parts(comm::MPI.Comm)
+  if comm != MPI.COMM_NULL
+    nparts = MPI.Comm_size(comm)
+  else
+    nparts = -1
+  end
+  nparts
+end
 
 function get_part_id(comm::MPI.Comm)
   if comm != MPI.COMM_NULL
@@ -491,9 +498,10 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   # Create the Prange for the rows
   rows = _setup_prange(test_dofs_gids_prange,I;ax=:rows)
   
-  # Move values to the owner part
-  # since we have integrated only over owned cells
-  t = _assemble_coo!(I,J,V,rows)
+  # Move (I,J,V) triplets to the owner process of each row I.
+  # The triplets are accompanyed which Jo which is the process column owner
+  Jo = get_gid_owners(J,trial_dofs_gids_prange;ax=:cols)
+  t  = _assemble_coo!(I,J,V,partition(rows);owners=Jo)
 
   # Here we can overlap computations
   # This is a good place to overlap since
@@ -504,7 +512,7 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   wait(t)
 
   # Create the Prange for the cols
-  cols = _setup_prange(trial_dofs_gids_prange,J;ax=:cols)
+  cols = _setup_prange(trial_dofs_gids_prange,J;ax=:cols,owners=Jo)
 
   # Overlap rhs communications with CSC compression
   t2 = async_callback(b)
@@ -520,7 +528,7 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   values = map(create_from_nz,local_views(asys))
 
   # Wait the transfer to finish
-  if t2 !== nothing
+  if !isa(t2,Nothing)
     wait(t2)
   end
 
@@ -597,7 +605,15 @@ function to_global_indices!(I,ids::PRange;kwargs...)
   map(to_global!,I,partition(ids))
 end
 
-for f in [:to_local_indices!, :to_global_indices!]
+function get_gid_owners(I,ids::PRange;kwargs...)
+  map(I,partition(ids)) do I, indices 
+    glo_to_loc = global_to_local(indices) 
+    loc_to_own = local_to_owner(indices)
+    map(x->loc_to_own[glo_to_loc[x]], I)
+  end 
+end
+
+for f in [:to_local_indices!, :to_global_indices!, :get_gid_owners]
   @eval begin
     function $f(I::Vector,ids::AbstractVector{<:PRange};kwargs...)
       map($f,I,ids)
@@ -631,15 +647,108 @@ function _setup_matrix(values,rows::Vector{<:PRange},cols::Vector{<:PRange})
   return mortar(block_mats)
 end
 
-function _assemble_coo!(I,J,V,rows::PRange)
-  PArrays.assemble_coo!(I,J,V,partition(rows))
+function _assemble_coo!(I,J,V,rows::PRange;owners=nothing)
+  if isa(owners,Nothing)
+    PArrays.assemble_coo!(I,J,V,partition(rows))
+  else
+    assemble_coo_with_column_owner!(I,J,V,partition(rows),owners)
+  end
 end
 
-function _assemble_coo!(I,J,V,rows::Vector{<:PRange})
+function _assemble_coo!(I,J,V,rows::Vector{<:PRange};owners=nothing)
   block_ids = CartesianIndices(I)
   map(block_ids) do id
     i = id[1]; j = id[2];
-    _assemble_coo!(I[i,j],J[i,j],V[i,j],rows[i])
+    if isa(owners,Nothing)
+      _assemble_coo!(I[i,j],J[i,j],V[i,j],rows[i])
+    else
+      _assemble_coo!(I[i,j],J[i,j],V[i,j],rows[i],owners=owners[j])
+    end
+  end
+end
+
+function assemble_coo_with_column_owner!(I,J,V,row_partition,Jown)
+  """
+    Returns three JaggedArrays with the coo triplets
+    to be sent to the corresponding owner parts in parts_snd
+  """
+  function setup_snd(part,parts_snd,row_lids,coo_entries_with_column_owner)
+      global_to_local_row = global_to_local(row_lids)
+      local_row_to_owner = local_to_owner(row_lids)
+      owner_to_i = Dict(( owner=>i for (i,owner) in enumerate(parts_snd) ))
+      ptrs = zeros(Int32,length(parts_snd)+1)
+      k_gi, k_gj, k_jo, k_v = coo_entries_with_column_owner
+      for k in 1:length(k_gi)
+          gi = k_gi[k]
+          li = global_to_local_row[gi]
+          owner = local_row_to_owner[li]
+          if owner != part
+              ptrs[owner_to_i[owner]+1] +=1
+          end
+      end
+      PArrays.length_to_ptrs!(ptrs)
+      gi_snd_data = zeros(eltype(k_gi),ptrs[end]-1)
+      gj_snd_data = zeros(eltype(k_gj),ptrs[end]-1)
+      jo_snd_data = zeros(eltype(k_jo),ptrs[end]-1)
+      v_snd_data = zeros(eltype(k_v),ptrs[end]-1)
+      for k in 1:length(k_gi)
+          gi = k_gi[k]
+          li = global_to_local_row[gi]
+          owner = local_row_to_owner[li]
+          if owner != part
+              gj = k_gj[k]
+              v = k_v[k]
+              p = ptrs[owner_to_i[owner]]
+              gi_snd_data[p] = gi
+              gj_snd_data[p] = gj
+              jo_snd_data[p] = k_jo[k]
+              v_snd_data[p] = v
+              k_v[k] = zero(v)
+              ptrs[owner_to_i[owner]] += 1
+          end
+      end
+      PArrays.rewind_ptrs!(ptrs)
+      gi_snd = JaggedArray(gi_snd_data,ptrs)
+      gj_snd = JaggedArray(gj_snd_data,ptrs)
+      jo_snd = JaggedArray(jo_snd_data,ptrs)
+      v_snd = JaggedArray(v_snd_data,ptrs)
+      gi_snd, gj_snd, jo_snd, v_snd
+  end
+  """
+    Pushes to coo_entries_with_column_owner the tuples 
+    gi_rcv,gj_rcv,jo_rcv,v_rcv received from remote processes
+  """
+  function setup_rcv!(coo_entries_with_column_owner,gi_rcv,gj_rcv,jo_rcv,v_rcv)
+      k_gi, k_gj, k_jo, k_v = coo_entries_with_column_owner
+      current_n = length(k_gi)
+      new_n = current_n + length(gi_rcv.data)
+      resize!(k_gi,new_n)
+      resize!(k_gj,new_n)
+      resize!(k_jo,new_n)
+      resize!(k_v,new_n)
+      for p in 1:length(gi_rcv.data)
+          k_gi[current_n+p] = gi_rcv.data[p]
+          k_gj[current_n+p] = gj_rcv.data[p]
+          k_jo[current_n+p] = jo_rcv.data[p]
+          k_v[current_n+p] = v_rcv.data[p]
+      end
+  end
+  part = linear_indices(row_partition)
+  parts_snd, parts_rcv = assembly_neighbors(row_partition)
+  coo_entries_with_column_owner = map(tuple,I,J,Jown,V)
+  gi_snd, gj_snd, jo_snd, v_snd = map(setup_snd,part,parts_snd,row_partition,coo_entries_with_column_owner) |> tuple_of_arrays
+  graph = ExchangeGraph(parts_snd,parts_rcv)
+  t1 = exchange(gi_snd,graph)
+  t2 = exchange(gj_snd,graph)
+  t3 = exchange(jo_snd,graph)
+  t4 = exchange(v_snd,graph)
+  @async begin
+      gi_rcv = fetch(t1)
+      gj_rcv = fetch(t2)
+      jo_rcv = fetch(t3)
+      v_rcv = fetch(t4)
+      map(setup_rcv!,coo_entries_with_column_owner,gi_rcv,gj_rcv,jo_rcv,v_rcv)
+      I,J,Jown,V
   end
 end
 
@@ -648,18 +757,40 @@ Base.wait(t::Matrix) = map(wait,t)
 # dofs_gids_prange can be either test_dofs_gids_prange or trial_dofs_gids_prange
 # In the former case, gids is a vector of global test dof identifiers, while in the 
 # latter, a vector of global trial dof identifiers
-function _setup_prange(dofs_gids_prange,gids;ghost=true,kwargs...)
-  if ghost
+function _setup_prange(dofs_gids_prange::PRange,gids;ghost=true,owners=nothing;kwargs...)
+  if !ghost
+    _setup_prange_without_ghosts(dofs_gids_prange)
+  elseif isa(owners,Nothing)
     _setup_prange_with_ghosts(dofs_gids_prange,gids)
   else
-    _setup_prange_without_ghosts(dofs_gids_prange)
+    _setup_prange_with_ghosts(dofs_gids_prange,gids,owners)
   end
+end
+
+function _setup_prange(dofs_gids_prange::AbstractVector{<:PRange},
+                       gids::AbstractMatrix;
+                       ax=:rows,ghost=true,owners=nothing)
+  @check ax ∈ (:rows,:cols)
+  block_ids = LinearIndices(dofs_gids_prange)
+
+  gids_ax_slice, _owners = map(block_ids,dofs_gids_prange) do id,prange
+    gids_ax_slice = (ax == :rows) ? gids[id,:] : gids[:,id]
+    _owners = nothing
+    if ghost
+      gids_ax_slice = map(x -> union(x...), to_parray_of_arrays(gids_ax_slice))
+      if !isa(owners,Nothing) # Recompute owners for the union
+        _owners = get_gid_owners(gids_ax_slice,prange)
+      end
+    end
+    return gids_ax_slice, _owners
+  end |> tuple_of_arrays
+  return map((p,g) -> _setup_prange(p,g;ghost=ghost,owners=_owners), dofs_gids_prange, gids_ax_slice)
 end
 
 # Create PRange for the rows of the linear system
 # without local ghost dofs as per required in the 
 # FullyAssembledRows() parallel assembly strategy 
-function _setup_prange_without_ghosts(dofs_gids_prange)
+function _setup_prange_without_ghosts(dofs_gids_prange::PRange)
   ngdofs = length(dofs_gids_prange)
   indices = map(partition(dofs_gids_prange)) do dofs_indices 
     owner = part_id(dofs_indices)
@@ -670,17 +801,66 @@ function _setup_prange_without_ghosts(dofs_gids_prange)
   return PRange(indices)
 end
 
-function _setup_prange_with_ghosts(dofs_gids_prange,gids)
+# Here we are assuming that the sparse communication graph underlying test_dofs_gids_partition
+# is a superset of the one underlying indices. This is (has to be) true for the rows of the linear system.
+# The precondition required for the consistency of any parallel assembly process in GridapDistributed 
+# is that each processor can determine locally with a single layer of ghost cells the global indices and associated 
+# processor owners of the rows that it touches after assembly of integration terms posed on locally-owned entities 
+# (i.e., either cells or faces). 
+function _setup_prange_with_ghosts(dofs_gids_prange::PRange,gids)
   ngdofs = length(dofs_gids_prange)
   dofs_gids_partition = partition(dofs_gids_prange)
-  gids_ghost_lids_to_dofs_ghost_lids = map(ghost_lids_touched,dofs_gids_partition,gids)
-  return _setup_prange_impl_(ngdofs,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition)
-end
 
-function _setup_prange_impl_(ngdofs,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition)
+  # Selected ghost ids -> dof PRange ghost ids
+  gids_ghost_lids_to_dofs_ghost_lids = map(ghost_lids_touched,dofs_gids_partition,gids)
+
+  # Selected ghost ids -> [global dof ids, owner processor ids]
   gids_ghost_to_global, gids_ghost_to_owner = map(
     find_gid_and_owner,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids_partition) |> tuple_of_arrays
 
+  return _setup_prange_impl_(ngdofs,dofs_gids_partition,gids_ghost_to_global,gids_ghost_to_owner)
+end
+
+# Here we cannot assume that the sparse communication graph underlying 
+# trial_dofs_gids_partition is a superset of the one underlying indices.
+# Here we chould check whether it is included and call _find_neighbours!()
+# if this is the case. At present, we are not taking advantage of this, 
+# but let the parallel scalable algorithm to compute the reciprocal to do the job. 
+function _setup_prange_with_ghosts(dofs_gids_prange::PRange,gids,owners)
+  ngdofs = length(dofs_gids_prange)
+  dofs_gids_partition = partition(dofs_gids_prange)
+
+  # Selected ghost ids -> [global dof ids, owner processor ids]
+  gids_ghost_to_global, gids_ghost_to_owner = map(
+    gids,owners,dofs_gids_partition) do gids, owners, indices
+    ghost_touched   = Dict{Int,Bool}()
+    ghost_to_global = Int64[] 
+    ghost_to_owner  = Int64[]
+    me = part_id(indices)
+    for (j,jo) in zip(gids,owners)
+      if jo != me
+        if !haskey(ghost_touched,j)
+          push!(ghost_to_global,j)
+          push!(ghost_to_owner,jo)
+          ghost_touched[j] = true
+        end
+      end
+    end
+    ghost_to_global, ghost_to_owner
+  end |> tuple_of_arrays
+
+  return _setup_prange_impl_(ngdofs,
+                             dofs_gids_partition,
+                             gids_ghost_to_global,
+                             gids_ghost_to_owner;
+                             discover_neighbours=false)
+end 
+
+function _setup_prange_impl_(ngdofs,
+                             dofs_gids_partition,
+                             gids_ghost_to_global,
+                             gids_ghost_to_owner;
+                             discover_neighbours=true)
   indices = map(dofs_gids_partition, 
                 gids_ghost_to_global, 
                 gids_ghost_to_owner) do dofs_indices, ghost_to_global, ghost_to_owner 
@@ -689,7 +869,9 @@ function _setup_prange_impl_(ngdofs,gids_ghost_lids_to_dofs_ghost_lids,dofs_gids
      ghost_indices = GhostIndices(ngdofs,ghost_to_global,ghost_to_owner)
      OwnAndGhostIndices(own_indices,ghost_indices)
   end
-  _find_neighbours!(indices, dofs_gids_partition)
+  if discover_neighbours
+    _find_neighbours!(indices,dofs_gids_partition)
+  end
   return PRange(indices)
 end
 
@@ -741,7 +923,7 @@ end
 
 function Algebra.create_from_nz(a::PVector)
   assemble!(a) |> wait
-  a
+  return a
 end
 
 function Algebra.create_from_nz(
@@ -753,7 +935,7 @@ function Algebra.create_from_nz(
   end
 
   A,b = _fa_create_from_nz_with_callback(callback,a)
-  A,b
+  return A,b
 end
 
 struct PVectorAllocationTrackTouchedAndValues{A,B,C}
@@ -776,7 +958,7 @@ function Algebra.create_from_nz(
   end
 
   A,b = _sa_create_from_nz_with_callback(callback,async_callback,a)
-  A,b
+  return A,b
 end
 
 struct ArrayAllocationTrackTouchedAndValues{A}
@@ -800,7 +982,7 @@ end
     if !(a.touched[i])
       a.touched[i]=true
     end
-    if v!=nothing
+    if !isa(v,Nothing)
       a.values[i]=c(v,a.values[i])
     end
   end
@@ -810,7 +992,7 @@ end
   @notimplemented
 end
 @inline function Arrays.add_entries!(c::Function,a::ArrayAllocationTrackTouchedAndValues,v,i)
-  if v != nothing
+  if !isa(v,Nothing)
     for (ve,ie) in zip(v,i)
       Arrays.add_entry!(c,a,ve,ie)
     end
@@ -824,8 +1006,8 @@ end
 
 function Arrays.nz_allocation(a::DistributedCounterCOO{<:SubAssembledRows},
                               b::PVectorCounter{<:SubAssembledRows})
-  A = nz_allocation(a)
-  dofs = b.test_dofs_gids_prange
+  A      = nz_allocation(a)
+  dofs   = b.test_dofs_gids_prange
   values = map(nz_allocation,b.counters)
   B = PVectorAllocationTrackOnlyValues(b.par_strategy,values,dofs)
   return A,B
@@ -870,12 +1052,12 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
     I_ghost_lids
   end
 
-  rows = _setup_prange_impl_(ngrdofs,
-                             I_ghost_lids_to_dofs_ghost_lids,
-                             indices)
+  gids_ghost_to_global, gids_ghost_to_owner = map(
+    find_gid_and_owner,I_ghost_lids_to_dofs_ghost_lids,indices) |> tuple_of_arrays
 
-  b = _rhs_callback(a,rows)
-  t2 = assemble!(b)
+  rows = _setup_prange_impl_(ngrdofs,indices,gids_ghost_to_global,gids_ghost_to_owner)
+  b    = _rhs_callback(a,rows)
+  t2   = assemble!(b)
 
   # Wait the transfer to finish
   if t2 !== nothing
