@@ -16,6 +16,25 @@ function change_axes(a::Algebra.AllocationCOO{T,A}, axes::A) where {T,A}
   Algebra.AllocationCOO(counter,a.I,a.J,a.V)
 end
 
+# Array of PArrays -> PArray of Arrays 
+function to_parray_of_arrays(a::AbstractArray{<:MPIArray})
+  indices = linear_indices(first(a))
+  map(indices) do i
+    map(a) do aj
+      PartitionedArrays.getany(aj)
+    end
+  end
+end
+
+function to_parray_of_arrays(a::AbstractArray{<:DebugArray})
+  indices = linear_indices(first(a))
+  map(indices) do i
+    map(a) do aj
+      aj.items[i]
+    end
+  end
+end
+
 # This type is required because MPIArray from PArrays 
 # cannot be instantiated with a NULL communicator
 struct MPIVoidVector{T} <: AbstractVector{T}

@@ -450,25 +450,6 @@ function FESpaces.SparseMatrixAssembler(
   return MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P}(block_assemblers)
 end
 
-# Array of PArrays -> PArray of Arrays 
-function to_parray_of_arrays(a::AbstractArray{<:MPIArray})
-  indices = linear_indices(first(a))
-  map(indices) do i
-    map(a) do aj
-      PartitionedArrays.getany(aj)
-    end
-  end
-end
-
-function to_parray_of_arrays(a::AbstractArray{<:DebugArray})
-  indices = linear_indices(first(a))
-  map(indices) do i
-    map(a) do aj
-      aj.items[i]
-    end
-  end
-end
-
 function local_views(a::MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P}) where {NB,NV,SB,P}
   assems = a.block_assemblers
   array = to_parray_of_arrays(map(local_views,assems))
