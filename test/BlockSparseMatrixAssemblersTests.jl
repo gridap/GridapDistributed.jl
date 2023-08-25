@@ -18,17 +18,6 @@ function LinearAlgebra.mul!(y::BlockVector,A::BlockMatrix,x::BlockVector)
   end
 end
 
-function GridapDistributed.change_ghost(
-  x::BlockVector,
-  X::GridapDistributed.DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}}) where {NB,SB,P}
-  block_ranges = MultiField.get_block_ranges(NB,SB,P)
-  array = map(block_ranges,blocks(x)) do range, xi
-    Xi = (length(range) == 1) ? X.field_fe_space[range[1]] : MultiFieldFESpace(X.field_fe_space[range])
-    GridapDistributed.change_ghost(xi,Xi.gids)
-  end
-  return mortar(array)
-end
-
 function is_same_vector(x::BlockVector,y::PVector,Ub,U)
   y_fespace = GridapDistributed.change_ghost(y,U.gids)
   x_fespace = GridapDistributed.change_ghost(x,Ub)
