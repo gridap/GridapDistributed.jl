@@ -29,21 +29,24 @@ local_views(a::Vector{<:DistributedCellField}) = [ai.fields for ai in a]
 
 """
 """
-struct DistributedMultiFieldFESpace{MS,A,B,C,D} <: DistributedFESpace
+struct DistributedMultiFieldFESpace{MS,A,B,C,D,E} <: DistributedFESpace
   multi_field_style::MS
   field_fe_space::A
   part_fe_space::B
   gids::C
-  vector_type::Type{D}
+  block_gids::D
+  vector_type::Type{E}
   function DistributedMultiFieldFESpace(
     field_fe_space::AbstractVector{<:DistributedSingleFieldFESpace},
     part_fe_space::AbstractArray{<:MultiFieldFESpace{MS}},
     gids::PRange,
-    vector_type::Type{D}) where {D,MS}
+    block_gids,
+    vector_type::Type{E}) where {E,MS}
     A = typeof(field_fe_space)
     B = typeof(part_fe_space)
     C = typeof(gids)
-    new{MS,A,B,C,D}(MS(),field_fe_space,part_fe_space,gids,vector_type)
+    D = typeof(block_gids)
+    new{MS,A,B,C,D,E}(MS(),field_fe_space,part_fe_space,gids,block_gids,vector_type)
   end
 end
 
@@ -85,16 +88,22 @@ function MultiField.restrict_to_field(
   PVector(values,partition(gids))
 end
 
+function change_ghost(x::BlockVector,
+                      X::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}}) where {NB,SB,P}
+  array = map(X.block_gids,blocks(x)) do gids, xi
+    change_ghost(xi,gids)
+  end
+  return mortar(array)
+end
+
 #function FESpaces.zero_free_values(f::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle})
 #  return mortar(map(zero_free_values,f.field_fe_space))
 #end
 
 function FESpaces.FEFunction(
   f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
-  free_values = change_ghost(x,f.gids)
-  # This will cause also the single-field components to be consistent
-  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  part_fe_fun = map(FEFunction,f.part_fe_space,local_vals)
+  free_values  = change_ghost(x,f.gids;is_consistent=isconsistent,make_consistent=true)
+  part_fe_fun  = map(FEFunction,f.part_fe_space,partition(free_values))
   field_fe_fun = DistributedSingleFieldFEFunction[]
   for i in 1:num_fields(f)
     free_values_i = restrict_to_field(f,free_values,i)
@@ -107,10 +116,8 @@ end
 
 function FESpaces.EvaluationFunction(
   f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
-  free_values = change_ghost(x,f.gids)
-  # This will cause also the single-field components to be consistent
-  local_vals = consistent_local_views(free_values,f.gids,false)
-  part_fe_fun = map(EvaluationFunction,f.part_fe_space,local_vals)
+  free_values  = change_ghost(x,f.gids;is_consistent=isconsistent,make_consistent=true)
+  part_fe_fun  = map(EvaluationFunction,f.part_fe_space,partition(free_values))
   field_fe_fun = DistributedSingleFieldFEFunction[]
   for i in 1:num_fields(f)
     free_values_i = restrict_to_field(f,free_values,i)
@@ -127,8 +134,10 @@ function FESpaces.interpolate(objects,fe::DistributedMultiFieldFESpace)
 end
 
 function FESpaces.interpolate!(objects,free_values::AbstractVector,fe::DistributedMultiFieldFESpace)
-  local_vals = consistent_local_views(free_values,fe.gids,true)
-  part_fe_fun = map(local_vals,local_views(fe)) do x,f
+  msg = "free_values and fe have incompatible index partitions."
+  @check partition(axes(free_values,1)) === partition(fe.gids) msg
+
+  part_fe_fun = map(partition(free_values),local_views(fe)) do x,f
     interpolate!(objects,x,f)
   end
   field_fe_fun = DistributedSingleFieldFEFunction[]
@@ -143,8 +152,7 @@ end
 
 function FESpaces.interpolate_everywhere(objects,fe::DistributedMultiFieldFESpace)
   free_values = zero_free_values(fe)
-  local_vals = consistent_local_views(free_values,fe.gids,true)
-  part_fe_fun = map(local_vals,local_views(fe)) do x,f
+  part_fe_fun = map(partition(free_values),local_views(fe)) do x,f
     interpolate!(objects,x,f)
   end
   field_fe_fun = DistributedSingleFieldFEFunction[]
@@ -162,8 +170,10 @@ function FESpaces.interpolate_everywhere!(
   objects,free_values::AbstractVector,
   dirichlet_values::Vector{AbstractArray{<:AbstractVector}},
   fe::DistributedMultiFieldFESpace)
-  local_vals = consistent_local_views(free_values,fe.gids,true)
-  part_fe_fun = map(local_vals,local_views(fe)) do x,f
+  msg = "free_values and fe have incompatible index partitions."
+  @check partition(axes(free_values,1)) === partition(fe.gids) msg
+  
+  part_fe_fun = map(partition(free_values),local_views(fe)) do x,f
     interpolate!(objects,x,f)
   end
   field_fe_fun = DistributedSingleFieldFEFunction[]
@@ -179,7 +189,7 @@ end
 
 function FESpaces.interpolate_everywhere(
   objects::Vector{<:DistributedCellField},fe::DistributedMultiFieldFESpace)
-  local_objects = local_views(objects)
+  local_objects = map(local_views,objects)
   local_spaces = local_views(fe)
   part_fe_fun = map(local_spaces,local_objects...) do f,o...
     interpolate_everywhere(o,f)
@@ -249,10 +259,11 @@ function FESpaces.TrialFESpace(a::DistributedMultiFieldFESpace,objects)
   f_p_space = map(local_views,f_dspace)
   v(x...) = collect(x)
   p_f_space = map(v,f_p_space...)
-  p_mspace = map(MultiFieldFESpace,p_f_space)
+  p_mspace  = map(MultiFieldFESpace,p_f_space)
   gids = a.gids
+  block_gids  = a.block_gids
   vector_type = a.vector_type
-  DistributedMultiFieldFESpace(f_dspace,p_mspace,gids,vector_type)
+  DistributedMultiFieldFESpace(f_dspace,p_mspace,gids,block_gids,vector_type)
 end
 
 # Factory
@@ -266,7 +277,11 @@ function MultiField.MultiFieldFESpace(
   p_mspace    = map(f->MultiFieldFESpace(f;kwargs...),p_f_space)
   gids        = generate_multi_field_gids(f_dspace,p_mspace)
   vector_type = _find_vector_type(p_mspace,gids)
-  DistributedMultiFieldFESpace(f_dspace,p_mspace,gids,vector_type)
+
+  style = MultiFieldStyle(PartitionedArrays.getany(p_mspace))
+  block_gids = _generate_block_gids(style,f_dspace)
+
+  DistributedMultiFieldFESpace(f_dspace,p_mspace,gids,block_gids,vector_type)
 end
 
 function generate_multi_field_gids(
@@ -402,6 +417,16 @@ function propagate_to_ghost_multifield!(
   end
 end
 
+_generate_block_gids(::MultiFieldStyle,f_dspace) = nothing
+
+function _generate_block_gids(::BlockMultiFieldStyle{NB,SB,P},f_dspace) where {NB,SB,P}
+  block_ranges = MultiField.get_block_ranges(NB,SB,P)
+  block_gids = map(block_ranges) do range
+    space = (length(range) == 1) ? f_dspace[range[1]] : MultiFieldFESpace(f_dspace[range])
+    get_free_dof_ids(space)
+  end
+  return block_gids
+end
 
 # BlockSparseMatrixAssemblers
 
@@ -415,32 +440,14 @@ function FESpaces.SparseMatrixAssembler(
   test::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}},
   par_strategy=SubAssembledRows()) where {NB,SB,P}
 
-  # Build block spaces
-  function get_block_fespace(spaces,range)
-    (length(range) == 1) ? spaces[range[1]] : MultiFieldFESpace(spaces[range])
-  end
-  block_ranges = MultiField.get_block_ranges(NB,SB,P)
-  block_tests  = map(range -> get_block_fespace(test.field_fe_space,range),block_ranges)
-  block_trials = map(range -> get_block_fespace(trial.field_fe_space,range),block_ranges)
-
   block_idx = CartesianIndices((NB,NB))
   block_assemblers = map(block_idx) do idx
-    Yi = block_tests[idx[1]]; Xj = block_trials[idx[2]]
-    return SparseMatrixAssembler(local_mat_type,local_vec_type,Xj,Yi,par_strategy)
+    rows = test.block_gids[idx[1]]; cols = trial.block_gids[idx[2]]
+    return SparseMatrixAssembler(local_mat_type,local_vec_type,rows,cols,par_strategy)
   end
 
-  NV = length(trial.field_fe_space)
+  NV = length(P)
   return MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P}(block_assemblers)
-end
-
-function FESpaces.SparseMatrixAssembler(
-  trial::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
-  test ::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
-  par_strategy=SubAssembledRows())
-  Tv = get_vector_type(PartitionedArrays.getany(local_views(first(trial))))
-  T  = eltype(Tv)
-  Tm = SparseMatrixCSC{T,Int}
-  SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)
 end
 
 # Array of PArrays -> PArray of Arrays 

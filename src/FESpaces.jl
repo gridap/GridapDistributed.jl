@@ -119,11 +119,15 @@ end
 function fetch_vector_ghost_values_cache(vector_partition,partition)
   cache = PArrays.p_vector_cache(vector_partition,partition)
   map(reverse,cache)
-end 
+end
 
 function fetch_vector_ghost_values!(vector_partition,cache)
   assemble!((a,b)->b, vector_partition, cache) 
-end 
+end
+
+function change_ghost(a::PVector,f::DistributedFESpace)
+  change_ghost(a,f.gids)
+end
 
 function generate_gids(
   cell_range::PRange,
@@ -325,18 +329,18 @@ function FESpaces.EvaluationFunction(
 end
 
 function _EvaluationFunction(func,
-  f::DistributedSingleFieldFESpace,free_values::AbstractVector,isconsistent=false)
-  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  fields = map(func,f.spaces,local_vals)
+  f::DistributedSingleFieldFESpace,x::AbstractVector,isconsistent=false)
+  free_values = change_ghost(x,f.gids,is_consistent=isconsistent,make_consistent=true)
+  fields   = map(func,f.spaces,partition(free_values))
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
 end
 
 function _EvaluationFunction(func,
-  f::DistributedSingleFieldFESpace,free_values::AbstractVector,
+  f::DistributedSingleFieldFESpace,x::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},isconsistent=false)
-  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  fields = map(func,f.spaces,local_vals,dirichlet_values)
+  free_values = change_ghost(x,f.gids,is_consistent=isconsistent,make_consistent=true)
+  fields   = map(func,f.spaces,partition(free_values),dirichlet_values)
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
 end
@@ -485,24 +489,16 @@ function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;kwargs...)
   DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
 
-function _find_vector_type(spaces,gids)
-  # TODO Now the user can select the local vector type but not the global one
+function _find_vector_type(spaces,gids;own_and_ghost=false)
+  # TODO: Now the user can select the local vector type but not the global one
   # new kw-arg global_vector_type ?
-  # we use PVector for the moment
   local_vector_type = get_vector_type(PartitionedArrays.getany(spaces))
-
-  if local_vector_type <: BlockVector
-    T = eltype(local_vector_type)
-    A = typeof(map(i->Vector{T}(undef,0),partition(gids)))
-    B = typeof(gids)
-    vector_type = PVector{T,A,B}
-  else
-    T = eltype(local_vector_type)
-    A = typeof(map(i->local_vector_type(undef,0),partition(gids)))
-    B = typeof(gids)
-    vector_type = PVector{T,A,B}
+  Tv = eltype(local_vector_type)
+  T  = Vector{Tv}
+  if own_and_ghost
+    T = OwnAndGhostVectors{T}
   end
-
+  vector_type = typeof(PVector{T}(undef,partition(gids)))
   return vector_type
 end
 
@@ -654,29 +650,34 @@ end
 function FESpaces.SparseMatrixAssembler(
   local_mat_type,
   local_vec_type,
+  rows::PRange,
+  cols::PRange,
+  par_strategy=SubAssembledRows())
+
+  assems = map(partition(rows),partition(cols)) do rows,cols
+    local_strategy = local_assembly_strategy(par_strategy,rows,cols)
+    FESpaces.GenericSparseMatrixAssembler(SparseMatrixBuilder(local_mat_type),
+                                          ArrayBuilder(local_vec_type),
+                                          Base.OneTo(length(rows)),
+                                          Base.OneTo(length(cols)),
+                                          local_strategy)
+  end
+
+  mat_builder = PSparseMatrixBuilderCOO(local_mat_type,par_strategy)
+  vec_builder = PVectorBuilder(local_vec_type,par_strategy)
+  return DistributedSparseMatrixAssembler(par_strategy,assems,mat_builder,vec_builder,rows,cols)
+end
+
+function FESpaces.SparseMatrixAssembler(
+  local_mat_type,
+  local_vec_type,
   trial::DistributedFESpace,
   test::DistributedFESpace,
   par_strategy=SubAssembledRows())
 
-  Tv = local_vec_type
-  T = eltype(Tv)
-  Tm = local_mat_type
-  trial_dofs_gids_partition = partition(trial.gids)
-  test_dofs_gids_partition = partition(test.gids)
-  assems = map(local_views(test),local_views(trial),test_dofs_gids_partition,trial_dofs_gids_partition) do v,u,trial_gids_partition,test_gids_partition
-    local_strategy = local_assembly_strategy(par_strategy,trial_gids_partition,test_gids_partition)
-    SparseMatrixAssembler(Tm,Tv,u,v,local_strategy)
-  end
-  matrix_builder = PSparseMatrixBuilderCOO(Tm,par_strategy)
-  vector_builder = PVectorBuilder(Tv,par_strategy)
-  test_dofs_gids_prange = get_free_dof_ids(test)
-  trial_dofs_gids_prange = get_free_dof_ids(trial)
-  DistributedSparseMatrixAssembler(par_strategy,
-                                   assems,
-                                   matrix_builder,
-                                   vector_builder,
-                                   test_dofs_gids_prange,
-                                   trial_dofs_gids_prange)
+  rows = get_free_dof_ids(test)
+  cols = get_free_dof_ids(trial)
+  SparseMatrixAssembler(local_mat_type,local_vec_type,rows,cols,par_strategy)
 end
 
 function FESpaces.SparseMatrixAssembler(
@@ -684,11 +685,8 @@ function FESpaces.SparseMatrixAssembler(
   test::DistributedFESpace,
   par_strategy=SubAssembledRows())
 
-  Tv = typeof(Int)
-  map(local_views(trial)) do trial
-    Tv = get_vector_type(trial)
-  end
-  T = eltype(Tv)
+  Tv = PartitionedArrays.getany(map(get_vector_type,local_views(trial)))
+  T  = eltype(Tv)
   Tm = SparseMatrixCSC{T,Int}
   SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)
 end
