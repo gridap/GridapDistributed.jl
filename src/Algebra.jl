@@ -5,14 +5,14 @@ end
 
 # This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.CounterCOO{T,A}, axes::A) where {T,A}
-  b=Algebra.CounterCOO{T}(axes)
+  b = Algebra.CounterCOO{T}(axes)
   b.nnz = a.nnz
   b
 end
 
 # This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.AllocationCOO{T,A}, axes::A) where {T,A}
-  counter=change_axes(a.counter,axes)
+  counter = change_axes(a.counter,axes)
   Algebra.AllocationCOO(counter,a.I,a.J,a.V)
 end
 
@@ -112,8 +112,8 @@ function local_views(a)
   @abstractmethod
 end
 
-function get_parts(x)
-  return linear_indices(local_views(x))
+function get_parts(a)
+  return linear_indices(local_views(a))
 end
 
 function local_views(a::AbstractVector,rows)
@@ -122,10 +122,6 @@ end
 
 function local_views(a::AbstractMatrix,rows,cols)
   @notimplemented
-end
-
-function consistent_local_views(a,ids,isconsistent)
-  @abstractmethod
 end
 
 function local_views(a::AbstractArray)
@@ -142,6 +138,32 @@ end
 
 function local_views(a::PSparseMatrix)
   partition(a)
+end
+
+# change_ghost
+
+function change_ghost(a::PVector{T},ids::PRange;is_consistent=false,make_consistent=false) where T
+  same_partition = (a.index_partition === partition(ids))
+  a_new = same_partition ? a : change_ghost(T,a,ids)
+  if make_consistent && (!same_partition || !is_consistent)
+    consistent!(a_new) |> wait
+  end
+  return a_new
+end
+
+function change_ghost(::Type{<:AbstractVector},a::PVector,ids::PRange)
+  a_new = similar(a,eltype(a),(ids,))
+  # Equivalent to copy!(a_new,a) but does not check that owned indices match
+  map(copy!,own_values(a_new),own_values(a))
+  return a_new
+end
+
+function change_ghost(::Type{<:OwnAndGhostVectors},a::PVector,ids::PRange)
+  values = map(own_values(a),partition(ids)) do own_vals,ids
+    ghost_vals = fill(zero(eltype(a)),ghost_length(ids))
+    OwnAndGhostVectors(own_vals,ghost_vals,ids)
+  end
+  return PVector(values,partition(ids))
 end
 
 # This function computes a mapping among the local identifiers of a and b
@@ -235,35 +257,9 @@ function local_views(row_col_partitioned_matrix::PSparseMatrix,
     end
 end
 
-function change_ghost(a::PVector,ids_fespace::PRange)
-  if a.index_partition === partition(ids_fespace)
-    a_fespace = a
-  else
-    a_fespace = similar(a,eltype(a),(ids_fespace,))
-    a_fespace .= a
-  end
-  a_fespace
+function Algebra.allocate_vector(::Type{<:PVector{T}},ids::PRange) where {T}
+  PVector{T}(undef,partition(ids))
 end
-
-function consistent_local_views(a::PVector,
-                                ids_fespace::PRange,
-                                isconsistent)
-  a_fespace = change_ghost(a,ids_fespace)
-  if ! isconsistent
-    fetch_vector_ghost_values!(partition(a_fespace),
-                               map(reverse,a_fespace.cache)) |> wait
-  end
-  partition(a_fespace)
-end
-
-function Algebra.allocate_vector(::Type{<:PVector{V,A}},ids::PRange) where {V,A}
-  values = map(partition(ids)) do ids
-    Tv = eltype(A)
-    Tv(undef,length(local_to_owner(ids)))
-  end
-  PVector(values,partition(ids))
-end
-
 
 # PSparseMatrix assembly
 
