@@ -180,7 +180,8 @@ end
 function change_ghost(::Type{<:OwnAndGhostVectors},a::PVector,ids::PRange)
   values = map(own_values(a),partition(ids)) do own_vals,ids
     ghost_vals = fill(zero(eltype(a)),ghost_length(ids))
-    OwnAndGhostVectors(own_vals,ghost_vals,ids)
+    perm = PartitionedArrays.local_permutation(ids)
+    OwnAndGhostVectors(own_vals,ghost_vals,perm)
   end
   return PVector(values,partition(ids))
 end
