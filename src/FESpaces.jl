@@ -177,7 +177,6 @@ function generate_gids(
                          cell_to_ldofs,
                          cell_range)
 
-
   # Find the global range of owned dofs
   first_gdof = scan(+,nodofs,type=:exclusive,init=one(eltype(nodofs)))
   
@@ -467,16 +466,16 @@ end
 
 # Factories
 
-function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
+function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;own_and_ghost=false,kwargs...)
   spaces = map(local_views(model)) do m
     FESpace(m,reffe;kwargs...)
   end
   gids =  generate_gids(model,spaces)
-  vector_type = _find_vector_type(spaces,gids)
+  vector_type = _find_vector_type(spaces,gids;own_and_ghost=own_and_ghost)
   DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
 
-function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;kwargs...)
+function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;own_and_ghost=false,kwargs...)
   trian = add_ghost_cells(_trian)
   trian_gids = generate_cell_gids(trian)
   spaces = map(trian.trians) do t
@@ -485,13 +484,11 @@ function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;kwargs...)
   cell_to_ldofs = map(get_cell_dof_ids,spaces)
   nldofs = map(num_free_dofs,spaces)
   gids = generate_gids(trian_gids,cell_to_ldofs,nldofs)
-  vector_type = _find_vector_type(spaces,gids)
+  vector_type = _find_vector_type(spaces,gids;own_and_ghost=own_and_ghost)
   DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
 
 function _find_vector_type(spaces,gids;own_and_ghost=false)
-  # TODO: Now the user can select the local vector type but not the global one
-  # new kw-arg global_vector_type ?
   local_vector_type = get_vector_type(PartitionedArrays.getany(spaces))
   Tv = eltype(local_vector_type)
   T  = Vector{Tv}
@@ -508,17 +505,12 @@ function FESpaces.collect_cell_matrix(
   trial::DistributedFESpace,
   test::DistributedFESpace,
   a::DistributedDomainContribution)
-  map(
-    collect_cell_matrix,
-    local_views(trial),
-    local_views(test),
-    local_views(a))
+  map(collect_cell_matrix,local_views(trial),local_views(test),local_views(a))
 end
 
 function FESpaces.collect_cell_vector(
   test::DistributedFESpace, a::DistributedDomainContribution)
-  map(
-    collect_cell_vector,local_views(test),local_views(a))
+  map(collect_cell_vector,local_views(test),local_views(a))
 end
 
 function FESpaces.collect_cell_matrix_and_vector(
@@ -559,8 +551,7 @@ function FESpaces.collect_cell_matrix_and_vector(
   test::DistributedFESpace,
   mat::DistributedDomainContribution,
   l::Number)
-  map(
-    local_views(trial),local_views(test),local_views(mat)) do u,v,m
+  map(local_views(trial),local_views(test),local_views(mat)) do u,v,m
     collect_cell_matrix_and_vector(u,v,m,l)
   end
 end
@@ -571,8 +562,7 @@ function FESpaces.collect_cell_matrix_and_vector(
   mat::DistributedDomainContribution,
   l::Number,
   uhd)
-  map(
-    local_views(trial),local_views(test),local_views(mat),local_views(uhd)) do u,v,m,f
+  map(local_views(trial),local_views(test),local_views(mat),local_views(uhd)) do u,v,m,f
     collect_cell_matrix_and_vector(u,v,m,l,f)
   end
 end
