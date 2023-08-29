@@ -186,6 +186,13 @@ function change_ghost(::Type{<:OwnAndGhostVectors},a::PVector,ids::PRange)
   return PVector(values,partition(ids))
 end
 
+function change_ghost(a::BlockPVector,ids::BlockPRange;is_consistent=false,make_consistent=false)
+  vals = map(blocks(a),blocks(ids)) do a, ids
+    change_ghost(a,ids;is_consistent=is_consistent,make_consistent=make_consistent)
+  end
+  return BlockPVector(vals,ids)
+end
+
 # This function computes a mapping among the local identifiers of a and b
 # for which the corresponding global identifiers are both in a and b. 
 # Note that the haskey check is necessary because in the general case 

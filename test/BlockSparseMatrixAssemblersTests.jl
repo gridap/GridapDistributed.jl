@@ -7,18 +7,9 @@ using Gridap.FESpaces, Gridap.ReferenceFEs, Gridap.MultiField
 
 using GridapDistributed
 using PartitionedArrays
+using GridapDistributed: BlockPVector, BlockPMatrix
 
-function LinearAlgebra.mul!(y::BlockVector,A::BlockMatrix,x::BlockVector)
-  o = one(eltype(A))
-  for i in blockaxes(A,2)
-    fill!(y[i],0.0)
-    for j in blockaxes(A,2)
-      mul!(y[i],A[i,j],x[j],o,o)
-    end
-  end
-end
-
-function is_same_vector(x::BlockVector,y::PVector,Ub,U)
+function is_same_vector(x::BlockPVector,y::PVector,Ub,U)
   y_fespace = GridapDistributed.change_ghost(y,U.gids)
   x_fespace = GridapDistributed.change_ghost(x,Ub)
 
@@ -30,13 +21,13 @@ function is_same_vector(x::BlockVector,y::PVector,Ub,U)
   return all(res)
 end
 
-function is_same_matrix(Ab::BlockMatrix,A::PSparseMatrix,Xb,X)
+function is_same_matrix(Ab::BlockPMatrix,A::PSparseMatrix,Xb,X)
   yb = mortar(map(Aii->pfill(0.0,partition(axes(Aii,1))),diag(blocks(Ab))));
   xb = mortar(map(Aii->pfill(1.0,partition(axes(Aii,2))),diag(blocks(Ab))));
   mul!(yb,Ab,xb)
 
-  y = pfill(0.0,partition(axes(A)[1]))
-  x = pfill(1.0,partition(axes(A)[2]))
+  y = pfill(0.0,partition(axes(A,1)))
+  x = pfill(1.0,partition(axes(A,2)))
   mul!(y,A,x)
 
   return is_same_vector(yb,y,Xb,X)

@@ -66,7 +66,7 @@ function FESpaces.get_free_dof_ids(fs::DistributedMultiFieldFESpace)
 end
 
 function MultiField.restrict_to_field(
-  f::DistributedMultiFieldFESpace,free_values::PVector,field::Integer)
+  f::DistributedMultiFieldFESpace,free_values::AbstractVector,field::Integer)
   values = map(f.part_fe_space,partition(free_values)) do u,x
     restrict_to_field(u,x,field)
   end
@@ -74,26 +74,12 @@ function MultiField.restrict_to_field(
   PVector(values,partition(gids))
 end
 
-function MultiField.restrict_to_field(
-  f::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},free_values::BlockVector,field::Integer)
-
-  # BlockVector{PVector} -> PVector{BlockVector}
-  fv1 = map(partition,blocks(free_values)) |> to_parray_of_arrays
-  fv2 = map(mortar,fv1)
-
-  values = map(f.part_fe_space,fv2) do u,x
-    restrict_to_field(u,x,field)
-  end
-  gids = f.field_fe_space[field].gids
-  PVector(values,partition(gids))
-end
-
-function change_ghost(x::BlockVector,
+function change_ghost(x::BlockPVector,
                       X::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}}) where {NB,SB,P}
   array = map(X.block_gids,blocks(x)) do gids, xi
     change_ghost(xi,gids)
   end
-  return mortar(array)
+  return BlockPVector(array,X.block_gids)
 end
 
 #function FESpaces.zero_free_values(f::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle})

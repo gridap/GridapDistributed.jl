@@ -160,8 +160,8 @@ function BlockArrays.mortar(blocks::Matrix{<:PSparseMatrix})
   cols = map(b->axes(b,2),blocks[1,:])
 
   function check_axes(a,r,c)
-    A = matching_local_indices(axes(a,1),r)
-    B = matching_local_indices(axes(a,2),c)
+    A = PartitionedArrays.matching_local_indices(axes(a,1),r)
+    B = PartitionedArrays.matching_local_indices(axes(a,2),c)
     return A & B
   end
   @check all(map(I -> check_axes(blocks[I],rows[I[1]],cols[I[2]]),CartesianIndices(size(blocks))))
@@ -183,7 +183,8 @@ function PartitionedArrays.consistent!(a::BlockPArray)
 end
 
 function PartitionedArrays.partition(a::BlockPArray)
-  return map(partition,blocks(a)) |> to_parray_of_arrays
+  vals = map(partition,blocks(a)) |> to_parray_of_arrays
+  return map(mortar,vals)
 end
 
 function PartitionedArrays.to_trivial_partition(a::BlockPArray)
