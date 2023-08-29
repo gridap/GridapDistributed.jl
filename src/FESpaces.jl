@@ -495,7 +495,11 @@ function _find_vector_type(spaces,gids;own_and_ghost=false)
   if own_and_ghost
     T = OwnAndGhostVectors{T}
   end
-  vector_type = typeof(PVector{T}(undef,partition(gids)))
+  if isa(gids,PRange)
+    vector_type = typeof(PVector{T}(undef,partition(gids)))
+  else # isa(gids,BlockPRange)
+    vector_type = typeof(BlockPVector{T}(undef,gids))
+  end
   return vector_type
 end
 

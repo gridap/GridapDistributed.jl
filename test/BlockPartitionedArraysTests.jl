@@ -87,3 +87,8 @@ copy!(x,v)
 
 LinearAlgebra.fillstored!(__m,1.0)
 
+__v = BlockPVector{Float64,PVector{Vector{Float64}}}(undef,block_range)
+
+m[Block(1,1)]
+m[Block(1),Block(1)]
+

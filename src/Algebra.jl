@@ -284,8 +284,12 @@ function local_views(row_col_partitioned_matrix::PSparseMatrix,
     end
 end
 
-function Algebra.allocate_vector(::Type{<:PVector{T}},ids::PRange) where {T}
-  PVector{T}(undef,partition(ids))
+function Algebra.allocate_vector(::Type{<:PVector{V}},ids::PRange) where {V}
+  PVector{V}(undef,partition(ids))
+end
+
+function Algebra.allocate_vector(::Type{<:BlockPVector{V}},ids::BlockPRange) where {V}
+  BlockPVector{V}(undef,ids)
 end
 
 # PSparseMatrix assembly

@@ -22,21 +22,24 @@ end
 
 """
 """
-struct BlockPArray{T,N,A,B} <: BlockArrays.AbstractBlockArray{T,N}
+struct BlockPArray{V,T,N,A,B} <: BlockArrays.AbstractBlockArray{T,N}
   blocks::Array{A,N}
   axes::NTuple{N,B}
 
   function BlockPArray(blocks::Array{<:AbstractArray{T,N},N},
                        axes  ::NTuple{N,<:BlockPRange}) where {T,N}
     @check all(map(d->size(blocks,d)==blocklength(axes[d]),1:N))
+    local_type(::Type{<:PVector{V}}) where V = V
+    local_type(::Type{<:PSparseMatrix{V}}) where V = V
     A = eltype(blocks)
     B = typeof(first(axes))
-    new{T,N,A,B}(blocks,axes)
+    V = local_type(A)
+    new{V,T,N,A,B}(blocks,axes)
   end
 end
 
-const BlockPVector{T,A,B} = BlockPArray{T,1,A,B}
-const BlockPMatrix{T,A,B} = BlockPArray{T,2,A,B}
+const BlockPVector{V,T,A,B} = BlockPArray{V,T,1,A,B}
+const BlockPMatrix{V,T,A,B} = BlockPArray{V,T,2,A,B}
 
 @inline function BlockPVector(blocks::Vector{<:PVector},rows::BlockPRange)
   BlockPArray(blocks,(rows,))
@@ -54,6 +57,25 @@ end
   BlockPMatrix(blocks,BlockPRange(rows),BlockPRange(cols))
 end
 
+function BlockPVector{V}(::UndefInitializer,rows::BlockPRange) where {V}
+  vals = map(blocks(rows)) do r
+    PVector{V}(undef,partition(r))
+  end
+  return BlockPVector(vals,rows)
+end
+
+function BlockPMatrix{V}(::UndefInitializer,rows::BlockPRange,cols::BlockPRange) where {V}
+  block_ids = CartesianIndices((blocklength(rows),blocklength(cols)))
+  block_rows = blocks(rows)
+  block_cols = blocks(cols)
+  vals = map(block_ids) do I
+    r = block_rows[I[1]]
+    c = block_cols[I[2]]
+    PSparseMatrix{V}(undef,partition(r),partition(c))
+  end
+  return BlockPMatrix(vals,rows)
+end
+
 # AbstractArray API
 
 Base.axes(a::BlockPArray) = a.axes
@@ -69,7 +91,7 @@ function Base.similar(a::BlockPVector,::Type{T},inds::Tuple{<:BlockPRange}) wher
   return BlockPArray(vals,inds)
 end
 
-function Base.similar(::Type{<:BlockPVector{T,A}},inds::Tuple{<:BlockPRange}) where {T,A}
+function Base.similar(::Type{<:BlockPVector{V,T,A}},inds::Tuple{<:BlockPRange}) where {V,T,A}
   rows   = blocks(inds[1])
   values = map(rows) do r
     return similar(A,(r,))
@@ -86,7 +108,7 @@ function Base.similar(a::BlockPMatrix,::Type{T},inds::Tuple{<:BlockPRange,<:Bloc
   return BlockPArray(vals,inds)
 end
 
-function Base.similar(::Type{<:BlockPMatrix{T,A}},inds::Tuple{<:BlockPRange,<:BlockPRange}) where {T,A}
+function Base.similar(::Type{<:BlockPMatrix{V,T,A}},inds::Tuple{<:BlockPRange,<:BlockPRange}) where {V,T,A}
   rows = blocks(inds[1])
   cols = blocks(inds[2])
   values = map(CartesianIndices((length(rows),length(cols)))) do I
@@ -147,10 +169,10 @@ BlockArrays.blocks(a::BlockPArray) = a.blocks
 function Base.getindex(a::BlockPArray,inds::Block{1})
   a.blocks[inds.n...]
 end
-function Base.getindex(a::BlockPArray{T,N},inds::Block{N}) where {T,N}
+function Base.getindex(a::BlockPArray{V,T,N},inds::Block{N}) where {V,T,N}
   a.blocks[inds.n...]
 end
-function Base.getindex(a::BlockPArray{T,N},inds::Vararg{Block{1},N}) where {T,N}
+function Base.getindex(a::BlockPArray{V,T,N},inds::Vararg{Block{1},N}) where {V,T,N}
   a.blocks[map(i->i.n[1],inds)...]
 end
 
