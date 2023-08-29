@@ -71,18 +71,6 @@ function MultiField.restrict_to_field(
   PVector(values,partition(gids))
 end
 
-function change_ghost(x::BlockPVector,
-                      X::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}}) where {NB,SB,P}
-  array = map(blocks(X.gids),blocks(x)) do gids, xi
-    change_ghost(xi,gids)
-  end
-  return BlockPVector(array,X.gids)
-end
-
-#function FESpaces.zero_free_values(f::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle})
-#  return mortar(map(zero_free_values,f.field_fe_space))
-#end
-
 function FESpaces.FEFunction(
   f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
   free_values  = change_ghost(x,f.gids;is_consistent=isconsistent,make_consistent=true)

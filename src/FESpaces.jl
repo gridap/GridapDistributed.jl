@@ -125,7 +125,7 @@ function fetch_vector_ghost_values!(vector_partition,cache)
   assemble!((a,b)->b, vector_partition, cache) 
 end
 
-function change_ghost(a::PVector,f::DistributedFESpace)
+function change_ghost(a,f::DistributedFESpace)
   change_ghost(a,f.gids)
 end
 
