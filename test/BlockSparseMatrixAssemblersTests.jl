@@ -11,7 +11,7 @@ using GridapDistributed: BlockPVector, BlockPMatrix
 
 function is_same_vector(x::BlockPVector,y::PVector,Ub,U)
   y_fespace = GridapDistributed.change_ghost(y,U.gids)
-  x_fespace = GridapDistributed.change_ghost(x,Ub)
+  x_fespace = GridapDistributed.change_ghost(x,Ub.gids)
 
   res = map(1:num_fields(Ub)) do i
     xi = restrict_to_field(Ub,x_fespace,i)
