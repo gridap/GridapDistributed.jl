@@ -1009,8 +1009,6 @@ function assemble_coo_with_column_owner!(I,J,V,row_partition,Jown)
   end
 end
 
-Base.wait(t::Matrix) = map(wait,t)
-
 # dofs_gids_prange can be either test_dofs_gids_prange or trial_dofs_gids_prange
 # In the former case, gids is a vector of global test dof identifiers, while in the 
 # latter, a vector of global trial dof identifiers
