@@ -40,9 +40,9 @@ export get_face_gids
 export local_views, get_parts
 export with_ghost, no_ghost
 
-include("Algebra.jl")
-
 include("BlockPartitionedArrays.jl")
+
+include("Algebra.jl")
 
 include("Geometry.jl")
 

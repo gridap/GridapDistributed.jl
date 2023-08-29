@@ -16,6 +16,10 @@ BlockArrays.blocksize(a::BlockPRange) = (blocklength(a),)
 BlockArrays.blockaxes(a::BlockPRange) = (Block.(Base.OneTo(blocklength(a))),)
 BlockArrays.blocks(a::BlockPRange) = a.ranges
 
+function PartitionedArrays.partition(a::BlockPRange)
+  return map(partition,blocks(a)) |> to_parray_of_arrays
+end
+
 """
 """
 struct BlockPArray{T,N,A,B} <: BlockArrays.AbstractBlockArray{T,N}
@@ -195,9 +199,10 @@ end
 # LinearAlgebra API
 
 function LinearAlgebra.mul!(y::BlockPVector,A::BlockPMatrix,x::BlockPVector)
+  z = zero(eltype(y))
   o = one(eltype(A))
   for i in blockaxes(A,2)
-    fill!(y[i],0.0)
+    fill!(y[i],z)
     for j in blockaxes(A,2)
       mul!(y[i],A[i,j],x[j],o,o)
     end
