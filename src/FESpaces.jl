@@ -627,12 +627,12 @@ end
 
 # When using this one, make sure that you also loop over ghost cells.
 # This is at your own risk.
-function local_assembly_strategy(::FullyAssembledRows,test_space_indices,trial_space_indices)
-  test_space_local_to_ghost = local_to_ghost(test_space_indices)
+function local_assembly_strategy(::FullyAssembledRows,rows,cols)
+  rows_local_to_ghost = local_to_ghost(rows)
   GenericAssemblyStrategy(
     identity,
     identity,
-    row->test_space_local_to_ghost[row]==0,
+    row->rows_local_to_ghost[row]==0,
     col->true)
 end
 

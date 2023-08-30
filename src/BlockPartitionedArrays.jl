@@ -242,7 +242,7 @@ end
 
 function LinearAlgebra.fillstored!(a::BlockPMatrix,v)
   map(blocks(a)) do a
-    fillstored!(a,v)
+    LinearAlgebra.fillstored!(a,v)
   end
   return a
 end

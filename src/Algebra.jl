@@ -263,25 +263,25 @@ end
 function local_views(row_col_partitioned_matrix::PSparseMatrix,
                      test_dofs_partition::PRange,
                      trial_dofs_partition::PRange)
-    if (row_col_partitioned_matrix.row_partition === partition(test_dofs_partition) || 
-      row_col_partitioned_matrix.col_partition === partition(trial_dofs_partition) )
-      @assert false                 
-    else 
-      map(
-        partition(row_col_partitioned_matrix),
-        partition(test_dofs_partition),
-        partition(trial_dofs_partition),
-        row_col_partitioned_matrix.row_partition,
-        row_col_partitioned_matrix.col_partition) do matrix_partition,
-                                                                test_dof_partition,
-                                                                trial_dof_partition,
-                                                                row_partition,
-                                                                col_partition
-        rl2lmap = find_local_to_local_map(test_dof_partition,row_partition)
-        cl2lmap = find_local_to_local_map(trial_dof_partition,col_partition)
-        LocalView(matrix_partition,(rl2lmap,cl2lmap))
-      end
+  if (row_col_partitioned_matrix.row_partition === partition(test_dofs_partition) || 
+    row_col_partitioned_matrix.col_partition === partition(trial_dofs_partition) )
+    @assert false                 
+  else 
+    map(
+      partition(row_col_partitioned_matrix),
+      partition(test_dofs_partition),
+      partition(trial_dofs_partition),
+      row_col_partitioned_matrix.row_partition,
+      row_col_partitioned_matrix.col_partition) do matrix_partition,
+                                                              test_dof_partition,
+                                                              trial_dof_partition,
+                                                              row_partition,
+                                                              col_partition
+      rl2lmap = find_local_to_local_map(test_dof_partition,row_partition)
+      cl2lmap = find_local_to_local_map(trial_dof_partition,col_partition)
+      LocalView(matrix_partition,(rl2lmap,cl2lmap))
     end
+  end
 end
 
 function Algebra.allocate_vector(::Type{<:PVector{V}},ids::PRange) where {V}
@@ -294,8 +294,33 @@ end
 
 # PSparseMatrix assembly
 
-struct FullyAssembledRows end
-struct SubAssembledRows end
+"""
+  ParallelAssemblyStrategy(ghosted_rows::Bool,optimize_ghosts::Bool)
+
+  Two main strategies are available for parallel assembly:
+    - FullyAssembledRows: the rows of the matrix are assembled only in the process owning the row.
+    - SubAssembledRows: processors also hold ghost rows.
+    
+  Options: 
+    - optimize_ghosts: If `false`, the FESpace PRanges are used for the linear system. 
+                       If `true`, ghost ids are reduced to minimize communications. 
+"""
+struct ParallelAssemblyStrategy{GR,OG}
+  ghosted_rows::Bool
+  optimize_ghosts::Bool
+  function ParallelAssemblyStrategy(ghosted_rows::Bool,optimize_ghosts::Bool)
+    new{ghosted_rows,optimize_ghosts}(ghosted_rows,optimize_ghosts)
+  end
+end
+
+const FullyAssembledRows{OG} = ParallelAssemblyStrategy{false,OG}
+FullyAssembledRows(;optimize_ghosts=true) = ParallelAssemblyStrategy(false,optimize_ghosts)
+
+const SubAssembledRows{OG} = ParallelAssemblyStrategy{true,OG}
+SubAssembledRows(;optimize_ghosts=true) = ParallelAssemblyStrategy(true,optimize_ghosts)
+
+optimize_ghosts(::Type{ParallelAssemblyStrategy{GR,OG}}) where {GR,OG} = OG
+optimize_ghosts(a::ParallelAssemblyStrategy) = optimize_ghosts(typeof(a))
 
 # For the moment we use COO format even though
 # it is quite memory consuming.
@@ -427,6 +452,11 @@ get_trial_gids(a::DistributedAllocationCOO) = a.trial_dofs_gids_prange
 get_test_gids(a::ArrayBlock{<:DistributedAllocationCOO})  = map(get_test_gids,diag(a.array))
 get_trial_gids(a::ArrayBlock{<:DistributedAllocationCOO}) = map(get_trial_gids,diag(a.array))
 
+ParallelAssemblyStrategy(a::DistributedAllocationCOO) = a.par_strategy
+function ParallelAssemblyStrategy(a::ArrayBlock{<:DistributedAllocationCOO})
+  return ParallelAssemblyStrategy(first(a.array))
+end
+
 function Algebra.create_from_nz(a::PSparseMatrix)
   # For FullyAssembledRows the underlying Exchanger should
   # not have ghost layer making assemble! do nothing (TODO check)
@@ -436,17 +466,19 @@ end
 
 function Algebra.create_from_nz(a::DistributedAllocationCOO{<:FullyAssembledRows})
   f(x) = nothing
-  A, = _fa_create_from_nz_with_callback(f,a)
+  s    = ParallelAssemblyStrategy(a)
+  A, = _fa_create_from_nz_with_callback(f,a,optimize_ghosts(s))
   return A
 end
 
 function Algebra.create_from_nz(a::ArrayBlock{<:DistributedAllocationCOO{<:FullyAssembledRows}})
   f(x) = nothing
-  A, = _fa_create_from_nz_with_callback(f,a)
+  s    = ParallelAssemblyStrategy(a)
+  A, = _fa_create_from_nz_with_callback(f,a,optimize_ghosts(s))
   return A
 end
 
-function _fa_create_from_nz_with_callback(callback,a)
+function _fa_create_from_nz_with_callback(callback,a,optimize_ghosts=true)
 
   # Recover some data
   I,J,V = get_allocations(a)
@@ -480,17 +512,19 @@ end
 
 function Algebra.create_from_nz(a::DistributedAllocationCOO{<:SubAssembledRows})
   f(x) = nothing
-  A, = _sa_create_from_nz_with_callback(f,f,a)
+  s    = ParallelAssemblyStrategy(a)
+  A, = _sa_create_from_nz_with_callback(f,f,a,optimize_ghosts(s))
   return A
 end
 
 function Algebra.create_from_nz(a::ArrayBlock{<:DistributedAllocationCOO{<:SubAssembledRows}})
   f(x) = nothing
-  A, = _sa_create_from_nz_with_callback(f,f,a)
+  s    = ParallelAssemblyStrategy(a)
+  A, = _sa_create_from_nz_with_callback(f,f,a,optimize_ghosts(s))
   return A
 end
 
-function _sa_create_from_nz_with_callback(callback,async_callback,a)
+function _sa_create_from_nz_with_callback(callback,async_callback,a,optimize_ghosts=true)
   # Recover some data
   I,J,V = get_allocations(a)
   test_dofs_gids_prange = get_test_gids(a)
@@ -662,7 +696,8 @@ function Algebra.create_from_nz(
     _rhs_callback(c_fespace,rows)
   end
 
-  A,b = _fa_create_from_nz_with_callback(callback,a)
+  s   = ParallelAssemblyStrategy(a)
+  A,b = _fa_create_from_nz_with_callback(callback,a,optimize_ghosts(s))
   return A,b
 end
 
@@ -685,7 +720,8 @@ function Algebra.create_from_nz(
     assemble!(b)
   end
 
-  A,b = _sa_create_from_nz_with_callback(callback,async_callback,a)
+  s   = ParallelAssemblyStrategy(a)
+  A,b = _sa_create_from_nz_with_callback(callback,async_callback,a,optimize_ghosts(s))
   return A,b
 end
 
@@ -747,7 +783,7 @@ function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
   touched = map(values) do values
      fill!(Vector{Bool}(undef,length(values)),false)
   end
-  allocations=map(values,touched) do values,touched
+  allocations = map(values,touched) do values,touched
     ArrayAllocationTrackTouchedAndValues(touched,values)
   end
   return PVectorAllocationTrackTouchedAndValues(allocations,values,dofs)
