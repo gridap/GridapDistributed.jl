@@ -69,7 +69,16 @@ function _main(n_spaces,mfs,weakform,Ω,dΩ,U,V)
   @test is_same_vector(b1_blocks,b1,Yb,Y)
   @test is_same_matrix(A1_blocks,A1,Xb,X)
 
+  assemble_matrix!(A1_blocks,assem_blocks,bmatdata);
+  assemble_vector!(b1_blocks,assem_blocks,bvecdata);
+  @test is_same_vector(b1_blocks,b1,Yb,Y)
+  @test is_same_matrix(A1_blocks,A1,Xb,X)
+
   A2_blocks, b2_blocks = assemble_matrix_and_vector(assem_blocks,bdata)
+  @test is_same_vector(b2_blocks,b2,Yb,Y)
+  @test is_same_matrix(A2_blocks,A2,Xb,X)
+  
+  assemble_matrix_and_vector!(A2_blocks,b2_blocks,assem_blocks,bdata)
   @test is_same_vector(b2_blocks,b2,Yb,Y)
   @test is_same_matrix(A2_blocks,A2,Xb,X)
 
