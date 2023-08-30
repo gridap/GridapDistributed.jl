@@ -162,6 +162,34 @@ function Base.fill!(a::BlockPVector,v)
   return a
 end
 
+function Base.sum(a::BlockPArray)
+  return sum(map(sum,blocks(a)))
+end
+
+Base.maximum(x::BlockPArray) = maximum(identity,x)
+function Base.maximum(f::Function,x::BlockPArray)
+  maximum(map(xi->maximum(f,xi),blocks(x)))
+end
+
+Base.minimum(x::BlockPArray) = minimum(identity,x)
+function Base.minimum(f::Function,x::BlockPArray)
+  minimum(map(xi->minimum(f,xi),blocks(x)))
+end
+
+function Base.:(==)(a::BlockPVector,b::BlockPVector)
+  A = length(a) == length(b)
+  B = all(map((ai,bi)->ai==bi,blocks(a),blocks(b)))
+  return A && B
+end
+
+function Base.any(f::Function,x::BlockPVector)
+  any(map(xi->any(f,xi),blocks(x)))
+end
+
+function Base.all(f::Function,x::PVector)
+  all(map(xi->all(f,xi),blocks(x)))
+end
+
 # AbstractBlockArray API
 
 BlockArrays.blocks(a::BlockPArray) = a.blocks
@@ -214,8 +242,33 @@ function PartitionedArrays.partition(a::BlockPArray)
 end
 
 function PartitionedArrays.to_trivial_partition(a::BlockPArray)
-  vals = map(to_trivial_partition,blocks(a))
+  vals = map(PartitionedArrays.to_trivial_partition,blocks(a))
   return mortar(vals)
+end
+
+function PartitionedArrays.local_values(a::BlockPArray)
+  vals = map(local_values,blocks(a)) |> to_parray_of_arrays
+  return map(mortar,vals)
+end
+
+function PartitionedArrays.own_values(a::BlockPArray)
+  vals = map(own_values,blocks(a)) |> to_parray_of_arrays
+  return map(mortar,vals)
+end
+
+function PartitionedArrays.ghost_values(a::BlockPArray)
+  vals = map(ghost_values,blocks(a)) |> to_parray_of_arrays
+  return map(mortar,vals)
+end
+
+function PartitionedArrays.own_ghost_values(a::BlockPMatrix)
+  vals = map(own_ghost_values,blocks(a)) |> to_parray_of_arrays
+  return map(mortar,vals)
+end
+
+function PartitionedArrays.ghost_own_values(a::BlockPMatrix)
+  vals = map(ghost_own_values,blocks(a)) |> to_parray_of_arrays
+  return map(mortar,vals)
 end
 
 # LinearAlgebra API
@@ -235,9 +288,9 @@ function LinearAlgebra.dot(x::BlockPVector,y::BlockPVector)
   return sum(map(dot,blocks(x),blocks(y)))
 end
 
-function LinearAlgebra.norm(v::BlockPVector)
-  block_norms = map(norm,blocks(v))
-  return sqrt(sum(block_norms.^2))
+function LinearAlgebra.norm(v::BlockPVector,p::Real=2)
+  block_norms = map(vi->norm(vi,p),blocks(v))
+  return sum(block_norms.^p)^(1/p)
 end
 
 function LinearAlgebra.fillstored!(a::BlockPMatrix,v)

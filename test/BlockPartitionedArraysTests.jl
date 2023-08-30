@@ -58,11 +58,11 @@ mul!(x,_m[1,1],_v)
 @test blocklength(block_range) == 2
 @test blocksize(block_range) == (2,)
 
-# BlockPArray
+# AbstractArray API
 
 __v = similar(v,block_range)
 __m = similar(m,(block_range,block_range))
-fill!(v,1.0)
+fill!(__v,1.0)
 
 __v = __v .+ 1.0
 __v = __v .- 1.0
@@ -74,7 +74,22 @@ __m = __m .- 1.0
 __m = __m .* 1.0
 __m = __m ./ 1.0
 
-# LinearAlgebra
+# PartitionedArrays API
+
+consistent!(__v) |> wait
+t = assemble!(__v)
+assemble!(__m) |> wait
+fetch(t);
+
+PartitionedArrays.to_trivial_partition(m)
+
+local_values(v)
+own_values(v)
+ghost_values(v)
+own_ghost_values(m)
+ghost_own_values(m)
+
+# LinearAlgebra API
 
 x = similar(v)
 mul!(x,m,v)
@@ -89,6 +104,6 @@ LinearAlgebra.fillstored!(__m,1.0)
 
 __v = BlockPVector{Float64,PVector{Vector{Float64}}}(undef,block_range)
 
-m[Block(1,1)]
-m[Block(1),Block(1)]
+maximum(abs,v)
+minimum(abs,v)
 
