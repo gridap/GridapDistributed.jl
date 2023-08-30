@@ -186,7 +186,7 @@ function Base.any(f::Function,x::BlockPVector)
   any(map(xi->any(f,xi),blocks(x)))
 end
 
-function Base.all(f::Function,x::PVector)
+function Base.all(f::Function,x::BlockPVector)
   all(map(xi->all(f,xi),blocks(x)))
 end
 
