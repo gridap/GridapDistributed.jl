@@ -190,6 +190,11 @@ function Base.all(f::Function,x::BlockPVector)
   all(map(xi->all(f,xi),blocks(x)))
 end
 
+function LinearAlgebra.rmul!(a::BlockPVector,v::Number)
+  map(ai->rmul!(ai,v),blocks(a))
+  return a
+end
+
 # AbstractBlockArray API
 
 BlockArrays.blocks(a::BlockPArray) = a.blocks
