@@ -236,7 +236,7 @@ end
 # Factory
 
 function MultiField.MultiFieldFESpace(
-  f_dspace::Vector{<:DistributedSingleFieldFESpace};own_and_ghost=false, kwargs...)
+  f_dspace::Vector{<:DistributedSingleFieldFESpace};split_own_and_ghost=false, kwargs...)
   f_p_space = map(local_views,f_dspace)
   v(x...) = collect(x)
 
@@ -244,7 +244,7 @@ function MultiField.MultiFieldFESpace(
   p_mspace    = map(f->MultiFieldFESpace(f;kwargs...),p_f_space)
   style       = PartitionedArrays.getany(map(MultiFieldStyle,p_mspace))
   gids        = generate_multi_field_gids(style,f_dspace,p_mspace)
-  vector_type = _find_vector_type(p_mspace,gids;own_and_ghost=own_and_ghost)
+  vector_type = _find_vector_type(p_mspace,gids;split_own_and_ghost=split_own_and_ghost)
   DistributedMultiFieldFESpace(f_dspace,p_mspace,gids,vector_type)
 end
 

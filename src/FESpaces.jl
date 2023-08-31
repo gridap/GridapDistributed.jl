@@ -462,16 +462,16 @@ end
 
 # Factories
 
-function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;own_and_ghost=false,kwargs...)
+function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;split_own_and_ghost=false,kwargs...)
   spaces = map(local_views(model)) do m
     FESpace(m,reffe;kwargs...)
   end
   gids =  generate_gids(model,spaces)
-  vector_type = _find_vector_type(spaces,gids;own_and_ghost=own_and_ghost)
+  vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
   DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
 
-function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;own_and_ghost=false,kwargs...)
+function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;split_own_and_ghost=false,kwargs...)
   trian = add_ghost_cells(_trian)
   trian_gids = generate_cell_gids(trian)
   spaces = map(trian.trians) do t
@@ -480,15 +480,15 @@ function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;own_and_ghost=f
   cell_to_ldofs = map(get_cell_dof_ids,spaces)
   nldofs = map(num_free_dofs,spaces)
   gids = generate_gids(trian_gids,cell_to_ldofs,nldofs)
-  vector_type = _find_vector_type(spaces,gids;own_and_ghost=own_and_ghost)
+  vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
   DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
 
-function _find_vector_type(spaces,gids;own_and_ghost=false)
+function _find_vector_type(spaces,gids;split_own_and_ghost=false)
   local_vector_type = get_vector_type(PartitionedArrays.getany(spaces))
   Tv = eltype(local_vector_type)
   T  = Vector{Tv}
-  if own_and_ghost
+  if split_own_and_ghost
     T = OwnAndGhostVectors{T}
   end
   if isa(gids,PRange)
