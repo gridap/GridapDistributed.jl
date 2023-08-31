@@ -38,4 +38,6 @@ end
   include("BlockSparseMatrixAssemblersTests.jl") 
 end
 
+@time @testset "Adaptivity" begin include("AdaptivityTests.jl") end
+
 end # module

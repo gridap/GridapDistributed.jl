@@ -60,18 +60,6 @@ function get_glue_components(glue::RedistributeGlue,reverse::Val{true})
   return glue.lids_snd, glue.lids_rcv, glue.parts_snd, glue.parts_rcv, glue.old2new
 end
 
-function allocate_rcv_buffer(t::Type{T},g::RedistributeGlue) where T
-  ptrs = local_indices_rcv.ptrs
-  data = zeros(T,ptrs[end]-1)
-  JaggedArray(data,ptrs)
-end 
-
-function allocate_snd_buffer(t::Type{T},g::RedistributeGlue) where T
-  ptrs = local_indices_snd.ptrs
-  data = zeros(T,ptrs[end]-1)
-  JaggedArray(data,ptrs)
-end
-
 """
   Redistributes an DistributedDiscreteModel to optimally 
   rebalance the loads between the processors. 
@@ -117,19 +105,20 @@ function _update_cell_dof_values_with_local_info!(cell_dof_values_new,
    end
 end
 
-function _allocate_comm_data(num_dofs_x_cell,lids)
-  map(num_dofs_x_cell,lids) do num_dofs_x_cell,lids
-    n = length(lids)
-    ptrs = Vector{Int32}(undef,n+1)
-    ptrs.= 0
-    for i = 1:n
-      for j = lids.ptrs[i]:lids.ptrs[i+1]-1
-        ptrs[i+1] = ptrs[i+1] + num_dofs_x_cell.data[j]
+function _allocate_comm_data(cell_values,lids)
+  map(cell_values,lids) do cell_values,lids
+    cache = array_cache(cell_values)
+    num_nbors = length(lids)
+    ptrs = fill(zero(Int32),num_nbors+1)
+    for nbor = 1:num_nbors
+      for j = lids.ptrs[nbor]:lids.ptrs[nbor+1]-1
+        cell = lids.data[j]
+        ptrs[nbor+1] += length(getindex!(cache,cell_values,cell))
       end
     end
     PartitionedArrays.length_to_ptrs!(ptrs)
-    ndata = ptrs[end]-1
-    data  = Vector{Float64}(undef,ndata)
+
+    data = Vector{Float64}(undef,ptrs[end]-1)
     PartitionedArrays.JaggedArray(data,ptrs)
   end
 end
@@ -169,13 +158,6 @@ function _unpack_rcv_data!(cell_dof_values,rcv_data,rcv_lids)
   end
 end
 
-function _num_dofs_x_cell(cell_dofs_array,lids)
-  map(cell_dofs_array,lids) do cell_dofs_array, lids
-     data = [length(cell_dofs_array[i]) for i = 1:length(cell_dofs_array) ]
-     PartitionedArrays.JaggedArray(data,lids.ptrs)
-  end
-end
-
 function get_redistribute_cell_dofs_cache(cell_dof_values_old,
                                           cell_dof_ids_new,
                                           model_new,
@@ -187,10 +169,8 @@ function get_redistribute_cell_dofs_cache(cell_dof_values_old,
   cell_dof_values_old = change_parts(cell_dof_values_old,get_parts(glue);default=[])
   cell_dof_ids_new    = change_parts(cell_dof_ids_new,get_parts(glue);default=[[]])
 
-  num_dofs_x_cell_snd = _num_dofs_x_cell(cell_dof_values_old, lids_snd)
-  num_dofs_x_cell_rcv = _num_dofs_x_cell(cell_dof_ids_new, lids_rcv)
-  snd_data = _allocate_comm_data(num_dofs_x_cell_snd, lids_snd)
-  rcv_data = _allocate_comm_data(num_dofs_x_cell_rcv, lids_rcv)
+  snd_data = _allocate_comm_data(cell_dof_values_old, lids_snd)
+  rcv_data = _allocate_comm_data(cell_dof_ids_new, lids_rcv)
 
   cell_dof_values_new = _allocate_cell_wise_dofs(cell_dof_ids_new)
 
@@ -225,7 +205,6 @@ function redistribute_cell_dofs!(caches,
 
   graph = ExchangeGraph(parts_snd,parts_rcv)
   t = exchange!(rcv_data,snd_data,graph)
-  wait(t)
 
   # We have to build the owned part of "cell_dof_values_new" out of
   #  1. cell_dof_values_old (for those cells s.t. new2old[:]!=0)
@@ -234,6 +213,7 @@ function redistribute_cell_dofs!(caches,
                                            cell_dof_values_old,
                                            new2old)
 
+  wait(t)
   _unpack_rcv_data!(cell_dof_values_new,rcv_data,lids_rcv)
 
   # Now that every part knows it's new owned dofs, exchange ghosts

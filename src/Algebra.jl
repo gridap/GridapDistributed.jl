@@ -74,22 +74,17 @@ function get_part_id(comm::MPI.Comm)
   id
 end
 
-function i_am_in(comm::MPI.Comm)
-  get_part_id(comm) >=0
-end
-
-function i_am_in(comm::MPIArray)
-  i_am_in(comm.comm)
-end
-
-function i_am_in(comm::MPIVoidVector)
-  i_am_in(comm.comm)
-end
+i_am_in(comm::MPI.Comm) = get_part_id(comm) >=0
+i_am_in(comm::MPIArray) = i_am_in(comm.comm)
+i_am_in(comm::MPIVoidVector) = i_am_in(comm.comm)
+i_am_in(comm::DebugArray) = true
 
 function change_parts(x::Union{MPIArray,DebugArray,Nothing,MPIVoidVector}, new_parts; default=nothing)
   x_new = map(new_parts) do _p
-    if isa(x,MPIArray) || isa(x,DebugArray)
+    if isa(x,MPIArray)
       PartitionedArrays.getany(x)
+    elseif isa(x,DebugArray) && (_p <= length(x))
+      x.items[_p]
     else
       default
     end

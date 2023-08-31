@@ -15,7 +15,7 @@ using GridapDistributed: find_local_to_local_map
 using GridapDistributed: DistributedAdaptedDiscreteModel
 using GridapDistributed: RedistributeGlue, redistribute_cell_dofs, redistribute_fe_function, redistribute_free_values
 
-function are_equal(a1::MPIArray,a2::MPIArray)
+function are_equal(a1::Union{MPIArray,DebugArray},a2::Union{MPIArray,DebugArray})
   same = map(a1,a2) do a1,a2
     a1 ≈ a2
   end
@@ -229,6 +229,10 @@ function main(distribute)
   test_adaptivity(fine_ranks,redist_parent,redist_child,fine_adaptivity_glue)
 
   return
+end
+
+with_debug() do distribute
+  main(distribute)
 end
 
 end # module AdaptivityTests
