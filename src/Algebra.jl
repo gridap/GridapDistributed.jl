@@ -294,33 +294,8 @@ end
 
 # PSparseMatrix assembly
 
-"""
-  ParallelAssemblyStrategy(ghosted_rows::Bool,optimize_ghosts::Bool)
-
-  Two main strategies are available for parallel assembly:
-    - FullyAssembledRows: the rows of the matrix are assembled only in the process owning the row.
-    - SubAssembledRows: processors also hold ghost rows.
-    
-  Options: 
-    - optimize_ghosts: If `false`, the FESpace PRanges are used for the linear system. 
-                       If `true`, ghost ids are reduced to minimize communications. 
-"""
-struct ParallelAssemblyStrategy{GR,OG}
-  ghosted_rows::Bool
-  optimize_ghosts::Bool
-  function ParallelAssemblyStrategy(ghosted_rows::Bool,optimize_ghosts::Bool)
-    new{ghosted_rows,optimize_ghosts}(ghosted_rows,optimize_ghosts)
-  end
-end
-
-const FullyAssembledRows{OG} = ParallelAssemblyStrategy{false,OG}
-FullyAssembledRows(;optimize_ghosts=true) = ParallelAssemblyStrategy(false,optimize_ghosts)
-
-const SubAssembledRows{OG} = ParallelAssemblyStrategy{true,OG}
-SubAssembledRows(;optimize_ghosts=true) = ParallelAssemblyStrategy(true,optimize_ghosts)
-
-optimize_ghosts(::Type{ParallelAssemblyStrategy{GR,OG}}) where {GR,OG} = OG
-optimize_ghosts(a::ParallelAssemblyStrategy) = optimize_ghosts(typeof(a))
+struct FullyAssembledRows end
+struct SubAssembledRows end
 
 # For the moment we use COO format even though
 # it is quite memory consuming.
@@ -452,11 +427,6 @@ get_trial_gids(a::DistributedAllocationCOO) = a.trial_dofs_gids_prange
 get_test_gids(a::ArrayBlock{<:DistributedAllocationCOO})  = map(get_test_gids,diag(a.array))
 get_trial_gids(a::ArrayBlock{<:DistributedAllocationCOO}) = map(get_trial_gids,diag(a.array))
 
-ParallelAssemblyStrategy(a::DistributedAllocationCOO) = a.par_strategy
-function ParallelAssemblyStrategy(a::ArrayBlock{<:DistributedAllocationCOO})
-  return ParallelAssemblyStrategy(first(a.array))
-end
-
 function Algebra.create_from_nz(a::PSparseMatrix)
   # For FullyAssembledRows the underlying Exchanger should
   # not have ghost layer making assemble! do nothing (TODO check)
@@ -466,19 +436,17 @@ end
 
 function Algebra.create_from_nz(a::DistributedAllocationCOO{<:FullyAssembledRows})
   f(x) = nothing
-  s    = ParallelAssemblyStrategy(a)
-  A, = _fa_create_from_nz_with_callback(f,a,optimize_ghosts(s))
+  A, = _fa_create_from_nz_with_callback(f,a)
   return A
 end
 
 function Algebra.create_from_nz(a::ArrayBlock{<:DistributedAllocationCOO{<:FullyAssembledRows}})
   f(x) = nothing
-  s    = ParallelAssemblyStrategy(a)
-  A, = _fa_create_from_nz_with_callback(f,a,optimize_ghosts(s))
+  A, = _fa_create_from_nz_with_callback(f,a)
   return A
 end
 
-function _fa_create_from_nz_with_callback(callback,a,optimize_ghosts=true)
+function _fa_create_from_nz_with_callback(callback,a)
 
   # Recover some data
   I,J,V = get_allocations(a)
@@ -512,19 +480,17 @@ end
 
 function Algebra.create_from_nz(a::DistributedAllocationCOO{<:SubAssembledRows})
   f(x) = nothing
-  s    = ParallelAssemblyStrategy(a)
-  A, = _sa_create_from_nz_with_callback(f,f,a,optimize_ghosts(s))
+  A, = _sa_create_from_nz_with_callback(f,f,a)
   return A
 end
 
 function Algebra.create_from_nz(a::ArrayBlock{<:DistributedAllocationCOO{<:SubAssembledRows}})
   f(x) = nothing
-  s    = ParallelAssemblyStrategy(a)
-  A, = _sa_create_from_nz_with_callback(f,f,a,optimize_ghosts(s))
+  A, = _sa_create_from_nz_with_callback(f,f,a)
   return A
 end
 
-function _sa_create_from_nz_with_callback(callback,async_callback,a,optimize_ghosts=true)
+function _sa_create_from_nz_with_callback(callback,async_callback,a)
   # Recover some data
   I,J,V = get_allocations(a)
   test_dofs_gids_prange = get_test_gids(a)
@@ -696,8 +662,7 @@ function Algebra.create_from_nz(
     _rhs_callback(c_fespace,rows)
   end
 
-  s   = ParallelAssemblyStrategy(a)
-  A,b = _fa_create_from_nz_with_callback(callback,a,optimize_ghosts(s))
+  A,b = _fa_create_from_nz_with_callback(callback,a)
   return A,b
 end
 
@@ -720,8 +685,7 @@ function Algebra.create_from_nz(
     assemble!(b)
   end
 
-  s   = ParallelAssemblyStrategy(a)
-  A,b = _sa_create_from_nz_with_callback(callback,async_callback,a,optimize_ghosts(s))
+  A,b = _sa_create_from_nz_with_callback(callback,async_callback,a)
   return A,b
 end
 
