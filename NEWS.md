@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added support for distributed block-assembly. Since PR [124](https://github.com/gridap/GridapDistributed.jl/pull/124).
 
+### Changed
+
+- Updated compat for FillArrays to v1. Since PR[127](https://github.com/gridap/GridapDistributed.jl/pull/127).
+
 ## [0.3.0] - 2023-08-16
 
 ### Changed
