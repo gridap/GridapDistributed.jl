@@ -7,31 +7,11 @@ using Gridap.FESpaces, Gridap.ReferenceFEs, Gridap.MultiField
 
 using GridapDistributed
 using PartitionedArrays
+using GridapDistributed: BlockPVector, BlockPMatrix
 
-function LinearAlgebra.mul!(y::BlockVector,A::BlockMatrix,x::BlockVector)
-  o = one(eltype(A))
-  for i in blockaxes(A,2)
-    fill!(y[i],0.0)
-    for j in blockaxes(A,2)
-      mul!(y[i],A[i,j],x[j],o,o)
-    end
-  end
-end
-
-function GridapDistributed.change_ghost(
-  x::BlockVector,
-  X::GridapDistributed.DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}}) where {NB,SB,P}
-  block_ranges = MultiField.get_block_ranges(NB,SB,P)
-  array = map(block_ranges,blocks(x)) do range, xi
-    Xi = (length(range) == 1) ? X.field_fe_space[range[1]] : MultiFieldFESpace(X.field_fe_space[range])
-    GridapDistributed.change_ghost(xi,Xi.gids)
-  end
-  return mortar(array)
-end
-
-function is_same_vector(x::BlockVector,y::PVector,Ub,U)
+function is_same_vector(x::BlockPVector,y::PVector,Ub,U)
   y_fespace = GridapDistributed.change_ghost(y,U.gids)
-  x_fespace = GridapDistributed.change_ghost(x,Ub)
+  x_fespace = GridapDistributed.change_ghost(x,Ub.gids)
 
   res = map(1:num_fields(Ub)) do i
     xi = restrict_to_field(Ub,x_fespace,i)
@@ -41,13 +21,13 @@ function is_same_vector(x::BlockVector,y::PVector,Ub,U)
   return all(res)
 end
 
-function is_same_matrix(Ab::BlockMatrix,A::PSparseMatrix,Xb,X)
+function is_same_matrix(Ab::BlockPMatrix,A::PSparseMatrix,Xb,X)
   yb = mortar(map(Aii->pfill(0.0,partition(axes(Aii,1))),diag(blocks(Ab))));
   xb = mortar(map(Aii->pfill(1.0,partition(axes(Aii,2))),diag(blocks(Ab))));
   mul!(yb,Ab,xb)
 
-  y = pfill(0.0,partition(axes(A)[1]))
-  x = pfill(1.0,partition(axes(A)[2]))
+  y = pfill(0.0,partition(axes(A,1)))
+  x = pfill(1.0,partition(axes(A,2)))
   mul!(y,A,x)
 
   return is_same_vector(yb,y,Xb,X)
@@ -89,7 +69,16 @@ function _main(n_spaces,mfs,weakform,Ω,dΩ,U,V)
   @test is_same_vector(b1_blocks,b1,Yb,Y)
   @test is_same_matrix(A1_blocks,A1,Xb,X)
 
+  assemble_matrix!(A1_blocks,assem_blocks,bmatdata);
+  assemble_vector!(b1_blocks,assem_blocks,bvecdata);
+  @test is_same_vector(b1_blocks,b1,Yb,Y)
+  @test is_same_matrix(A1_blocks,A1,Xb,X)
+
   A2_blocks, b2_blocks = assemble_matrix_and_vector(assem_blocks,bdata)
+  @test is_same_vector(b2_blocks,b2,Yb,Y)
+  @test is_same_matrix(A2_blocks,A2,Xb,X)
+  
+  assemble_matrix_and_vector!(A2_blocks,b2_blocks,assem_blocks,bdata)
   @test is_same_vector(b2_blocks,b2,Yb,Y)
   @test is_same_matrix(A2_blocks,A2,Xb,X)
 

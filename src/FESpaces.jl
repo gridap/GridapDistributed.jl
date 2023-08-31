@@ -119,11 +119,11 @@ end
 function fetch_vector_ghost_values_cache(vector_partition,partition)
   cache = PArrays.p_vector_cache(vector_partition,partition)
   map(reverse,cache)
-end 
+end
 
 function fetch_vector_ghost_values!(vector_partition,cache)
   assemble!((a,b)->b, vector_partition, cache) 
-end 
+end
 
 function generate_gids(
   cell_range::PRange,
@@ -172,7 +172,6 @@ function generate_gids(
                          cell_ldofs_to_part,
                          cell_to_ldofs,
                          cell_range)
-
 
   # Find the global range of owned dofs
   first_gdof = scan(+,nodofs,type=:exclusive,init=one(eltype(nodofs)))
@@ -325,18 +324,18 @@ function FESpaces.EvaluationFunction(
 end
 
 function _EvaluationFunction(func,
-  f::DistributedSingleFieldFESpace,free_values::AbstractVector,isconsistent=false)
-  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  fields = map(func,f.spaces,local_vals)
+  f::DistributedSingleFieldFESpace,x::AbstractVector,isconsistent=false)
+  free_values = change_ghost(x,f.gids,is_consistent=isconsistent,make_consistent=true)
+  fields   = map(func,f.spaces,partition(free_values))
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
 end
 
 function _EvaluationFunction(func,
-  f::DistributedSingleFieldFESpace,free_values::AbstractVector,
+  f::DistributedSingleFieldFESpace,x::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},isconsistent=false)
-  local_vals = consistent_local_views(free_values,f.gids,isconsistent)
-  fields = map(func,f.spaces,local_vals,dirichlet_values)
+  free_values = change_ghost(x,f.gids,is_consistent=isconsistent,make_consistent=true)
+  fields   = map(func,f.spaces,partition(free_values),dirichlet_values)
   metadata = DistributedFEFunctionData(free_values)
   DistributedCellField(fields,metadata)
 end
@@ -463,16 +462,16 @@ end
 
 # Factories
 
-function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;kwargs...)
+function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;split_own_and_ghost=false,kwargs...)
   spaces = map(local_views(model)) do m
     FESpace(m,reffe;kwargs...)
   end
   gids =  generate_gids(model,spaces)
-  vector_type = _find_vector_type(spaces,gids)
+  vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
   DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
 
-function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;kwargs...)
+function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;split_own_and_ghost=false,kwargs...)
   trian = add_ghost_cells(_trian)
   trian_gids = generate_cell_gids(trian)
   spaces = map(trian.trians) do t
@@ -481,28 +480,22 @@ function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;kwargs...)
   cell_to_ldofs = map(get_cell_dof_ids,spaces)
   nldofs = map(num_free_dofs,spaces)
   gids = generate_gids(trian_gids,cell_to_ldofs,nldofs)
-  vector_type = _find_vector_type(spaces,gids)
+  vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
   DistributedSingleFieldFESpace(spaces,gids,vector_type)
 end
 
-function _find_vector_type(spaces,gids)
-  # TODO Now the user can select the local vector type but not the global one
-  # new kw-arg global_vector_type ?
-  # we use PVector for the moment
+function _find_vector_type(spaces,gids;split_own_and_ghost=false)
   local_vector_type = get_vector_type(PartitionedArrays.getany(spaces))
-
-  if local_vector_type <: BlockVector
-    T = eltype(local_vector_type)
-    A = typeof(map(i->Vector{T}(undef,0),partition(gids)))
-    B = typeof(gids)
-    vector_type = PVector{T,A,B}
-  else
-    T = eltype(local_vector_type)
-    A = typeof(map(i->local_vector_type(undef,0),partition(gids)))
-    B = typeof(gids)
-    vector_type = PVector{T,A,B}
+  Tv = eltype(local_vector_type)
+  T  = Vector{Tv}
+  if split_own_and_ghost
+    T = OwnAndGhostVectors{T}
   end
-
+  if isa(gids,PRange)
+    vector_type = typeof(PVector{T}(undef,partition(gids)))
+  else # isa(gids,BlockPRange)
+    vector_type = typeof(BlockPVector{T}(undef,gids))
+  end
   return vector_type
 end
 
@@ -512,17 +505,12 @@ function FESpaces.collect_cell_matrix(
   trial::DistributedFESpace,
   test::DistributedFESpace,
   a::DistributedDomainContribution)
-  map(
-    collect_cell_matrix,
-    local_views(trial),
-    local_views(test),
-    local_views(a))
+  map(collect_cell_matrix,local_views(trial),local_views(test),local_views(a))
 end
 
 function FESpaces.collect_cell_vector(
   test::DistributedFESpace, a::DistributedDomainContribution)
-  map(
-    collect_cell_vector,local_views(test),local_views(a))
+  map(collect_cell_vector,local_views(test),local_views(a))
 end
 
 function FESpaces.collect_cell_matrix_and_vector(
@@ -563,8 +551,7 @@ function FESpaces.collect_cell_matrix_and_vector(
   test::DistributedFESpace,
   mat::DistributedDomainContribution,
   l::Number)
-  map(
-    local_views(trial),local_views(test),local_views(mat)) do u,v,m
+  map(local_views(trial),local_views(test),local_views(mat)) do u,v,m
     collect_cell_matrix_and_vector(u,v,m,l)
   end
 end
@@ -575,8 +562,7 @@ function FESpaces.collect_cell_matrix_and_vector(
   mat::DistributedDomainContribution,
   l::Number,
   uhd)
-  map(
-    local_views(trial),local_views(test),local_views(mat),local_views(uhd)) do u,v,m,f
+  map(local_views(trial),local_views(test),local_views(mat),local_views(uhd)) do u,v,m,f
     collect_cell_matrix_and_vector(u,v,m,l,f)
   end
 end
@@ -641,12 +627,12 @@ end
 
 # When using this one, make sure that you also loop over ghost cells.
 # This is at your own risk.
-function local_assembly_strategy(::FullyAssembledRows,test_space_indices,trial_space_indices)
-  test_space_local_to_ghost = local_to_ghost(test_space_indices)
+function local_assembly_strategy(::FullyAssembledRows,rows,cols)
+  rows_local_to_ghost = local_to_ghost(rows)
   GenericAssemblyStrategy(
     identity,
     identity,
-    row->test_space_local_to_ghost[row]==0,
+    row->rows_local_to_ghost[row]==0,
     col->true)
 end
 
@@ -654,29 +640,34 @@ end
 function FESpaces.SparseMatrixAssembler(
   local_mat_type,
   local_vec_type,
+  rows::PRange,
+  cols::PRange,
+  par_strategy=SubAssembledRows())
+
+  assems = map(partition(rows),partition(cols)) do rows,cols
+    local_strategy = local_assembly_strategy(par_strategy,rows,cols)
+    FESpaces.GenericSparseMatrixAssembler(SparseMatrixBuilder(local_mat_type),
+                                          ArrayBuilder(local_vec_type),
+                                          Base.OneTo(length(rows)),
+                                          Base.OneTo(length(cols)),
+                                          local_strategy)
+  end
+
+  mat_builder = PSparseMatrixBuilderCOO(local_mat_type,par_strategy)
+  vec_builder = PVectorBuilder(local_vec_type,par_strategy)
+  return DistributedSparseMatrixAssembler(par_strategy,assems,mat_builder,vec_builder,rows,cols)
+end
+
+function FESpaces.SparseMatrixAssembler(
+  local_mat_type,
+  local_vec_type,
   trial::DistributedFESpace,
   test::DistributedFESpace,
   par_strategy=SubAssembledRows())
 
-  Tv = local_vec_type
-  T = eltype(Tv)
-  Tm = local_mat_type
-  trial_dofs_gids_partition = partition(trial.gids)
-  test_dofs_gids_partition = partition(test.gids)
-  assems = map(local_views(test),local_views(trial),test_dofs_gids_partition,trial_dofs_gids_partition) do v,u,trial_gids_partition,test_gids_partition
-    local_strategy = local_assembly_strategy(par_strategy,trial_gids_partition,test_gids_partition)
-    SparseMatrixAssembler(Tm,Tv,u,v,local_strategy)
-  end
-  matrix_builder = PSparseMatrixBuilderCOO(Tm,par_strategy)
-  vector_builder = PVectorBuilder(Tv,par_strategy)
-  test_dofs_gids_prange = get_free_dof_ids(test)
-  trial_dofs_gids_prange = get_free_dof_ids(trial)
-  DistributedSparseMatrixAssembler(par_strategy,
-                                   assems,
-                                   matrix_builder,
-                                   vector_builder,
-                                   test_dofs_gids_prange,
-                                   trial_dofs_gids_prange)
+  rows = get_free_dof_ids(test)
+  cols = get_free_dof_ids(trial)
+  SparseMatrixAssembler(local_mat_type,local_vec_type,rows,cols,par_strategy)
 end
 
 function FESpaces.SparseMatrixAssembler(
@@ -684,11 +675,8 @@ function FESpaces.SparseMatrixAssembler(
   test::DistributedFESpace,
   par_strategy=SubAssembledRows())
 
-  Tv = typeof(Int)
-  map(local_views(trial)) do trial
-    Tv = get_vector_type(trial)
-  end
-  T = eltype(Tv)
+  Tv = PartitionedArrays.getany(map(get_vector_type,local_views(trial)))
+  T  = eltype(Tv)
   Tm = SparseMatrixCSC{T,Int}
   SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)
 end

@@ -5,15 +5,34 @@ end
 
 # This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.CounterCOO{T,A}, axes::A) where {T,A}
-  b=Algebra.CounterCOO{T}(axes)
+  b = Algebra.CounterCOO{T}(axes)
   b.nnz = a.nnz
   b
 end
 
 # This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.AllocationCOO{T,A}, axes::A) where {T,A}
-  counter=change_axes(a.counter,axes)
+  counter = change_axes(a.counter,axes)
   Algebra.AllocationCOO(counter,a.I,a.J,a.V)
+end
+
+# Array of PArrays -> PArray of Arrays 
+function to_parray_of_arrays(a::AbstractArray{<:MPIArray})
+  indices = linear_indices(first(a))
+  map(indices) do i
+    map(a) do aj
+      PartitionedArrays.getany(aj)
+    end
+  end
+end
+
+function to_parray_of_arrays(a::AbstractArray{<:DebugArray})
+  indices = linear_indices(first(a))
+  map(indices) do i
+    map(a) do aj
+      aj.items[i]
+    end
+  end
 end
 
 # This type is required because MPIArray from PArrays 
@@ -112,8 +131,8 @@ function local_views(a)
   @abstractmethod
 end
 
-function get_parts(x)
-  return linear_indices(local_views(x))
+function get_parts(a)
+  return linear_indices(local_views(a))
 end
 
 function local_views(a::AbstractVector,rows)
@@ -122,10 +141,6 @@ end
 
 function local_views(a::AbstractMatrix,rows,cols)
   @notimplemented
-end
-
-function consistent_local_views(a,ids,isconsistent)
-  @abstractmethod
 end
 
 function local_views(a::AbstractArray)
@@ -142,6 +157,40 @@ end
 
 function local_views(a::PSparseMatrix)
   partition(a)
+end
+
+# change_ghost
+
+function change_ghost(a::PVector{T},ids::PRange;is_consistent=false,make_consistent=false) where T
+  same_partition = (a.index_partition === partition(ids))
+  a_new = same_partition ? a : change_ghost(T,a,ids)
+  if make_consistent && (!same_partition || !is_consistent)
+    consistent!(a_new) |> wait
+  end
+  return a_new
+end
+
+function change_ghost(::Type{<:AbstractVector},a::PVector,ids::PRange)
+  a_new = similar(a,eltype(a),(ids,))
+  # Equivalent to copy!(a_new,a) but does not check that owned indices match
+  map(copy!,own_values(a_new),own_values(a))
+  return a_new
+end
+
+function change_ghost(::Type{<:OwnAndGhostVectors},a::PVector,ids::PRange)
+  values = map(own_values(a),partition(ids)) do own_vals,ids
+    ghost_vals = fill(zero(eltype(a)),ghost_length(ids))
+    perm = PartitionedArrays.local_permutation(ids)
+    OwnAndGhostVectors(own_vals,ghost_vals,perm)
+  end
+  return PVector(values,partition(ids))
+end
+
+function change_ghost(a::BlockPVector,ids::BlockPRange;is_consistent=false,make_consistent=false)
+  vals = map(blocks(a),blocks(ids)) do a, ids
+    change_ghost(a,ids;is_consistent=is_consistent,make_consistent=make_consistent)
+  end
+  return BlockPVector(vals,ids)
 end
 
 # This function computes a mapping among the local identifiers of a and b
@@ -214,56 +263,34 @@ end
 function local_views(row_col_partitioned_matrix::PSparseMatrix,
                      test_dofs_partition::PRange,
                      trial_dofs_partition::PRange)
-    if (row_col_partitioned_matrix.row_partition === partition(test_dofs_partition) || 
-      row_col_partitioned_matrix.col_partition === partition(trial_dofs_partition) )
-      @assert false                 
-    else 
-      map(
-        partition(row_col_partitioned_matrix),
-        partition(test_dofs_partition),
-        partition(trial_dofs_partition),
-        row_col_partitioned_matrix.row_partition,
-        row_col_partitioned_matrix.col_partition) do matrix_partition,
-                                                                test_dof_partition,
-                                                                trial_dof_partition,
-                                                                row_partition,
-                                                                col_partition
-        rl2lmap = find_local_to_local_map(test_dof_partition,row_partition)
-        cl2lmap = find_local_to_local_map(trial_dof_partition,col_partition)
-        LocalView(matrix_partition,(rl2lmap,cl2lmap))
-      end
+  if (row_col_partitioned_matrix.row_partition === partition(test_dofs_partition) || 
+    row_col_partitioned_matrix.col_partition === partition(trial_dofs_partition) )
+    @assert false                 
+  else 
+    map(
+      partition(row_col_partitioned_matrix),
+      partition(test_dofs_partition),
+      partition(trial_dofs_partition),
+      row_col_partitioned_matrix.row_partition,
+      row_col_partitioned_matrix.col_partition) do matrix_partition,
+                                                              test_dof_partition,
+                                                              trial_dof_partition,
+                                                              row_partition,
+                                                              col_partition
+      rl2lmap = find_local_to_local_map(test_dof_partition,row_partition)
+      cl2lmap = find_local_to_local_map(trial_dof_partition,col_partition)
+      LocalView(matrix_partition,(rl2lmap,cl2lmap))
     end
-end
-
-function change_ghost(a::PVector,ids_fespace::PRange)
-  if a.index_partition === partition(ids_fespace)
-    a_fespace = a
-  else
-    a_fespace = similar(a,eltype(a),(ids_fespace,))
-    a_fespace .= a
   end
-  a_fespace
 end
 
-function consistent_local_views(a::PVector,
-                                ids_fespace::PRange,
-                                isconsistent)
-  a_fespace = change_ghost(a,ids_fespace)
-  if ! isconsistent
-    fetch_vector_ghost_values!(partition(a_fespace),
-                               map(reverse,a_fespace.cache)) |> wait
-  end
-  partition(a_fespace)
+function Algebra.allocate_vector(::Type{<:PVector{V}},ids::PRange) where {V}
+  PVector{V}(undef,partition(ids))
 end
 
-function Algebra.allocate_vector(::Type{<:PVector{V,A}},ids::PRange) where {V,A}
-  values = map(partition(ids)) do ids
-    Tv = eltype(A)
-    Tv(undef,length(local_to_owner(ids)))
-  end
-  PVector(values,partition(ids))
+function Algebra.allocate_vector(::Type{<:BlockPVector{V}},ids::BlockPRange) where {V}
+  BlockPVector{V}(undef,ids)
 end
-
 
 # PSparseMatrix assembly
 
@@ -720,7 +747,7 @@ function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
   touched = map(values) do values
      fill!(Vector{Bool}(undef,length(values)),false)
   end
-  allocations=map(values,touched) do values,touched
+  allocations = map(values,touched) do values,touched
     ArrayAllocationTrackTouchedAndValues(touched,values)
   end
   return PVectorAllocationTrackTouchedAndValues(allocations,values,dofs)
@@ -992,8 +1019,6 @@ function assemble_coo_with_column_owner!(I,J,V,row_partition,Jown)
       I,J,Jown,V
   end
 end
-
-Base.wait(t::Matrix) = map(wait,t)
 
 # dofs_gids_prange can be either test_dofs_gids_prange or trial_dofs_gids_prange
 # In the former case, gids is a vector of global test dof identifiers, while in the 
