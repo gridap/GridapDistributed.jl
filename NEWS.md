@@ -10,10 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added support for distributed block-assembly. Since PR [124](https://github.com/gridap/GridapDistributed.jl/pull/124).
+- Add possibility to use `OwnAndGhostVector` as vector partition for `FESpace` dofs. Since PR [124](https://github.com/gridap/GridapDistributed.jl/pull/124).
+- Implement `BlockPArray <: AbstractBlockArray`, a new type that behaves as a `BlockArray{PArray}` and which fulfills the APIs of both `PArray` and `AbstractBlockArray`. This new type will be used to implement distributed block-assembly. Since PR [124](https://github.com/gridap/GridapDistributed.jl/pull/124).
+- `DistributedMultiFieldFESpace{<:BlockMultiFieldStyle}` now has a `BlockPRange` as gids and `BlockPVector` as vector type. This is necessary to create consistency between fespace and system vectors, which in turn avoids memory allocations/copies when transferring between FESpace and linear system layouts. Since PR [124](https://github.com/gridap/GridapDistributed.jl/pull/124).
 
 ### Changed
 
 - Updated compat for FillArrays to v1. Since PR[127](https://github.com/gridap/GridapDistributed.jl/pull/127).
+- Merged functionalities of `consistent_local_views` and `change_ghost`. `consistent_local_views` has been removed. `change_ghost` now has two keywargs `is_consistent` and `make_consistent` that take into consideration all possible use cases. `change_ghost` has also been optimized to avoid unnecessary allocations if possible. Since PR [124](https://github.com/gridap/GridapDistributed.jl/pull/124).
 
 ## [0.3.0] - 2023-08-16
 
