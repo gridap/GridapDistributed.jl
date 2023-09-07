@@ -42,22 +42,11 @@ struct RedistributeGlue
   new2old   :: AbstractArray{<:AbstractVector{<:Integer}}
 end
 
-get_parts(g::RedistributeGlue) = get_parts(g.parts_rcv)
+get_parts(g::RedistributeGlue) = biggest_parts(g.new_parts,g.old_parts)
 
-function get_old_and_new_parts(g::RedistributeGlue,reverse::Val{false})
-  return g.old_parts, g.new_parts
-end
-
-function get_old_and_new_parts(g::RedistributeGlue,reverse::Val{true})
-  return g.new_parts, g.old_parts
-end
-
-function get_glue_components(glue::RedistributeGlue,reverse::Val{false})
-  return glue.lids_rcv, glue.lids_snd, glue.parts_rcv, glue.parts_snd, glue.new2old
-end
-
-function get_glue_components(glue::RedistributeGlue,reverse::Val{true})
-  return glue.lids_snd, glue.lids_rcv, glue.parts_snd, glue.parts_rcv, glue.old2new
+function PartitionedArrays.reverse(g::RedistributeGlue)
+  return RedistributeGlue(g.old_parts,g.new_parts,g.parts_snd,g.parts_rcv,
+                          g.lids_snd,g.lids_rcv,g.new2old,g.old2new)
 end
 
 """
@@ -87,25 +76,21 @@ function _allocate_cell_wise_dofs(cell_to_ldofs)
   end
 end
 
-function _update_cell_dof_values_with_local_info!(cell_dof_values_new,
-                                                  cell_dof_values_old,
-                                                  new2old)
-   map(cell_dof_values_new,
-       cell_dof_values_old,
-       new2old) do cell_dof_values_new,cell_dof_values_old,new2old
-    ocache = array_cache(cell_dof_values_old)
+function _copy_local_info!(values_new,values_old,new2old)
+  map(values_new,values_old,new2old) do values_new,values_old,new2old
+    ocache = array_cache(values_old)
     for (ncell,ocell) in enumerate(new2old)
       if ocell!=0
-        # Copy ocell to ncell
-        oentry = getindex!(ocache,cell_dof_values_old,ocell)
-        range  = cell_dof_values_new.ptrs[ncell]:cell_dof_values_new.ptrs[ncell+1]-1
-        cell_dof_values_new.data[range] .= oentry
+        # Copy old cell to new cell
+        oentry = getindex!(ocache,values_old,ocell)
+        range  = values_new.ptrs[ncell]:values_new.ptrs[ncell+1]-1
+        values_new.data[range] .= oentry
       end
     end
-   end
+  end
 end
 
-function _allocate_comm_data(cell_values,lids)
+function _allocate_comm_data(cell_values,lids;T=Float64)
   map(cell_values,lids) do cell_values,lids
     cache = array_cache(cell_values)
     num_nbors = length(lids)
@@ -118,19 +103,19 @@ function _allocate_comm_data(cell_values,lids)
     end
     PartitionedArrays.length_to_ptrs!(ptrs)
 
-    data = Vector{Float64}(undef,ptrs[end]-1)
+    data = Vector{T}(undef,ptrs[end]-1)
     PartitionedArrays.JaggedArray(data,ptrs)
   end
 end
 
-function _pack_snd_data!(snd_data,cell_dof_values,snd_lids)
-  map(snd_data,cell_dof_values,snd_lids) do snd_data,cell_dof_values,snd_lids
-    cache = array_cache(cell_dof_values)
+function _pack_snd_data!(snd_data,cell_values,snd_lids)
+  map(snd_data,cell_values,snd_lids) do snd_data,cell_values,snd_lids
+    cache = array_cache(cell_values)
     s = 1
     for i = 1:length(snd_lids)
       for j = snd_lids.ptrs[i]:snd_lids.ptrs[i+1]-1
         cell  = snd_lids.data[j]
-        ldofs = getindex!(cache,cell_dof_values,cell)
+        ldofs = getindex!(cache,cell_values,cell)
 
         e = s+length(ldofs)-1
         range = s:e
@@ -141,90 +126,99 @@ function _pack_snd_data!(snd_data,cell_dof_values,snd_lids)
   end
 end
 
-function _unpack_rcv_data!(cell_dof_values,rcv_data,rcv_lids)
-  map(cell_dof_values,rcv_data,rcv_lids) do cell_dof_values,rcv_data,rcv_lids
+function _unpack_rcv_data!(cell_values,rcv_data,rcv_lids)
+  map(cell_values,rcv_data,rcv_lids) do cell_values,rcv_data,rcv_lids
     s = 1
     for i = 1:length(rcv_lids.ptrs)-1
       for j = rcv_lids.ptrs[i]:rcv_lids.ptrs[i+1]-1
         cell = rcv_lids.data[j]
-        range_cell_dof_values = cell_dof_values.ptrs[cell]:cell_dof_values.ptrs[cell+1]-1
+        range_cell_values = cell_values.ptrs[cell]:cell_values.ptrs[cell+1]-1
         
-        e = s+length(range_cell_dof_values)-1
+        e = s+length(range_cell_values)-1
         range_rcv_data = s:e
-        cell_dof_values.data[range_cell_dof_values] .= rcv_data.data[range_rcv_data]
+        cell_values.data[range_cell_values] .= rcv_data.data[range_rcv_data]
         s = e+1
       end
     end
   end
 end
 
-function get_redistribute_cell_dofs_cache(cell_dof_values_old,
-                                          cell_dof_ids_new,
-                                          model_new,
-                                          glue::RedistributeGlue;
-                                          reverse=false)
+function get_redistribute_cache(values_old,
+                                values_new,
+                                glue::RedistributeGlue)
+  exchange_parts = biggest_parts(glue.new_parts,glue.old_parts)
+  values_old = change_parts(values_old,exchange_parts;default=[])
+  values_new = change_parts(values_new,exchange_parts;default=[[]])
 
-  lids_rcv, lids_snd, parts_rcv, parts_snd, new2old = get_glue_components(glue,Val(reverse))
+  snd_data = _allocate_comm_data(values_old, glue.lids_snd)
+  rcv_data = _allocate_comm_data(values_new, glue.lids_rcv)
 
-  cell_dof_values_old = change_parts(cell_dof_values_old,get_parts(glue);default=[])
-  cell_dof_ids_new    = change_parts(cell_dof_ids_new,get_parts(glue);default=[[]])
-
-  snd_data = _allocate_comm_data(cell_dof_values_old, lids_snd)
-  rcv_data = _allocate_comm_data(cell_dof_ids_new, lids_rcv)
-
-  cell_dof_values_new = _allocate_cell_wise_dofs(cell_dof_ids_new)
-
-  caches = snd_data, rcv_data, cell_dof_values_new
+  caches = snd_data, rcv_data
   return caches
 end
 
-function redistribute_cell_dofs(cell_dof_values_old,
-                                cell_dof_ids_new,
-                                model_new,
-                                glue::RedistributeGlue;
-                                reverse=false)
-  caches = get_redistribute_cell_dofs_cache(cell_dof_values_old,cell_dof_ids_new,model_new,glue;reverse=reverse)
-  return redistribute_cell_dofs!(caches,cell_dof_values_old,cell_dof_ids_new,model_new,glue;reverse=reverse)
+function redistribute(a_old::PVector,
+                      a_new::PVector,
+                      glue::RedistributeGlue)
+  values_old = partition(a_old)
+  values_new = partition(a_new)
+  redistribute_cache = get_redistribute_cache(values_old,values_new,glue)
+  exchange_cache_new = a_new.cache
+  return redistribute!(redistribute_cache,values_old,values_new,exchange_cache_new,glue)
 end
 
-function redistribute_cell_dofs!(caches,
-                                 cell_dof_values_old,
-                                 cell_dof_ids_new,
-                                 model_new,
-                                 glue::RedistributeGlue;
-                                 reverse=false)
+function redistribute(values_old,
+                      values_new,
+                      indices_new,
+                      glue::RedistributeGlue)
+  redistribute_cache = get_redistribute_cache(values_old,values_new,glue)
+  exchange_cache_new = fetch_vector_ghost_values_cache(values_new,indices_new)
+  return redistribute!(redistribute_cache,values_old,values_new,exchange_cache_new,glue)
+end
 
-  snd_data, rcv_data, cell_dof_values_new = caches
-  lids_rcv, lids_snd, parts_rcv, parts_snd, new2old = get_glue_components(glue,Val(reverse))
-  old_parts, new_parts = get_old_and_new_parts(glue,Val(reverse))
+function redistribute!(caches,
+                       values_old,
+                       values_new,
+                       exchange_cache_new,
+                       glue::RedistributeGlue)
 
-  cell_dof_values_old = change_parts(cell_dof_values_old,get_parts(glue);default=[])
-  cell_dof_ids_new    = change_parts(cell_dof_ids_new,get_parts(glue);default=[[]])
+  snd_data, rcv_data = caches
 
-  _pack_snd_data!(snd_data,cell_dof_values_old,lids_snd)
+  exchange_parts = biggest_parts(glue.new_parts,glue.old_parts)
+  values_old = change_parts(values_old,exchange_parts;default=[])
 
-  graph = ExchangeGraph(parts_snd,parts_rcv)
+  _pack_snd_data!(snd_data,values_old,glue.lids_snd)
+
+  graph = ExchangeGraph(glue.parts_snd,glue.parts_rcv)
   t = exchange!(rcv_data,snd_data,graph)
 
   # We have to build the owned part of "cell_dof_values_new" out of
-  #  1. cell_dof_values_old (for those cells s.t. new2old[:]!=0)
-  #  2. cell_dof_values_new_rcv (for those cells s.t. new2old[:]=0)
-  _update_cell_dof_values_with_local_info!(cell_dof_values_new,
-                                           cell_dof_values_old,
-                                           new2old)
+  #  1. cell_values_old (for those cells s.t. new2old[:]!=0)
+  #  2. cell_values_new_rcv (for those cells s.t. new2old[:]=0)
+  _copy_local_info!(values_new,values_old,glue.new2old)
 
   wait(t)
-  _unpack_rcv_data!(cell_dof_values_new,rcv_data,lids_rcv)
+  _unpack_rcv_data!(values_new,rcv_data,glue.lids_rcv)
 
   # Now that every part knows it's new owned dofs, exchange ghosts
-  cell_dof_values_new = change_parts(cell_dof_values_new,new_parts)
-  if i_am_in(new_parts)
-    cache = fetch_vector_ghost_values_cache(cell_dof_values_new,partition(get_cell_gids(model_new)))
-    fetch_vector_ghost_values!(cell_dof_values_new,cache) |> wait
+  values_new = change_parts(values_new,glue.new_parts)
+  if i_am_in(glue.new_parts)
+    fetch_vector_ghost_values!(values_new,exchange_cache_new) |> wait
   end
-  return cell_dof_values_new
+  return values_new
 end
 
+function biggest_parts(p1,p2)
+  if length(p1) > length(p2)
+    return p1
+  else
+    return p2
+  end
+end
+biggest_parts(p1::Nothing,p2) = p2
+biggest_parts(p1,p2::Nothing) = p1
+
+"""
 function _get_cell_dof_ids_inner_space(s::FESpace)
   get_cell_dof_ids(s)
 end 
@@ -239,12 +233,11 @@ function get_redistribute_free_values_cache(fv_new::Union{PVector,Nothing},
                                             dv_old::Union{AbstractArray,Nothing},
                                             Uh_old::Union{DistributedSingleFieldFESpace,Nothing},
                                             model_new,
-                                            glue::RedistributeGlue;
-                                            reverse=false)
-  old_parts, new_parts = get_old_and_new_parts(glue,Val(reverse))
+                                            glue::RedistributeGlue)
+  old_parts, new_parts = get_old_and_new_parts(glue)
   cell_dof_values_old = i_am_in(old_parts) ? map(scatter_free_and_dirichlet_values,local_views(Uh_old),local_views(fv_old),dv_old) : nothing
   cell_dof_ids_new    = i_am_in(new_parts) ? map(_get_cell_dof_ids_inner_space, local_views(Uh_new)) : nothing
-  caches = get_redistribute_cell_dofs_cache(cell_dof_values_old,cell_dof_ids_new,model_new,glue;reverse=reverse)
+  caches = get_redistribute_cell_dofs_cache(cell_dof_values_old,cell_dof_ids_new,model_new,glue)
   return caches
 end
 
@@ -254,11 +247,10 @@ function redistribute_free_values(fv_new::Union{PVector,Nothing},
                                   dv_old::Union{AbstractArray,Nothing},
                                   Uh_old::Union{DistributedSingleFieldFESpace,Nothing},
                                   model_new,
-                                  glue::RedistributeGlue;
-                                  reverse=false)
+                                  glue::RedistributeGlue)
 
-  caches = get_redistribute_free_values_cache(fv_new,Uh_new,fv_old,dv_old,Uh_old,model_new,glue;reverse=reverse)
-  return redistribute_free_values!(caches,fv_new,Uh_new,fv_old,dv_old,Uh_old,model_new,glue;reverse=reverse)
+  caches = get_redistribute_free_values_cache(fv_new,Uh_new,fv_old,dv_old,Uh_old,model_new,glue)
+  return redistribute_free_values!(caches,fv_new,Uh_new,fv_old,dv_old,Uh_old,model_new,glue)
 end
 
 function redistribute_free_values!(caches,
@@ -304,3 +296,4 @@ function redistribute_fe_function(uh_old::Union{DistributedSingleFieldFEFunction
     return nothing
   end
 end
+"""
