@@ -20,6 +20,10 @@ function PartitionedArrays.partition(a::BlockPRange)
   return map(partition,blocks(a)) |> to_parray_of_arrays
 end
 
+function Base.getindex(a::BlockPRange,inds::Block{1})
+  a.ranges[inds.n...]
+end
+
 """
 """
 struct BlockPArray{V,T,N,A,B} <: BlockArrays.AbstractBlockArray{T,N}
@@ -65,7 +69,7 @@ function BlockPVector{V}(::UndefInitializer,rows::BlockPRange) where {V}
 end
 
 function BlockPMatrix{V}(::UndefInitializer,rows::BlockPRange,cols::BlockPRange) where {V}
-  block_ids = CartesianIndices((blocklength(rows),blocklength(cols)))
+  block_ids  = CartesianIndices((blocklength(rows),blocklength(cols)))
   block_rows = blocks(rows)
   block_cols = blocks(cols)
   vals = map(block_ids) do I
@@ -315,7 +319,7 @@ end
 BlockArrays.blocks(b::BlockPBroadcasted) = b.blocks
 BlockArrays.blockaxes(b::BlockPBroadcasted) = b.axes
 
-function Base.broadcasted(f, args::Union{BlockPVector,BlockPBroadcasted}...)
+function Base.broadcasted(f, args::Union{BlockPArray,BlockPBroadcasted}...)
   a1 = first(args)
   @boundscheck @assert all(ai -> blockaxes(ai) == blockaxes(a1),args)
   
@@ -325,18 +329,18 @@ function Base.broadcasted(f, args::Union{BlockPVector,BlockPBroadcasted}...)
   return BlockPBroadcasted(blocks_out,blockaxes(a1))
 end
 
-function Base.broadcasted(f, a::Number, b::Union{BlockPVector,BlockPBroadcasted})
+function Base.broadcasted(f, a::Number, b::Union{BlockPArray,BlockPBroadcasted})
   blocks_out = map(b->Base.broadcasted(f,a,b),blocks(b))
   return BlockPBroadcasted(blocks_out,blockaxes(b))
 end
 
-function Base.broadcasted(f, a::Union{BlockPVector,BlockPBroadcasted}, b::Number)
+function Base.broadcasted(f, a::Union{BlockPArray,BlockPBroadcasted}, b::Number)
   blocks_out = map(a->Base.broadcasted(f,a,b),blocks(a))
   return BlockPBroadcasted(blocks_out,blockaxes(a))
 end
 
 function Base.broadcasted(f,
-                        a::Union{BlockPVector,BlockPBroadcasted},
+                        a::Union{BlockPArray,BlockPBroadcasted},
                         b::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}})
   Base.broadcasted(f,a,Base.materialize(b))
 end
@@ -344,7 +348,7 @@ end
 function Base.broadcasted(
   f,
   a::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
-  b::Union{BlockPVector,BlockPBroadcasted})
+  b::Union{BlockPArray,BlockPBroadcasted})
   Base.broadcasted(f,Base.materialize(a),b)
 end
 
@@ -353,7 +357,7 @@ function Base.materialize(b::BlockPBroadcasted)
   return mortar(blocks_out)
 end
 
-function Base.materialize!(a::BlockPVector,b::BlockPBroadcasted)
+function Base.materialize!(a::BlockPArray,b::BlockPBroadcasted)
   map(Base.materialize!,blocks(a),blocks(b))
   return a
 end

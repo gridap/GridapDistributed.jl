@@ -143,20 +143,22 @@ function local_views(a::AbstractMatrix,rows,cols)
   @notimplemented
 end
 
-function local_views(a::AbstractArray)
-  a
+local_views(a::AbstractArray) = a
+local_views(a::PRange) = partition(a)
+local_views(a::PVector) = partition(a)
+local_views(a::PSparseMatrix) = partition(a)
+
+function local_views(a::BlockPRange)
+  map(blocks(a)) do a
+    local_views(a)
+  end |> to_parray_of_arrays
 end
 
-function local_views(a::PRange)
-  partition(a)
-end
-
-function local_views(a::PVector)
-  partition(a)
-end
-
-function local_views(a::PSparseMatrix)
-  partition(a)
+function local_views(a::BlockPArray)
+  vals = map(blocks(a)) do a
+    local_views(a)
+  end |> to_parray_of_arrays
+  return map(mortar,vals)
 end
 
 # change_ghost
@@ -248,40 +250,42 @@ function _lid_to_plid(lid,lid_to_plid)
   plid
 end
 
-function local_views(row_partitioned_vector::PVector,test_dofs_partition::PRange)
-  if row_partitioned_vector.index_partition === partition(test_dofs_partition)
-    @assert false
+function local_views(a::PVector,new_rows::PRange)
+  old_rows = axes(a,1)
+  if partition(old_rows) === partition(new_rows)
+    partition(a)
   else
-    map(partition(row_partitioned_vector),
-        partition(test_dofs_partition),
-        row_partitioned_vector.index_partition) do vector_partition,dofs_partition,row_partition
-      LocalView(vector_partition,(find_local_to_local_map(dofs_partition,row_partition),))
+    map(partition(a),partition(old_rows),partition(new_rows)) do vector_partition,old_rows,new_rows
+      LocalView(vector_partition,(find_local_to_local_map(new_rows,old_rows),))
     end
   end
 end
 
-function local_views(row_col_partitioned_matrix::PSparseMatrix,
-                     test_dofs_partition::PRange,
-                     trial_dofs_partition::PRange)
-  if (row_col_partitioned_matrix.row_partition === partition(test_dofs_partition) || 
-    row_col_partitioned_matrix.col_partition === partition(trial_dofs_partition) )
-    @assert false                 
-  else 
-    map(
-      partition(row_col_partitioned_matrix),
-      partition(test_dofs_partition),
-      partition(trial_dofs_partition),
-      row_col_partitioned_matrix.row_partition,
-      row_col_partitioned_matrix.col_partition) do matrix_partition,
-                                                              test_dof_partition,
-                                                              trial_dof_partition,
-                                                              row_partition,
-                                                              col_partition
-      rl2lmap = find_local_to_local_map(test_dof_partition,row_partition)
-      cl2lmap = find_local_to_local_map(trial_dof_partition,col_partition)
+function local_views(a::PSparseMatrix,new_rows::PRange,new_cols::PRange)
+  old_rows, old_cols = axes(a)
+  if (partition(old_rows) === partition(new_rows) && partition(old_cols) === partition(new_cols) )
+    partition(a)
+  else
+    map(partition(a),
+        partition(old_rows),partition(old_cols),
+        partition(new_rows),partition(new_cols)) do matrix_partition,old_rows,old_cols,new_rows,new_cols
+      rl2lmap = find_local_to_local_map(new_rows,old_rows)
+      cl2lmap = find_local_to_local_map(new_cols,old_cols)
       LocalView(matrix_partition,(rl2lmap,cl2lmap))
     end
   end
+end
+
+function local_views(a::BlockPVector,new_rows::BlockPRange)
+  vals = map(local_views,blocks(a),blocks(new_rows)) |> to_parray_of_arrays
+  return map(mortar,vals)
+end
+
+function local_views(a::BlockPMatrix,new_rows::BlockPRange,new_cols::BlockPRange)
+  vals = map(CartesianIndices(blocksize(a))) do I
+    local_views(a[Block(I)],new_rows[Block(I[1])],new_cols[Block(I[2])])
+  end |> to_parray_of_arrays
+  return map(mortar,vals)
 end
 
 function Algebra.allocate_vector(::Type{<:PVector{V}},ids::PRange) where {V}

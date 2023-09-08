@@ -9,7 +9,6 @@ using LinearAlgebra
 
 using GridapDistributed: BlockPArray, BlockPVector, BlockPMatrix, BlockPRange
 
-
 ranks = with_debug() do distribute
   distribute(LinearIndices((2,)))
 end
@@ -33,6 +32,7 @@ block_range = BlockPRange([PRange(indices),PRange(indices)])
 
 _v = PVector{OwnAndGhostVectors{Vector{Float64}}}(undef,indices)
 v = BlockPArray([_v,_v],(block_range,))
+fill!(v,1.0)
 
 _m = map(CartesianIndices((2,2))) do I
   i,j = I[1],I[2]
@@ -47,7 +47,7 @@ _m = map(CartesianIndices((2,2))) do I
     end
   end
   PSparseMatrix(local_mats,indices,indices)
-end
+end;
 m = BlockPArray(_m,(block_range,block_range))
 
 x = similar(_v)
@@ -69,11 +69,6 @@ __v = __v .- 1.0
 __v = __v .* 1.0
 __v = __v ./ 1.0
 
-__m = __m .+ 1.0
-__m = __m .- 1.0
-__m = __m .* 1.0
-__m = __m ./ 1.0
-
 # PartitionedArrays API
 
 consistent!(__v) |> wait
@@ -83,6 +78,8 @@ fetch(t);
 
 PartitionedArrays.to_trivial_partition(m)
 
+partition(v)
+partition(m)
 local_values(v)
 own_values(v)
 ghost_values(v)
@@ -90,20 +87,26 @@ own_ghost_values(m)
 ghost_own_values(m)
 
 # LinearAlgebra API
-
+fill!(v,1.0)
 x = similar(v)
 mul!(x,m,v)
-consistent!(x) |> fetch
-partition(x)
+consistent!(x) |> wait
 
-dot(v,x)
+@test dot(v,x) ≈ 36
 norm(v)
 copy!(x,v)
 
 LinearAlgebra.fillstored!(__m,1.0)
 
-__v = BlockPVector{Float64,PVector{Vector{Float64}}}(undef,block_range)
+__v = BlockPVector{Vector{Float64}}(undef,block_range)
+#__m = BlockPMatrix{SparseMatrixCSC{Float64,Int64}}(undef,block_range,block_range)
 
 maximum(abs,v)
 minimum(abs,v)
 
+# GridapDistributed API
+v_parts = local_views(v)
+m_parts = local_views(m)
+
+v_parts = local_views(v,block_range)
+m_parts = local_views(m,block_range,block_range)
