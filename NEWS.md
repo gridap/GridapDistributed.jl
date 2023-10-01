@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added 
 
 - Added missing _get_cell_dof_ids_inner_space() method overload. Since PR[130](https://github.com/gridap/GridapDistributed.jl/pull/130).
+- Added missing remove_ghost_cells() overload for AdaptiveTriangulation. Since PR[131](https://github.com/gridap/GridapDistributed.jl/pull/131).
 
 ### Changed
 
