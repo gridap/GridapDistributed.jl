@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added 
+
+- Added missing _get_cell_dof_ids_inner_space() method overload. Since PR[130](https://github.com/gridap/GridapDistributed.jl/pull/130).
+
 ### Changed
 
 - Updated compat for FillArrays to v1. Since PR[127](https://github.com/gridap/GridapDistributed.jl/pull/127).
