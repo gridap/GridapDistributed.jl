@@ -531,6 +531,11 @@ function remove_ghost_cells(trian::Union{SkeletonTriangulation,BoundaryTriangula
   remove_ghost_cells(glue,trian,gids)
 end
 
+function remove_ghost_cells(
+  trian::AdaptedTriangulation{Dc,Dp,<:Union{SkeletonTriangulation,BoundaryTriangulation}},gids) where {Dc,Dp}
+  remove_ghost_cells(trian.trian,gids)
+end
+
 function remove_ghost_cells(glue::FaceToFaceGlue,trian,gids)
   tcell_to_mcell = glue.tface_to_mface
   mcell_to_part  = local_to_owner(gids)
