@@ -2,5 +2,5 @@
 
 ```@autodocs
 Modules = [GridapDistributed]
-Pages   = ["MultiField.jl"]
+Pages   = ["MultiField.jl","BlockPartitionedArrays.jl"]
 ```
