@@ -450,7 +450,6 @@ end
 
 # SparseMatrixAssembler API
 
-#! The following could be avoided if DistributedBlockSparseMatrixAssembler <: DistributedSparseMatrixAssembler
 function FESpaces.symbolic_loop_matrix!(A,a::DistributedBlockSparseMatrixAssembler,matdata)
   rows = get_rows(a)
   cols = get_cols(a)

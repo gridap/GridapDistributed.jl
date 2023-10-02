@@ -1,5 +1,6 @@
 
 """
+  struct BlockPRange{A} <: AbstractUnitRange{Int}
 """
 struct BlockPRange{A} <: AbstractUnitRange{Int}
   ranges::Vector{PRange{A}}
@@ -25,6 +26,7 @@ function Base.getindex(a::BlockPRange,inds::Block{1})
 end
 
 """
+  struct BlockPArray{V,T,N,A,B} <: BlockArrays.AbstractBlockArray{T,N}
 """
 struct BlockPArray{V,T,N,A,B} <: BlockArrays.AbstractBlockArray{T,N}
   blocks::Array{A,N}
@@ -361,4 +363,3 @@ function Base.materialize!(a::BlockPArray,b::BlockPBroadcasted)
   map(Base.materialize!,blocks(a),blocks(b))
   return a
 end
-

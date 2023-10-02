@@ -11,8 +11,8 @@ pages = [
   "Geometry" => "Geometry.md",
   "MultiField" => "MultiField.md",
   "Visualization" => "Visualization.md",
+  "Adaptivity" => "Adaptivity.md",
  ]
-
 
 makedocs(;
     modules=[GridapDistributed],
@@ -20,7 +20,7 @@ makedocs(;
     pages=pages,
     repo="https://github.com/gridap/GridapDistributed.jl/blob/{commit}{path}#L{line}",
     sitename="GridapDistributed.jl",
-    authors="S. Badia <santiago.badia@monash.edu>, A. F. Martin <alberto.martin@monash.edu>, F. Verdugo <fverdugo@cimne.upc.edu>",
+    authors="S. Badia <santiago.badia@monash.edu>, A. F. Martin <alberto.f.martin@anu.edu.au>, F. Verdugo <fverdugo@cimne.upc.edu>",
 )
 
 deploydocs(;
