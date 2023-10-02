@@ -1,3 +1,14 @@
+
+# Vector allocation 
+
+function Algebra.allocate_vector(::Type{<:PVector{V}},ids::PRange) where {V}
+  PVector{V}(undef,partition(ids))
+end
+
+function Algebra.allocate_vector(::Type{<:BlockPVector{V}},ids::BlockPRange) where {V}
+  BlockPVector{V}(undef,ids)
+end
+
 # This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.ArrayCounter,axes)
   @notimplemented
@@ -286,14 +297,6 @@ function local_views(a::BlockPMatrix,new_rows::BlockPRange,new_cols::BlockPRange
     local_views(a[Block(I)],new_rows[Block(I[1])],new_cols[Block(I[2])])
   end |> to_parray_of_arrays
   return map(mortar,vals)
-end
-
-function Algebra.allocate_vector(::Type{<:PVector{V}},ids::PRange) where {V}
-  PVector{V}(undef,partition(ids))
-end
-
-function Algebra.allocate_vector(::Type{<:BlockPVector{V}},ids::BlockPRange) where {V}
-  BlockPVector{V}(undef,ids)
 end
 
 # PSparseMatrix assembly
