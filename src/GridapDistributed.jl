@@ -22,9 +22,11 @@ const PArrays = PartitionedArrays
 using SparseArrays
 using WriteVTK
 using FillArrays
+using BlockArrays
+using LinearAlgebra
 
 import Gridap.TensorValues: inner, outer, double_contraction, symmetric_part
-import LinearAlgebra: det, tr, cross, dot, ⋅
+import LinearAlgebra: det, tr, cross, dot, ⋅, diag
 import Base: inv, abs, abs2, *, +, -, /, adjoint, transpose, real, imag, conj, getproperty, propertynames
 import Gridap.Fields: grad2curl
 import Gridap.ODEs.ODETools: ∂t, ∂tt
@@ -37,6 +39,8 @@ export get_face_gids
 
 export local_views, get_parts
 export with_ghost, no_ghost
+
+include("BlockPartitionedArrays.jl")
 
 include("Algebra.jl")
 

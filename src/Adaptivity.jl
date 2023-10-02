@@ -22,6 +22,7 @@ end
   RedistributeGlue
 
   Glue linking two distributions of the same mesh.
+  
   - `new_parts`: Array with the new part IDs (and comms)
   - `old_parts`: Array with the old part IDs (and comms)
   - `parts_rcv`: Array with the part IDs from which each part receives

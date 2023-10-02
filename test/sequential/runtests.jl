@@ -34,5 +34,8 @@ end
 
 @time @testset "StokesHdivDGTests.jl" begin include("StokesHdivDGTests.jl") end
 
+@time @testset "BlockSparseMatrixAssemblers" begin 
+  include("BlockSparseMatrixAssemblersTests.jl") 
+end
 
 end # module

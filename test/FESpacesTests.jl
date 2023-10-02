@@ -91,11 +91,11 @@ function main(distribute,parts,das)
   V = TestFESpace(model,reffe,dirichlet_tags="boundary")
   U = TrialFESpace(u,V)
   V2 = FESpace(Ω,reffe)
-  @test get_vector_type(V) <: PVector
-  @test get_vector_type(U) <: PVector
-  @test get_vector_type(V2) <: PVector
+  @test get_vector_type(V) <: PVector{<:Vector}
+  @test get_vector_type(U) <: PVector{<:Vector}
+  @test get_vector_type(V2) <: PVector{<:Vector}
 
-  free_values_partition=map(partition(V.gids)) do indices 
+  free_values_partition = map(partition(V.gids)) do indices 
     ones(Float64,local_length(indices))
   end 
 
@@ -163,6 +163,23 @@ function main(distribute,parts,das)
   cont  = ∫( abs2(u0h) )dΩ
   @test sqrt(sum(cont)) < 1.0e-14
 
+  # OwnAndGhostVector partitions
+  V3 = FESpace(model,reffe,dirichlet_tags="boundary",split_own_and_ghost=true)
+  U3 = TrialFESpace(u,V3)
+  @test get_vector_type(V3) <: PVector{<:OwnAndGhostVectors}
+
+  free_values = zero_free_values(U3)
+  dirichlet_values = get_dirichlet_dof_values(U3)
+  uh = interpolate_everywhere(u,U3)
+  _uh = interpolate_everywhere(uh,U3)
+  __uh = interpolate_everywhere!(_uh,free_values,dirichlet_values,U3)
+
+  uh = interpolate(u,U3)
+  dofs      = get_fe_dof_basis(U3)
+  cell_vals = dofs(uh)
+  gather_free_values!(free_values,U3,cell_vals)
+  gather_free_and_dirichlet_values!(free_values,dirichlet_values,U3,cell_vals)
+  uh = FEFunction(U3,free_values,dirichlet_values)
 
   # I need to use the square [0,2]² in the sequel so that
   # when integrating over the interior facets, the entries

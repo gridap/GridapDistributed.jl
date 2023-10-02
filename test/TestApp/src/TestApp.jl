@@ -12,4 +12,5 @@ module TestApp
   include("../../HeatEquationTests.jl")
   include("../../StokesOpenBoundaryTests.jl")
   include("../../AdaptivityTests.jl")
+  include("../../BlockSparseMatrixAssemblersTests.jl")
 end

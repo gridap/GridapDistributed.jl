@@ -2,5 +2,5 @@
 
 ```@autodocs
 Modules = [GridapDistributed]
-Pages   = ["FESpaces.jl"]
+Pages   = ["FESpaces.jl","DivConformingFESpaces.jl"]
 ```

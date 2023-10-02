@@ -45,5 +45,8 @@ function all_tests(distribute,parts)
     PArrays.toc!(t,"Adaptivity")
   end
 
+  TestApp.BlockSparseMatrixAssemblersTests.main(distribute,parts)
+  PArrays.toc!(t,"BlockSparseMatrixAssemblers")
+
   display(t)
 end
