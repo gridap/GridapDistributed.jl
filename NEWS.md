@@ -9,10 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added missing _get_cell_dof_ids_inner_space() method overload. Since PR[130](https://github.com/gridap/GridapDistributed.jl/pull/130).
+- Added missing remove_ghost_cells() overload for AdaptiveTriangulation. Since PR[131](https://github.com/gridap/GridapDistributed.jl/pull/131).
 - Added support for distributed block-assembly. Since PR [124](https://github.com/gridap/GridapDistributed.jl/pull/124).
 - Add possibility to use `OwnAndGhostVector` as vector partition for `FESpace` dofs. Since PR [124](https://github.com/gridap/GridapDistributed.jl/pull/124).
 - Implement `BlockPArray <: AbstractBlockArray`, a new type that behaves as a `BlockArray{PArray}` and which fulfills the APIs of both `PArray` and `AbstractBlockArray`. This new type will be used to implement distributed block-assembly. Since PR [124](https://github.com/gridap/GridapDistributed.jl/pull/124).
 - `DistributedMultiFieldFESpace{<:BlockMultiFieldStyle}` now has a `BlockPRange` as gids and `BlockPVector` as vector type. This is necessary to create consistency between fespace and system vectors, which in turn avoids memory allocations/copies when transferring between FESpace and linear system layouts. Since PR [124](https://github.com/gridap/GridapDistributed.jl/pull/124).
+
+## [0.3.1] - 2023-10-01
+
+### Added
+
+- Added missing _get_cell_dof_ids_inner_space() method overload. Since PR[130](https://github.com/gridap/GridapDistributed.jl/pull/130).
+- Added missing remove_ghost_cells() overload for AdaptiveTriangulation. Since PR[131](https://github.com/gridap/GridapDistributed.jl/pull/131).
+- Added support for distributed block-assembly. Since PR [124](https://github.com/gridap/GridapDistributed.jl/pull/124).
 
 ### Changed
 

@@ -251,7 +251,13 @@ end
 
 function _get_cell_dof_ids_inner_space(s::FESpaceWithLinearConstraints)
   get_cell_dof_ids(s.space)
-end 
+end
+
+# Required in order to avoid returning the results of get_cell_dof_ids(space)
+# in the case of a FESpaceWithLinearConstraints wrapped around a TrialFESpace
+function _get_cell_dof_ids_inner_space(s::TrialFESpace)
+  _get_cell_dof_ids_inner_space(s.space)
+end
 
 function get_redistribute_free_values_cache(fv_new::Union{PVector,Nothing},
                                             Uh_new::Union{DistributedSingleFieldFESpace,Nothing},
