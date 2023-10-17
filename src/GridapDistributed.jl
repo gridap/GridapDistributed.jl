@@ -40,6 +40,8 @@ export get_face_gids
 export local_views, get_parts
 export with_ghost, no_ghost
 
+export allocate_col_vector, allocate_row_vector
+
 include("BlockPartitionedArrays.jl")
 
 include("Algebra.jl")
