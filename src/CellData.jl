@@ -358,3 +358,63 @@ Did you mean evaluate(f,s) instead of evaluate(s,f), i.e.
 f(s) instead of s(f)?
 """
 end
+
+# Support for distributed Dirac deltas
+struct DistributedDiracDelta{D} <: GridapType
+  Γ::DistributedTriangulation
+  dΓ::DistributedMeasure
+end
+# This code is from Gridap, repeated in BoundaryTriangulations.jl and DiracDelta.jl.
+# We could refactor...
+import Gridap.Geometry: FaceToCellGlue
+function BoundaryTriangulation{D}(
+  model::DiscreteModel,
+  face_to_bgface::AbstractVector{<:Integer}) where D
+
+  bgface_to_lcell = Fill(1,num_faces(model,D))
+
+  topo = get_grid_topology(model)
+  bgface_grid = Grid(ReferenceFE{D},model)
+  face_grid = view(bgface_grid,face_to_bgface)
+  cell_grid = get_grid(model)
+  glue = FaceToCellGlue(topo,cell_grid,face_grid,face_to_bgface,bgface_to_lcell)
+  trian = BodyFittedTriangulation(model,face_grid,face_to_bgface)
+  BoundaryTriangulation(trian,glue)
+end
+
+function BoundaryTriangulation{D}(model::DiscreteModel;tags) where D
+  labeling = get_face_labeling(model)
+  bgface_to_mask = get_face_mask(labeling,tags,D)
+  face_to_bgface = findall(bgface_to_mask)
+  BoundaryTriangulation{D}(model,face_to_bgface)
+end
+
+function DiracDelta{D}(model::DistributedDiscreteModel{Dc},degree::Integer;kwargs...) where {D,Dc}
+
+  @assert 0 <= D && D < num_cell_dims(model) """\n
+  Incorrect value of D=$D for building a DiracDelta{D} on a model with $(num_cell_dims(model)) cell dims.
+
+  D should be in [0,$(num_cell_dims(model))).
+  """
+
+  gids   = get_face_gids(model,Dc)
+  trians = map(local_views(model),partition(gids)) do model, gids
+      trian = BoundaryTriangulation{D}(model;kwargs...)
+      filter_cells_when_needed(no_ghost,gids,trian)
+  end
+  Γ=DistributedTriangulation(trians,model)
+  dΓ=Measure(Γ,degree)
+  DistributedDiracDelta{D}(Γ,dΓ)
+end
+
+# Following functions can be eliminated introducing an abstract delta in Gridap.jl
+function DiracDelta{0}(model::DistributedDiscreteModel;tags)
+  degree = 0
+  DiracDelta{0}(model,degree;tags=tags)
+end
+function (d::DistributedDiracDelta)(f)
+ evaluate(d,f)
+end
+function Gridap.Arrays.evaluate!(cache,d::DistributedDiracDelta,f)
+ ∫(f)*d.dΓ
+end
