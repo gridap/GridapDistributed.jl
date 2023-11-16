@@ -33,6 +33,7 @@ import Gridap.ODEs.ODETools: ∂t, ∂tt
 
 export FullyAssembledRows
 export SubAssembledRows
+export FEConsistentAssembly
 
 export get_cell_gids
 export get_face_gids

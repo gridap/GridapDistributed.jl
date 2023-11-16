@@ -635,6 +635,14 @@ function local_assembly_strategy(::FullyAssembledRows,rows,cols)
     row->rows_local_to_ghost[row]==0,
     col->true)
 end
+function local_assembly_strategy(::FEConsistentAssembly,rows,cols)
+  rows_local_to_ghost = local_to_ghost(rows)
+  GenericAssemblyStrategy(
+    identity,
+    identity,
+    row->rows_local_to_ghost[row]==0,
+    col->true)
+end
 
 # Assembler high level constructors
 function FESpaces.SparseMatrixAssembler(

@@ -73,6 +73,7 @@ end
 function main(distribute,parts)
   main(distribute,parts,SubAssembledRows())
   main(distribute,parts,FullyAssembledRows())
+  main(distribute,parts,FEConsistentAssembly())
 end
 
 function main(distribute,parts,das)
@@ -197,6 +198,10 @@ function main(distribute,parts,das)
   U = TrialFESpace(u,V)
   assemble_tests(das,dΓ,dΓass,U,V)
 
+end
+
+with_debug() do distribute
+  main(distribute,(2,2))
 end
 
 end # module
