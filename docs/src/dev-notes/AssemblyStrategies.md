@@ -11,7 +11,6 @@ GridapDistributed offers several assembly strategies for distributed linear syst
     - **Use cases:** Default assembly strategy.
 
 - Each processor integrates over the **owned cells**, i.e there are no duplicated cell contributions. However, processors do not hold all the contributions they need to assemble their matrix and vector.
-- 
 
 ## FullyAssembledRows
 
@@ -31,3 +30,9 @@ GridapDistributed offers several assembly strategies for distributed linear syst
     - **Pros:** Assembly is local, i.e no communication is required. DoF `PVector`s from the `FESpace` can be used as column and row vectors for the matrix (like in serial).
     - **Cons:** Matrix-vector product only fills the owned rows of the output vector. Communication is therefore required to make the output vector consistent.
     - **Use cases:** You should use this strategy if you are constantly creating `FEFunction`s with vectors coming from the linear system (and viceversa). This is quite typical for geometric solvers.
+
+Problem:
+
+We cannot have the same partition for FESpaces and Matrix. The reason is that we want the matrix layouts to be owned then ghots. However FESpace local numberings are mixed owned and ghost.
+
+We can create the matrix layouts so that the order of the owned and ghosts (separately) is the same as in the FESpace. Paired with the OwnedAndGhostValues data type, this allows no-copy no-allocation reuse of values between the two dof layouts. However this is prone to create crash-less bugs (the worst kind) if the user is careless. How should this be handled? Is there a cheap way to check that we are not doing anything wrong (without checking the whole index ranges every time)?
