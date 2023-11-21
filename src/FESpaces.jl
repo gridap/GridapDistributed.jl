@@ -293,6 +293,18 @@ function FESpaces.get_free_dof_ids(fs::DistributedSingleFieldFESpace)
   fs.gids
 end
 
+function FESpaces.get_dof_value_type(cell_shapefuns::DistributedCellField,cell_dof_basis::DistributedCellDof)
+  vt = map(local_views(cell_shapefuns),local_views(cell_dof_basis)) do cell_shapefuns, cell_dof_basis
+    FESpaces.get_dof_value_type(cell_shapefuns,cell_dof_basis)
+  end
+  # Jordi: is this always consistent between processors? It should, I think...
+  return PartitionedArrays.getany(vt)
+end
+
+function FESpaces.ConstraintStyle(::Type{<:DistributedSingleFieldFESpace{A}}) where A
+  return FESpaces.ConstraintStyle(eltype(A))
+end
+
 function FESpaces.get_dirichlet_dof_values(U::DistributedSingleFieldFESpace)
   map(get_dirichlet_dof_values,U.spaces)
 end
