@@ -70,6 +70,12 @@ outer(::typeof(∇),f::TransientDistributedCellField) = outer(∇,f.cellfield)
 outer(f::TransientDistributedCellField,::typeof(∇)) = outer(f.cellfield,∇)
 cross(::typeof(∇),f::TransientDistributedCellField) = cross(∇,f.cellfield)
 
+Gridap.Arrays.evaluate!(cache,k::Operation,a::TransientDistributedCellField,b::DistributedCellField) = evaluate!(cache,k,a.cellfield,b)
+Gridap.Arrays.evaluate!(cache,k::Operation,a::DistributedCellField,b::TransientDistributedCellField) = evaluate!(cache,k,a,b.cellfield)
+
+Base.:(∘)(f::Function,g::Tuple{TransientDistributedCellField,DistributedCellField}) = Operation(f)(g[1],g[2])
+Base.:(∘)(f::Function,g::Tuple{DistributedCellField,TransientDistributedCellField}) = Operation(f)(g[1],g[2])
+
 # Skeleton related
 function Base.getproperty(f::TransientDistributedCellField, sym::Symbol)
   if sym in (:⁺,:plus,:⁻, :minus)
