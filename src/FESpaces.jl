@@ -297,7 +297,6 @@ function FESpaces.get_dof_value_type(cell_shapefuns::DistributedCellField,cell_d
   vt = map(local_views(cell_shapefuns),local_views(cell_dof_basis)) do cell_shapefuns, cell_dof_basis
     FESpaces.get_dof_value_type(cell_shapefuns,cell_dof_basis)
   end
-  # Jordi: is this always consistent between processors? It should, I think...
   return PartitionedArrays.getany(vt)
 end
 
