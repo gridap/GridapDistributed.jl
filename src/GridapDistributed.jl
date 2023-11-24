@@ -40,6 +40,8 @@ export get_face_gids
 export local_views, get_parts
 export with_ghost, no_ghost
 
+export redistribute
+
 include("BlockPartitionedArrays.jl")
 
 include("Algebra.jl")
