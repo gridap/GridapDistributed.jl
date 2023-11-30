@@ -9,6 +9,35 @@ function Algebra.allocate_vector(::Type{<:BlockPVector{V}},ids::BlockPRange) whe
   BlockPVector{V}(undef,ids)
 end
 
+# Row/Col vector allocations for serial
+function allocate_row_vector(A::AbstractMatrix{T}) where T
+  return zeros(T,size(A,1))
+end
+
+function allocate_col_vector(A::AbstractMatrix{T}) where T
+  return zeros(T,size(A,2))
+end
+
+# Row/Col vector allocations for parallel
+function allocate_row_vector(A::PSparseMatrix)
+  T = eltype(A)
+  return pfill(zero(T),partition(axes(A,1)))
+end
+
+function allocate_col_vector(A::PSparseMatrix)
+  T = eltype(A)
+  return pfill(zero(T),partition(axes(A,2)))
+end
+
+# Row/Col vector allocations for blocks
+function allocate_row_vector(A::AbstractBlockMatrix)
+  return mortar(map(Aii->allocate_row_vector(Aii),blocks(A)[:,1]))
+end
+
+function allocate_col_vector(A::AbstractBlockMatrix)
+  return mortar(map(Aii->allocate_col_vector(Aii),blocks(A)[1,:]))
+end
+
 # This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.ArrayCounter,axes)
   @notimplemented
@@ -303,6 +332,7 @@ end
 
 struct FullyAssembledRows end
 struct SubAssembledRows end
+struct FEConsistentAssembly end
 
 # For the moment we use COO format even though
 # it is quite memory consuming.
@@ -549,6 +579,29 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   return A, b
 end
 
+function Algebra.create_from_nz(a::DistributedAllocationCOO{<:FEConsistentAssembly})
+  f(x) = nothing
+  A, = _feca_create_from_nz_with_callback(f,a)
+  return A
+end
+
+function Algebra.create_from_nz(a::ArrayBlock{<:DistributedAllocationCOO{<:FEConsistentAssembly}})
+  f(x) = nothing
+  A, = _feca_create_from_nz_with_callback(f,a)
+  return A
+end
+
+function _feca_create_from_nz_with_callback(callback,a)
+  I,J,V = get_allocations(a)
+  rows  = _setup_prange(get_test_gids(a),I;ghost=false,ax=:rows)
+  cols  = get_trial_gids(a)
+  b = callback(rows)
+
+  asys = change_axes(a,(rows,cols))
+  values = map(create_from_nz,local_views(asys))
+  A = _setup_matrix(values,rows,cols)
+  return A, b
+end
 
 # PVector assembly 
 
@@ -595,6 +648,12 @@ function Arrays.nz_allocation(a::PVectorCounter{<:FullyAssembledRows})
   PVectorAllocationTrackOnlyValues(a.par_strategy,values,dofs)
 end
 
+function Arrays.nz_allocation(a::PVectorCounter{<:FEConsistentAssembly})
+  dofs = a.test_dofs_gids_prange
+  values = map(nz_allocation,a.counters)
+  PVectorAllocationTrackOnlyValues(a.par_strategy,values,dofs)
+end
+
 struct PVectorAllocationTrackOnlyValues{A,B,C}
   par_strategy::A
   values::B
@@ -611,6 +670,11 @@ function local_views(a::PVectorAllocationTrackOnlyValues,rows)
 end
 
 function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues{<:FullyAssembledRows})
+  rows = _setup_prange_without_ghosts(a.test_dofs_gids_prange)
+  _rhs_callback(a,rows)
+end
+
+function Algebra.create_from_nz(a::PVectorAllocationTrackOnlyValues{<:FEConsistentAssembly})
   rows = _setup_prange_without_ghosts(a.test_dofs_gids_prange)
   _rhs_callback(a,rows)
 end
@@ -670,6 +734,18 @@ function Algebra.create_from_nz(
   end
 
   A,b = _fa_create_from_nz_with_callback(callback,a)
+  return A,b
+end
+
+function Algebra.create_from_nz(
+  a::DistributedAllocationCOO{<:FEConsistentAssembly},
+  c_fespace::PVectorAllocationTrackOnlyValues{<:FEConsistentAssembly})
+
+  function callback(rows)
+    _rhs_callback(c_fespace,rows)
+  end
+
+  A,b = _feca_create_from_nz_with_callback(callback,a)
   return A,b
 end
 

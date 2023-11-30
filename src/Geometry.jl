@@ -517,6 +517,14 @@ function filter_cells_when_needed(
   remove_ghost_cells(trian,cell_gids)
 end
 
+function filter_cells_when_needed(
+  portion::FEConsistentAssembly,
+  cell_gids::AbstractLocalIndices,
+  trian::Triangulation)
+
+  trian
+end
+
 function remove_ghost_cells(trian::Triangulation,gids)
   model = get_background_model(trian)
   Dt    = num_cell_dims(trian)
