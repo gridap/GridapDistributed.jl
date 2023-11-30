@@ -42,6 +42,7 @@ export local_views, get_parts
 export with_ghost, no_ghost
 
 export allocate_col_vector, allocate_row_vector
+export redistribute
 
 include("BlockPartitionedArrays.jl")
 
