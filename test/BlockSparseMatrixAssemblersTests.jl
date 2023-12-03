@@ -22,12 +22,12 @@ function is_same_vector(x::BlockPVector,y::PVector,Ub,U)
 end
 
 function is_same_matrix(Ab::BlockPMatrix,A::PSparseMatrix,Xb,X)
-  yb = mortar(map(Aii->pfill(0.0,partition(axes(Aii,1))),diag(blocks(Ab))));
-  xb = mortar(map(Aii->pfill(1.0,partition(axes(Aii,2))),diag(blocks(Ab))));
+  yb = allocate_in_range(Ab)
+  xb = allocate_in_domain(Ab); fill!(xb,1.0)
   mul!(yb,Ab,xb)
 
-  y = pfill(0.0,partition(axes(A,1)))
-  x = pfill(1.0,partition(axes(A,2)))
+  y = allocate_in_range(A)
+  x = allocate_in_domain(A); fill!(x,1.0)
   mul!(y,A,x)
 
   return is_same_vector(yb,y,Xb,X)
