@@ -10,22 +10,22 @@ function Algebra.allocate_vector(::Type{<:BlockPVector{V}},ids::BlockPRange) whe
 end
 
 function Algebra.allocate_in_range(matrix::PSparseMatrix)
-  V = Vector{eltype(mat)}
+  V = Vector{eltype(matrix)}
   allocate_in_range(PVector{V},matrix)
 end
 
 function Algebra.allocate_in_domain(matrix::PSparseMatrix)
-  V = Vector{eltype(mat)}
+  V = Vector{eltype(matrix)}
   allocate_in_domain(PVector{V},matrix)
 end
 
 function Algebra.allocate_in_range(matrix::BlockPMatrix)
-  V = Vector{eltype(mat)}
+  V = Vector{eltype(matrix)}
   allocate_in_range(BlockPVector{V},matrix)
 end
 
 function Algebra.allocate_in_domain(matrix::BlockPMatrix)
-  V = Vector{eltype(mat)}
+  V = Vector{eltype(matrix)}
   allocate_in_domain(BlockPVector{V},matrix)
 end
 
