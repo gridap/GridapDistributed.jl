@@ -3,7 +3,7 @@ module BlockSparseMatrixAssemblersTests
 using Test, LinearAlgebra, BlockArrays, SparseArrays
 
 using Gridap
-using Gridap.FESpaces, Gridap.ReferenceFEs, Gridap.MultiField
+using Gridap.FESpaces, Gridap.ReferenceFEs, Gridap.MultiField, Gridap.Algebra
 
 using GridapDistributed
 using PartitionedArrays
