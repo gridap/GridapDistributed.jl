@@ -282,10 +282,13 @@ function redistribute_fe_function(uh_old::Union{DistributedSingleFieldFEFunction
   end
 end
 
-_get_fe_type(U::DistributedSingleFieldFESpace,V) = DistributedSingleFieldFESpace
-_get_fe_type(U,V::DistributedSingleFieldFESpace) = DistributedSingleFieldFESpace
-_get_fe_type(U::DistributedMultiFieldFESpace,V)  = DistributedMultiFieldFESpace
-_get_fe_type(U,V::DistributedMultiFieldFESpace)  = DistributedMultiFieldFESpace
+for T in [:DistributedSingleFieldFESpace,:DistributedMultiFieldFESpace]
+  @eval begin
+    _get_fe_type(::$T,::Nothing) = $T
+    _get_fe_type(::Nothing,::$T) = $T
+    _get_fe_type(::$T,::$T) = $T
+  end
+end
 
 function redistribute_free_values(fv_new::Union{PVector,Nothing},
                                   Uh_new::Union{DistributedSingleFieldFESpace,DistributedMultiFieldFESpace,Nothing},
@@ -295,31 +298,22 @@ function redistribute_free_values(fv_new::Union{PVector,Nothing},
                                   model_new,
                                   glue::RedistributeGlue;
                                   reverse=false)
-
   caches = get_redistribute_free_values_cache(fv_new,Uh_new,fv_old,dv_old,Uh_old,model_new,glue;reverse=reverse)
   return redistribute_free_values!(caches,fv_new,Uh_new,fv_old,dv_old,Uh_old,model_new,glue;reverse=reverse)
 end
 
-function get_redistribute_free_values_cache(fv_new,
-                                            Uh_new,
-                                            fv_old,
-                                            dv_old,
-                                            Uh_old,
-                                            model_new,
-                                            glue::RedistributeGlue;
+function get_redistribute_free_values_cache(fv_new,Uh_new,
+                                            fv_old,dv_old,Uh_old,
+                                            model_new,glue::RedistributeGlue;
                                             reverse=false)
   T = _get_fe_type(Uh_new,Uh_old)
   get_redistribute_free_values_cache(T,fv_new,Uh_new,fv_old,dv_old,Uh_old,model_new,glue;reverse=reverse)
 end
 
 function get_redistribute_free_values_cache(::Type{DistributedSingleFieldFESpace},
-                                            fv_new,
-                                            Uh_new,
-                                            fv_old,
-                                            dv_old,
-                                            Uh_old,
-                                            model_new,
-                                            glue::RedistributeGlue;
+                                            fv_new,Uh_new,
+                                            fv_old,dv_old,Uh_old,
+                                            model_new,glue::RedistributeGlue;
                                             reverse=false)
   old_parts, new_parts = get_old_and_new_parts(glue,Val(reverse))
   cell_dof_values_old = i_am_in(old_parts) ? map(scatter_free_and_dirichlet_values,local_views(Uh_old),local_views(fv_old),dv_old) : nothing
@@ -329,13 +323,9 @@ function get_redistribute_free_values_cache(::Type{DistributedSingleFieldFESpace
 end
 
 function get_redistribute_free_values_cache(::Type{DistributedMultiFieldFESpace},
-                                            fv_new,
-                                            Uh_new,
-                                            fv_old,
-                                            dv_old,
-                                            Uh_old,
-                                            model_new,
-                                            glue::RedistributeGlue;
+                                            fv_new,Uh_new,
+                                            fv_old,dv_old,Uh_old,
+                                            model_new,glue::RedistributeGlue;
                                             reverse=false)
   old_parts, new_parts = get_old_and_new_parts(glue,Val(reverse))
 
@@ -345,9 +335,9 @@ function get_redistribute_free_values_cache(::Type{DistributedMultiFieldFESpace}
     dv_old_i = dv_old
   else
     nfields = num_fields(Uh_new) # The other is not Nothing
-    Uh_old_i = [Nothing for i = 1:nfields]
-    fv_old_i = [Nothing for i = 1:nfields]
-    dv_old_i = [Nothing for i = 1:nfields]
+    Uh_old_i = [nothing for i = 1:nfields]
+    fv_old_i = [nothing for i = 1:nfields]
+    dv_old_i = [nothing for i = 1:nfields]
   end
 
   if i_am_in(new_parts)
@@ -355,8 +345,8 @@ function get_redistribute_free_values_cache(::Type{DistributedMultiFieldFESpace}
     fv_new_i = map(i->restrict_to_field(Uh_new,fv_new,i),1:num_fields(Uh_new))
   else
     nfields = num_fields(Uh_old) # The other is not Nothing
-    Uh_new_i = [Nothing for i = 1:nfields]
-    fv_new_i = [Nothing for i = 1:nfields]
+    Uh_new_i = [nothing for i = 1:nfields]
+    fv_new_i = [nothing for i = 1:nfields]
   end
 
   caches = map(Uh_new_i,Uh_old_i,fv_new_i,fv_old_i,dv_old_i) do Uh_new_i,Uh_old_i,fv_new_i,fv_old_i,dv_old_i
@@ -367,11 +357,8 @@ function get_redistribute_free_values_cache(::Type{DistributedMultiFieldFESpace}
 end
 
 function redistribute_free_values!(caches,
-                                   fv_new::Union{PVector,Nothing},
-                                   Uh_new::Union{DistributedSingleFieldFESpace,Nothing},
-                                   fv_old::Union{PVector,Nothing},
-                                   dv_old::Union{AbstractArray,Nothing},
-                                   Uh_old::Union{DistributedSingleFieldFESpace,Nothing},
+                                   fv_new,Uh_new,
+                                   fv_old,dv_old,Uh_old,
                                    model_new,
                                    glue::RedistributeGlue;
                                    reverse=false)
@@ -405,10 +392,10 @@ end
 function redistribute_free_values!(::Type{DistributedMultiFieldFESpace},
                                    caches,
                                    fv_new::Union{PVector,Nothing},
-                                   Uh_new::Union{DistributedSingleFieldFESpace,Nothing},
+                                   Uh_new::Union{DistributedMultiFieldFESpace,Nothing},
                                    fv_old::Union{PVector,Nothing},
                                    dv_old::Union{AbstractArray,Nothing},
-                                   Uh_old::Union{DistributedSingleFieldFESpace,Nothing},
+                                   Uh_old::Union{DistributedMultiFieldFESpace,Nothing},
                                    model_new,
                                    glue::RedistributeGlue;
                                    reverse=false)
@@ -421,9 +408,9 @@ function redistribute_free_values!(::Type{DistributedMultiFieldFESpace},
     dv_old_i = dv_old
   else
     nfields = num_fields(Uh_new) # The other is not Nothing
-    Uh_old_i = [Nothing for i = 1:nfields]
-    fv_old_i = [Nothing for i = 1:nfields]
-    dv_old_i = [Nothing for i = 1:nfields]
+    Uh_old_i = [nothing for i = 1:nfields]
+    fv_old_i = [nothing for i = 1:nfields]
+    dv_old_i = [nothing for i = 1:nfields]
   end
 
   if i_am_in(new_parts)
@@ -431,11 +418,11 @@ function redistribute_free_values!(::Type{DistributedMultiFieldFESpace},
     fv_new_i = map(i->restrict_to_field(Uh_new,fv_new,i),1:num_fields(Uh_new))
   else
     nfields = num_fields(Uh_old) # The other is not Nothing
-    Uh_new_i = [Nothing for i = 1:nfields]
-    fv_new_i = [Nothing for i = 1:nfields]
+    Uh_new_i = [nothing for i = 1:nfields]
+    fv_new_i = [nothing for i = 1:nfields]
   end
 
-  map!(Uh_new_i,Uh_old_i,fv_new_i,fv_old_i,dv_old_i,caches) do Uh_new_i,Uh_old_i,fv_new_i,fv_old_i,dv_old_i,caches
+  map(Uh_new_i,Uh_old_i,fv_new_i,fv_old_i,dv_old_i,caches) do Uh_new_i,Uh_old_i,fv_new_i,fv_old_i,dv_old_i,caches
     redistribute_free_values!(DistributedSingleFieldFESpace,caches,fv_new_i,Uh_new_i,fv_old_i,dv_old_i,Uh_old_i,model_new,glue;reverse=reverse)
   end
 end
