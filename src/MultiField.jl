@@ -71,6 +71,10 @@ function MultiField.restrict_to_field(
   PVector(values,partition(gids))
 end
 
+function FESpaces.zero_dirichlet_values(f::DistributedMultiFieldFESpace)
+  map(zero_dirichlet_values,f.field_fe_space)
+end
+
 function FESpaces.FEFunction(
   f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
   free_values  = change_ghost(x,f.gids;is_consistent=isconsistent,make_consistent=true)
