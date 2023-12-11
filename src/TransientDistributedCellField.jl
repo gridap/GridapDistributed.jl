@@ -10,21 +10,21 @@ end
 local_views(f::TransientSingleFieldDistributedCellField) = local_views(f.cellfield)
 
 # Constructors
-function TransientFETools.TransientCellField(single_field::DistributedSingleFieldFEFunction,derivatives::Tuple)
+function ODEs.TransientCellField(single_field::DistributedSingleFieldFEFunction,derivatives::Tuple)
   TransientSingleFieldDistributedCellField(single_field,derivatives)
 end
 
-function TransientFETools.TransientCellField(single_field::DistributedCellField,derivatives::Tuple)
-TransientSingleFieldDistributedCellField(single_field,derivatives)
+function ODEs.TransientCellField(single_field::DistributedCellField,derivatives::Tuple)
+  TransientSingleFieldDistributedCellField(single_field,derivatives)
 end
 
 # Time derivative
-function ∂t(f::TransientDistributedCellField)
+function ODEs.∂t(f::TransientDistributedCellField)
   cellfield, derivatives = first_and_tail(f.derivatives)
   TransientCellField(cellfield,derivatives)
 end
 
-∂tt(f::TransientDistributedCellField) = ∂t(∂t(f))
+ODEs.∂tt(f::TransientDistributedCellField) = ∂t(∂t(f))
 
 # Integration related
 function Fields.integrate(f::TransientDistributedCellField,b::DistributedMeasure)

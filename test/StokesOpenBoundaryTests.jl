@@ -81,7 +81,7 @@ function main(distribute,parts)
   ph0 = interpolate_everywhere(p(0.0),P0)
   xh0 = interpolate_everywhere([uh0,ph0],X0)
 
-  op = TransientFEOperator(res,jac,jac_t,X,Y)
+  op = TransientFEOperator(res,(jac,jac_t),X,Y)
 
   t0 = 0.0
   tF = 1.0
@@ -90,7 +90,7 @@ function main(distribute,parts)
   ls = LUSolver()
   ode_solver = ThetaMethod(ls,dt,θ)
 
-  sol_t = solve(ode_solver,op,xh0,t0,tF)
+  sol_t = solve(ode_solver,op,t0,tF,xh0)
 
   l2(w) = w⋅w
 
@@ -110,6 +110,10 @@ function main(distribute,parts)
     el2 = sqrt(sum( ∫(l2(e))dΩ ))
     @test el2 < tol
   end
+end
+
+with_debug() do distribute
+  main(distribute,(2,2))
 end
 
 end #module

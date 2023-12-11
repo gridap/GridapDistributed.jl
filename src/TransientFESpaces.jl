@@ -4,10 +4,10 @@ Fields.evaluate(U::DistributedSingleFieldFESpace,t::Nothing) = U
 
 (U::DistributedSingleFieldFESpace)(t) = U
 
-∂t(U::DistributedSingleFieldFESpace) = HomogeneousTrialFESpace(U)
-∂t(U::DistributedMultiFieldFESpace) = MultiFieldFESpace(∂t.(U.field_fe_space))
-∂tt(U::DistributedSingleFieldFESpace) = HomogeneousTrialFESpace(U)
-∂tt(U::DistributedMultiFieldFESpace) = MultiFieldFESpace(∂tt.(U.field_fe_spaces))
+ODEs.∂t(U::DistributedSingleFieldFESpace) = HomogeneousTrialFESpace(U)
+ODEs.∂t(U::DistributedMultiFieldFESpace) = MultiFieldFESpace(∂t.(U.field_fe_space))
+ODEs.∂tt(U::DistributedSingleFieldFESpace) = HomogeneousTrialFESpace(U)
+ODEs.∂tt(U::DistributedMultiFieldFESpace) = MultiFieldFESpace(∂tt.(U.field_fe_spaces))
 
 function TransientMultiFieldFESpace(spaces::Vector{<:DistributedSingleFieldFESpace})
   MultiFieldFESpace(spaces)
@@ -15,24 +15,24 @@ end
 
 # Functions for transient FE Functions
 
-function ODETools.allocate_jacobian(
-  op::TransientFETools.TransientFEOperatorFromWeakForm,
+function ODEs.allocate_jacobian(
+  op::ODEs.TransientFEOpFromWeakForm,
   t0::Real,
   duh::Union{DistributedCellField,DistributedMultiFieldFEFunction},
   cache)
-  _matdata_jacobians = TransientFETools.fill_initial_jacobians(op,t0,duh)
+  _matdata_jacobians = ODEs.fill_initial_jacobians(op,t0,duh)
   matdata = _vcat_distributed_matdata(_matdata_jacobians)
   allocate_matrix(op.assem_t,matdata)
 end
 
-function ODETools.jacobians!(
+function ODEs.jacobians!(
   A::AbstractMatrix,
-  op::TransientFETools.TransientFEOperatorFromWeakForm,
+  op::ODEs.TransientFEOpFromWeakForm,
   t::Real,
   xh::TransientDistributedCellField,
   γ::Tuple{Vararg{Real}},
   cache)
-  _matdata_jacobians = TransientFETools.fill_jacobians(op,t,xh,γ)
+  _matdata_jacobians = ODEs.fill_jacobians(op,t,xh,γ)
   matdata = _vcat_distributed_matdata(_matdata_jacobians)
   assemble_matrix_add!(A,op.assem_t, matdata)
   A

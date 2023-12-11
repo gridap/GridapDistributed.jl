@@ -8,7 +8,7 @@ end
 local_views(f::TransientMultiFieldDistributedCellField) = local_views(f.cellfield)
 
 # Constructors
-function TransientFETools.TransientCellField(multi_field::DistributedMultiFieldFEFunction,derivatives::Tuple)
+function ODEs.TransientCellField(multi_field::DistributedMultiFieldFEFunction,derivatives::Tuple)
   transient_single_fields = _to_transient_single_distributed_fields(multi_field,derivatives)
   TransientMultiFieldDistributedCellField(multi_field,derivatives,transient_single_fields)
 end
@@ -53,7 +53,7 @@ Base.iterate(f::TransientMultiFieldDistributedCellField)  = iterate(f.transient_
 Base.iterate(f::TransientMultiFieldDistributedCellField,state)  = iterate(f.transient_single_fields,state)
 
 # Time derivative
-function ∂t(f::TransientMultiFieldDistributedCellField)
+function ODEs.∂t(f::TransientMultiFieldDistributedCellField)
   cellfield, derivatives = first_and_tail(f.derivatives)
   transient_single_field_derivatives = TransientDistributedCellField[]
   for transient_single_field in f.transient_single_fields
