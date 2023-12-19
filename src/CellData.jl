@@ -9,6 +9,7 @@ end
 
 local_views(a::DistributedCellPoint) = a.points
 CellData.get_triangulation(a::DistributedCellPoint) = a.trian
+CellData.DomainStyle(a::DistributedCellPoint) = DomainStyle(getany(local_views(a)))
 
 # DistributedCellField
 """
@@ -31,7 +32,7 @@ end
 
 local_views(a::DistributedCellField) = a.fields
 CellData.get_triangulation(a::DistributedCellField) = a.trian
-CellData.DomainStyle(a::DistributedCellField) = DomainStyle(getany(a.fields))
+CellData.DomainStyle(a::DistributedCellField) = DomainStyle(getany(local_views(a)))
 
 # Constructors
 
@@ -69,8 +70,8 @@ function Arrays.evaluate!(cache,f::DistributedCellField,x::DistributedCellPoint)
   end
 end
 
-# Operations
-
+# Given local CellFields and a set of original DistributedTriangulations, 
+# returns the DistributedTriangulation where the local CellFields are defined. 
 function _select_triangulation(fields,parents::DistributedCellField...)
   trian_candidates = unique(objectid,map(get_triangulation,parents))
   _select_triangulation(fields,trian_candidates...)
@@ -104,8 +105,10 @@ function _select_triangulation(fields,trian_candidates::DistributedTriangulation
   @error "Cannot select a triangulation for the operation"
 end
 
+# Operations
+
 function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField)
-  fields = map(a.fields) do f
+  fields = map(local_views(a)) do f
     evaluate!(nothing,k,f)
   end
   DistributedCellField(fields,get_triangulation(a))
@@ -121,28 +124,28 @@ function Arrays.evaluate!(
 end
 
 function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField,b::Number)
-  fields = map(a.fields) do f
+  fields = map(local_views(a)) do f
     evaluate!(nothing,k,f,b)
   end
   DistributedCellField(fields,get_triangulation(a))
 end
 
 function Arrays.evaluate!(cache,k::Operation,b::Number,a::DistributedCellField)
-  fields = map(a.fields) do f
+  fields = map(local_views(a)) do f
     evaluate!(nothing,k,b,f)
   end
   DistributedCellField(fields,get_triangulation(a))
 end
 
 function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField,b::Function)
-  fields = map(a.fields) do f
+  fields = map(local_views(a)) do f
     evaluate!(nothing,k,f,b)
   end
   DistributedCellField(fields,get_triangulation(a))
 end
 
 function Arrays.evaluate!(cache,k::Operation,b::Function,a::DistributedCellField)
-  fields = map(a.fields) do f
+  fields = map(local_views(a)) do f
     evaluate!(nothing,k,b,f)
   end
   DistributedCellField(fields,get_triangulation(a))
@@ -155,51 +158,6 @@ function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField...)
   trian = _select_triangulation(fields,a...)
   DistributedCellField(fields,trian)
 end
-
-# Composition
-
-# Base.:(∘)(f::Function,g::DistributedCellField) = Operation(f)(g)
-# Base.:(∘)(f::Function,g::Tuple{DistributedCellField,DistributedCellField}) = Operation(f)(g[1],g[2])
-# Base.:(∘)(f::Function,g::Tuple{DistributedCellField,Number}) = Operation(f)(g[1],g[2])
-# Base.:(∘)(f::Function,g::Tuple{Number,DistributedCellField}) = Operation(f)(g[1],g[2])
-# Base.:(∘)(f::Function,g::Tuple{DistributedCellField,Function}) = Operation(f)(g[1],g[2])
-# Base.:(∘)(f::Function,g::Tuple{Function,DistributedCellField}) = Operation(f)(g[1],g[2])
-# Base.:(∘)(f::Function,g::Tuple{Vararg{DistributedCellField}}) = Operation(f)(g...)
-
-# Define some of the well known arithmetic ops
-
-# Unary ops
-
-#for op in (:symmetric_part,:inv,:det,:abs,:abs2,:+,:-,:tr,:transpose,:adjoint,:grad2curl,:real,:imag,:conj)
-#  @eval begin
-#    ($op)(a::DistributedCellField) = Operation($op)(a)
-#  end
-#end
-
-# Binary ops
-#
-#for op in (:inner,:outer,:double_contraction,:+,:-,:*,:cross,:dot,:/)
-#  @eval begin
-#    ($op)(a::DistributedCellField,b::DistributedCellField) = Operation($op)(a,b)
-#    ($op)(a::DistributedCellField,b::Number) = Operation($op)(a,b)
-#    ($op)(a::Number,b::DistributedCellField) = Operation($op)(a,b)
-#    ($op)(a::DistributedCellField,b::Function) = Operation($op)(a,b)
-#    ($op)(a::Function,b::DistributedCellField) = Operation($op)(a,b)
-#  end
-#end
-#
-#Base.broadcasted(f,a::DistributedCellField,b::DistributedCellField) = Operation((i,j)->f.(i,j))(a,b)
-#Base.broadcasted(f,a::Number,b::DistributedCellField) = Operation((i,j)->f.(i,j))(a,b)
-#Base.broadcasted(f,a::DistributedCellField,b::Number) = Operation((i,j)->f.(i,j))(a,b)
-#Base.broadcasted(f,a::Function,b::DistributedCellField) = Operation((i,j)->f.(i,j))(a,b)
-#Base.broadcasted(f,a::DistributedCellField,b::Function) = Operation((i,j)->f.(i,j))(a,b)
-#Base.broadcasted(::typeof(*),::typeof(∇),f::DistributedCellField) = Operation(Fields._extract_grad_diag)(∇(f))
-#Base.broadcasted(::typeof(*),s::Fields.ShiftedNabla,f::DistributedCellField) = Operation(Fields._extract_grad_diag)(s(f))
-#
-#dot(::typeof(∇),f::DistributedCellField) = divergence(f)
-#outer(::typeof(∇),f::DistributedCellField) = gradient(f)
-#outer(f::DistributedCellField,::typeof(∇)) = transpose(gradient(f))
-#cross(::typeof(∇),f::DistributedCellField) = curl(f)
 
 # Differential ops
 
@@ -345,33 +303,8 @@ function Base.getproperty(x::DistributedCellField, sym::Symbol)
   end
 end
 
-function Base.propertynames(x::DistributedCellField, private::Bool=false)
-  (fieldnames(typeof(x))...,:⁺,:plus,:⁻,:minus)
-end
-
-for op in (:outer,:*,:dot)
-  @eval begin
-    ($op)(a::DistributedCellField,b::SkeletonPair{<:DistributedCellField}) = Operation($op)(a,b)
-    ($op)(a::SkeletonPair{<:DistributedCellField},b::DistributedCellField) = Operation($op)(a,b)
-  end
-end
-
-function Arrays.evaluate!(cache,k::Operation,a::DistributedCellField,b::SkeletonPair{<:DistributedCellField})
-  plus = k(a.plus,b.plus)
-  minus = k(a.minus,b.minus)
-  SkeletonPair(plus,minus)
-end
-
-function Arrays.evaluate!(cache,k::Operation,a::SkeletonPair{<:DistributedCellField},b::DistributedCellField)
-  plus = k(a.plus,b.plus)
-  minus = k(a.minus,b.minus)
-  SkeletonPair(plus,minus)
-end
-
 CellData.jump(a::DistributedCellField) = DistributedCellField(map(jump,a.fields),get_triangulation(a))
-CellData.jump(a::SkeletonPair{<:DistributedCellField}) = a.⁺ + a.⁻
 CellData.mean(a::DistributedCellField) = DistributedCellField(map(mean,a.fields),get_triangulation(a))
-
 
 # DistributedCellDof
 
@@ -381,12 +314,13 @@ struct DistributedCellDof{A,B} <: CellDatum
 end
 
 local_views(s::DistributedCellDof) = s.dofs
+CellData.get_triangulation(s::DistributedCellDof) = s.trian
 
 (a::DistributedCellDof)(f) = evaluate(a,f)
 
 function Gridap.Arrays.evaluate!(cache,s::DistributedCellDof,f::DistributedCellField)
   map(local_views(s),local_views(f)) do s, f
-      evaluate!(nothing,s,f)
+    evaluate!(nothing,s,f)
   end
 end
 
