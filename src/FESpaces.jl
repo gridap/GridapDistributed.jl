@@ -258,7 +258,7 @@ end
 
 """
 """
-const DistributedSingleFieldFEFunction = DistributedCellField{A,B,<:DistributedFEFunctionData{T}} where {A,B,T}
+const DistributedSingleFieldFEFunction{A,B,T} = DistributedCellField{A,B,DistributedFEFunctionData{T}}
 
 function FESpaces.get_free_dof_values(uh::DistributedSingleFieldFEFunction)
   uh.metadata.free_values

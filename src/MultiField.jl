@@ -1,31 +1,55 @@
 
-struct DistributedMultiFieldFEFunction{A,B,C} <: GridapType
+# DistributedMultiFieldCellField
+struct DistributedMultiFieldCellField{A,B,C} <: CellField
   field_fe_fun::A
   part_fe_fun::B
-  free_values::C
-  function DistributedMultiFieldFEFunction(
-    field_fe_fun::AbstractVector{<:DistributedSingleFieldFEFunction},
-    part_fe_fun::AbstractArray{<:MultiFieldFEFunction},
-    free_values::AbstractVector)
+  metadata::C
+  function DistributedMultiFieldCellField(
+    field_fe_fun::AbstractVector{<:DistributedCellField},
+    part_fe_fun::AbstractArray{<:CellField},
+    metadata=nothing)
     A = typeof(field_fe_fun)
     B = typeof(part_fe_fun)
-    C = typeof(free_values)
-    new{A,B,C}(field_fe_fun,part_fe_fun,free_values)
+    C = typeof(metadata)
+    new{A,B,C}(field_fe_fun,part_fe_fun,metadata)
   end
 end
 
-
-function FESpaces.get_free_dof_values(uh::DistributedMultiFieldFEFunction)
-  uh.free_values
+function CellData.get_triangulation(a::DistributedMultiFieldCellField)
+  trians = map(get_triangulation,a.field_fe_fun)
+  @check all(map(t -> t === first(trians), trians))
+  return first(trians)
 end
 
-local_views(a::DistributedMultiFieldFEFunction) = a.part_fe_fun
-MultiField.num_fields(m::DistributedMultiFieldFEFunction) = length(m.field_fe_fun)
-Base.iterate(m::DistributedMultiFieldFEFunction) = iterate(m.field_fe_fun)
-Base.iterate(m::DistributedMultiFieldFEFunction,state) = iterate(m.field_fe_fun,state)
-Base.getindex(m::DistributedMultiFieldFEFunction,field_id::Integer) = m.field_fe_fun[field_id]
+function CellData.DomainStyle(::Type{<:DistributedMultiFieldCellField{A,B}}) where {A,B}
+  DomainStyle(eltype(B))
+end
 
-local_views(a::Vector{<:DistributedCellField}) = [ai.fields for ai in a]
+local_views(a::DistributedMultiFieldCellField) = a.part_fe_fun
+local_views(a::Vector{<:DistributedCellField}) = map(local_views,a)
+
+MultiField.num_fields(m::DistributedMultiFieldCellField) = length(m.field_fe_fun)
+Base.iterate(m::DistributedMultiFieldCellField) = iterate(m.field_fe_fun)
+Base.iterate(m::DistributedMultiFieldCellField,state) = iterate(m.field_fe_fun,state)
+Base.getindex(m::DistributedMultiFieldCellField,field_id::Integer) = m.field_fe_fun[field_id]
+
+# DistributedMultiFieldFEFunction
+
+const DistributedMultiFieldFEFunction{A,B,T} = DistributedMultiFieldCellField{A,B,DistributedFEFunctionData{T}}
+
+function DistributedMultiFieldFEFunction(
+  field_fe_fun::AbstractVector{<:DistributedSingleFieldFEFunction},
+  part_fe_fun::AbstractArray{<:MultiFieldFEFunction},
+  free_values::AbstractVector)
+  metadata = DistributedFEFunctionData(free_values)
+  DistributedMultiFieldCellField(field_fe_fun,part_fe_fun,metadata)
+end
+
+function FESpaces.get_free_dof_values(uh::DistributedMultiFieldFEFunction)
+  uh.metadata.free_values
+end
+
+# DistributedMultiFieldFESpace
 
 """
 """
@@ -46,6 +70,14 @@ struct DistributedMultiFieldFESpace{MS,A,B,C,D} <: DistributedFESpace
     new{MS,A,B,C,D}(MS(),field_fe_space,part_fe_space,gids,vector_type)
   end
 end
+
+function CellData.get_triangulation(a::DistributedMultiFieldFESpace)
+  trians = map(get_triangulation,a.field_fe_space)
+  @check all(map(t -> t === first(trians), trians))
+  return first(trians)
+end
+
+MultiField.MultiFieldStyle(::Type{<:DistributedMultiFieldFESpace{MS}}) where MS = MS()
 
 local_views(a::DistributedMultiFieldFESpace) = a.part_fe_space
 MultiField.num_fields(m::DistributedMultiFieldFESpace) = length(m.field_fe_space)
@@ -178,49 +210,6 @@ function FESpaces.interpolate_everywhere(
   DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
 end
 
-
-"""
-"""
-struct DistributedMultiFieldFEBasis{A,B} <: GridapType
-  field_fe_basis::A
-  part_fe_basis::B
-  function DistributedMultiFieldFEBasis(
-    field_fe_basis::AbstractVector{<:DistributedCellField},
-    part_fe_basis::AbstractArray{<:MultiFieldCellField})
-    A = typeof(field_fe_basis)
-    B = typeof(part_fe_basis)
-    new{A,B}(field_fe_basis,part_fe_basis)
-  end
-end
-
-local_views(a::DistributedMultiFieldFEBasis) = a.part_fe_basis
-MultiField.num_fields(m::DistributedMultiFieldFEBasis) = length(m.field_fe_basis)
-Base.iterate(m::DistributedMultiFieldFEBasis) = iterate(m.field_fe_basis)
-Base.iterate(m::DistributedMultiFieldFEBasis,state) = iterate(m.field_fe_basis,state)
-Base.getindex(m::DistributedMultiFieldFEBasis,field_id::Integer) = m.field_fe_basis[field_id]
-
-function FESpaces.get_fe_basis(f::DistributedMultiFieldFESpace)
-  part_mbasis = map(get_fe_basis,f.part_fe_space)
-  field_fe_basis = DistributedCellField[]
-  for i in 1:num_fields(f)
-    basis_i = map(b->b[i],part_mbasis)
-    bi = DistributedCellField(basis_i)
-    push!(field_fe_basis,bi)
-  end
-  DistributedMultiFieldFEBasis(field_fe_basis,part_mbasis)
-end
-
-function FESpaces.get_trial_fe_basis(f::DistributedMultiFieldFESpace)
-  part_mbasis = map(get_trial_fe_basis,f.part_fe_space)
-  field_fe_basis = DistributedCellField[]
-  for i in 1:num_fields(f)
-    basis_i = map(b->b[i],part_mbasis)
-    bi = DistributedCellField(basis_i)
-    push!(field_fe_basis,bi)
-  end
-  DistributedMultiFieldFEBasis(field_fe_basis,part_mbasis)
-end
-
 function FESpaces.TrialFESpace(objects,a::DistributedMultiFieldFESpace)
   TrialFESpace(a,objects)
 end
@@ -235,6 +224,30 @@ function FESpaces.TrialFESpace(a::DistributedMultiFieldFESpace{MS},objects) wher
   gids = a.gids
   vector_type = a.vector_type
   DistributedMultiFieldFESpace(f_dspace,p_mspace,gids,vector_type)
+end
+
+# DistributedMultiFieldFEBasis
+
+const DistributedMultiFieldFEBasis{A,B<:AbstractArray{<:FEBasis}} = DistributedMultiFieldCellField{A,B}
+
+function FESpaces.get_fe_basis(f::DistributedMultiFieldFESpace)
+  part_mbasis = map(get_fe_basis,f.part_fe_space)
+  field_fe_basis = map(1:num_fields(f)) do i
+    space_i  = f.field_fe_space[i]
+    basis_i = map(b->b[i],part_mbasis)
+    DistributedCellField(basis_i,get_triangulation(space_i))
+  end
+  DistributedMultiFieldCellField(field_fe_basis,part_mbasis)
+end
+
+function FESpaces.get_trial_fe_basis(f::DistributedMultiFieldFESpace)
+  part_mbasis = map(get_trial_fe_basis,f.part_fe_space)
+  field_fe_basis = map(1:num_fields(f)) do i
+    space_i  = f.field_fe_space[i]
+    basis_i = map(b->b[i],part_mbasis)
+    DistributedCellField(basis_i,get_triangulation(space_i))
+  end
+  DistributedMultiFieldCellField(field_fe_basis,part_mbasis)
 end
 
 # Factory

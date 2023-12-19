@@ -9,7 +9,10 @@ end
 
 local_views(a::DistributedCellPoint) = a.points
 CellData.get_triangulation(a::DistributedCellPoint) = a.trian
-CellData.DomainStyle(a::DistributedCellPoint) = DomainStyle(getany(local_views(a)))
+
+function CellData.DomainStyle(::Type{<:DistributedCellPoint{A}}) where A 
+  DomainStyle(eltype(A))
+end
 
 # DistributedCellField
 """
@@ -32,7 +35,10 @@ end
 
 local_views(a::DistributedCellField) = a.fields
 CellData.get_triangulation(a::DistributedCellField) = a.trian
-CellData.DomainStyle(a::DistributedCellField) = DomainStyle(getany(local_views(a)))
+
+function CellData.DomainStyle(::Type{<:DistributedCellField{A}}) where A 
+  DomainStyle(eltype(A))
+end
 
 # Constructors
 
@@ -308,13 +314,17 @@ CellData.mean(a::DistributedCellField) = DistributedCellField(map(mean,a.fields)
 
 # DistributedCellDof
 
-struct DistributedCellDof{A,B} <: CellDatum
+struct DistributedCellDof{A<:AbstractArray{<:CellDof},B<:DistributedTriangulation} <: CellDatum
   dofs::A
   trian::B
 end
 
 local_views(s::DistributedCellDof) = s.dofs
 CellData.get_triangulation(s::DistributedCellDof) = s.trian
+
+function CellData.DomainStyle(::Type{<:DistributedCellDof{A}}) where A 
+  DomainStyle(eltype(A))
+end
 
 (a::DistributedCellDof)(f) = evaluate(a,f)
 
