@@ -107,8 +107,7 @@ function FESpaces.zero_dirichlet_values(f::DistributedMultiFieldFESpace)
   map(zero_dirichlet_values,f.field_fe_space)
 end
 
-function FESpaces.FEFunction(
-  f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
+function FESpaces.FEFunction(f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
   free_values  = change_ghost(x,f.gids;is_consistent=isconsistent,make_consistent=true)
   part_fe_fun  = map(FEFunction,f.part_fe_space,partition(free_values))
   field_fe_fun = DistributedSingleFieldFEFunction[]
@@ -121,8 +120,7 @@ function FESpaces.FEFunction(
   DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
 end
 
-function FESpaces.EvaluationFunction(
-  f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
+function FESpaces.EvaluationFunction(f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
   free_values  = change_ghost(x,f.gids;is_consistent=isconsistent,make_consistent=true)
   part_fe_fun  = map(EvaluationFunction,f.part_fe_space,partition(free_values))
   field_fe_fun = DistributedSingleFieldFEFunction[]
@@ -228,7 +226,7 @@ end
 
 # DistributedMultiFieldFEBasis
 
-const DistributedMultiFieldFEBasis{A,B<:AbstractArray{<:FEBasis}} = DistributedMultiFieldCellField{A,B}
+const DistributedMultiFieldFEBasis{A} = DistributedMultiFieldCellField{A,<:AbstractArray{<:FEBasis}}
 
 function FESpaces.get_fe_basis(f::DistributedMultiFieldFESpace)
   part_mbasis = map(get_fe_basis,f.part_fe_space)
