@@ -1,5 +1,5 @@
 # Transient Distributed CellField
-abstract type TransientDistributedCellField <: DistributedCellDatum  end
+abstract type TransientDistributedCellField <: CellDatum  end
 
 # Transient SingleField
 struct TransientSingleFieldDistributedCellField{A} <: TransientDistributedCellField

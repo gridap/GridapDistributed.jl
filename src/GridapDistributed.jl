@@ -17,6 +17,7 @@ using Gridap.ODEs
 using MPI
 using PartitionedArrays
 const PArrays = PartitionedArrays
+using PartitionedArrays: getany
 
 using SparseArrays
 using WriteVTK

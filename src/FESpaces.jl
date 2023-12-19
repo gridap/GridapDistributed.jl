@@ -130,8 +130,6 @@ function generate_gids(
   cell_to_ldofs::AbstractArray{<:AbstractArray},
   nldofs::AbstractArray{<:Integer})
 
-  ngcells = length(cell_range)
-
   # Find and count number owned dofs
   ldof_to_owner, nodofs = map(partition(cell_range),cell_to_ldofs,nldofs) do indices,cell_to_ldofs,nldofs
     ldof_to_owner = fill(Int32(0),nldofs)
@@ -260,7 +258,7 @@ end
 
 """
 """
-const DistributedSingleFieldFEFunction = DistributedCellField{A,<:DistributedFEFunctionData{T}} where {A,T}
+const DistributedSingleFieldFEFunction = DistributedCellField{A,B,<:DistributedFEFunctionData{T}} where {A,B,T}
 
 function FESpaces.get_free_dof_values(uh::DistributedSingleFieldFEFunction)
   uh.metadata.free_values
@@ -269,21 +267,25 @@ end
 # Single field related
 """
 """
-struct DistributedSingleFieldFESpace{A,B,C} <: DistributedFESpace
+struct DistributedSingleFieldFESpace{A,B,C,D} <: DistributedFESpace
   spaces::A
   gids::B
-  vector_type::Type{C}
+  trian::C
+  vector_type::Type{D}
   function DistributedSingleFieldFESpace(
     spaces::AbstractArray{<:SingleFieldFESpace},
     gids::PRange,
-    vector_type::Type{C}) where C
+    trian::DistributedTriangulation,
+    vector_type::Type{D}) where D
     A = typeof(spaces)
     B = typeof(gids)
-    new{A,B,C}(spaces,gids,vector_type)
+    C = typeof(trian)
+    new{A,B,C,D}(spaces,gids,trian,vector_type)
   end
 end
 
 local_views(a::DistributedSingleFieldFESpace) = a.spaces
+CellData.get_triangulation(a::DistributedSingleFieldFESpace) = a.trian
 
 function FESpaces.get_vector_type(fs::DistributedSingleFieldFESpace)
   fs.vector_type
@@ -338,8 +340,9 @@ function _EvaluationFunction(func,
   f::DistributedSingleFieldFESpace,x::AbstractVector,isconsistent=false)
   free_values = change_ghost(x,f.gids,is_consistent=isconsistent,make_consistent=true)
   fields   = map(func,f.spaces,partition(free_values))
+  trian    = get_triangulation(f)
   metadata = DistributedFEFunctionData(free_values)
-  DistributedCellField(fields,metadata)
+  DistributedCellField(fields,trian,metadata)
 end
 
 function _EvaluationFunction(func,
@@ -347,56 +350,60 @@ function _EvaluationFunction(func,
   dirichlet_values::AbstractArray{<:AbstractVector},isconsistent=false)
   free_values = change_ghost(x,f.gids,is_consistent=isconsistent,make_consistent=true)
   fields   = map(func,f.spaces,partition(free_values),dirichlet_values)
+  trian    = get_triangulation(f)
   metadata = DistributedFEFunctionData(free_values)
-  DistributedCellField(fields,metadata)
+  DistributedCellField(fields,trian,metadata)
 end
 
 function FESpaces.get_fe_basis(f::DistributedSingleFieldFESpace)
   fields = map(get_fe_basis,f.spaces)
-  DistributedCellField(fields)
+  trian  = get_triangulation(f)
+  DistributedCellField(fields,trian)
 end
 
 function FESpaces.get_trial_fe_basis(f::DistributedSingleFieldFESpace)
   fields = map(get_trial_fe_basis,f.spaces)
-  DistributedCellField(fields)
+  trian  = get_triangulation(f)
+  DistributedCellField(fields,trian)
 end
 
 function FESpaces.get_fe_dof_basis(f::DistributedSingleFieldFESpace)
-  dofs = map(get_fe_dof_basis,local_views(f))
-  DistributedCellDof(dofs)
+  dofs  = map(get_fe_dof_basis,local_views(f))
+  trian = get_triangulation(f)
+  DistributedCellDof(dofs,trian)
 end
 
 function FESpaces.TrialFESpace(f::DistributedSingleFieldFESpace)
   spaces = map(TrialFESpace,f.spaces)
-  DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
+  DistributedSingleFieldFESpace(spaces,f.gids,f.trian,f.vector_type)
 end
 
 function FESpaces.TrialFESpace(f::DistributedSingleFieldFESpace,fun)
   spaces = map(f.spaces) do s
     TrialFESpace(s,fun)
   end
-  DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
+  DistributedSingleFieldFESpace(spaces,f.gids,f.trian,f.vector_type)
 end
 
 function FESpaces.TrialFESpace(fun,f::DistributedSingleFieldFESpace)
   spaces = map(f.spaces) do s
     TrialFESpace(fun,s)
   end
-  DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
+  DistributedSingleFieldFESpace(spaces,f.gids,f.trian,f.vector_type)
 end
 
 function FESpaces.TrialFESpace!(f::DistributedSingleFieldFESpace,fun)
   spaces = map(f.spaces) do s
     TrialFESpace!(s,fun)
   end
-  DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
+  DistributedSingleFieldFESpace(spaces,f.gids,f.trian,f.vector_type)
 end
 
 function FESpaces.HomogeneousTrialFESpace(f::DistributedSingleFieldFESpace)
   spaces = map(f.spaces) do s
     HomogeneousTrialFESpace(s)
   end
-  DistributedSingleFieldFESpace(spaces,f.gids,f.vector_type)
+  DistributedSingleFieldFESpace(spaces,f.gids,f.trian,f.vector_type)
 end
 
 function generate_gids(
@@ -478,8 +485,9 @@ function FESpaces.FESpace(model::DistributedDiscreteModel,reffe;split_own_and_gh
     FESpace(m,reffe;kwargs...)
   end
   gids =  generate_gids(model,spaces)
+  trian = DistributedTriangulation(map(get_triangulation,spaces),model)
   vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
-  DistributedSingleFieldFESpace(spaces,gids,vector_type)
+  DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
 end
 
 function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;split_own_and_ghost=false,kwargs...)
@@ -492,7 +500,7 @@ function FESpaces.FESpace(_trian::DistributedTriangulation,reffe;split_own_and_g
   nldofs = map(num_free_dofs,spaces)
   gids = generate_gids(trian_gids,cell_to_ldofs,nldofs)
   vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
-  DistributedSingleFieldFESpace(spaces,gids,vector_type)
+  DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
 end
 
 function _find_vector_type(spaces,gids;split_own_and_ghost=false)
