@@ -83,20 +83,23 @@ function _select_triangulation(fields,trian_candidates::DistributedTriangulation
 
   # Check if we can select one of the original triangulations
   trians = map(local_views,trian_candidates)
-  t_id = map(fields,trians...) do f, trians
+  t_id = map(fields,trians...) do f, trians...
     f_id = objectid(get_triangulation(f))
     return findfirst(tt -> objectid(tt) == f_id, trians)
   end |> getany
   if !isnothing(t_id)
-    return trians[t_id]
+    return trian_candidates[t_id]
   end
 
   # If not, check if we can build a new DistributedTriangulation based on one of the original models. 
-  m_id = map(fields,trians...) do f, trians
+  m_id = map(fields,trians...) do f, trians...
     f_id = objectid(get_background_model(get_triangulation(f)))
     return findfirst(tt -> objectid(get_background_model(tt)) == f_id, trians)
   end |> getany
-  return DistributedTriangulation(map(get_triangulation,fields),get_background_model(trians[m_id]))
+  if !isnothing(m_id)
+    model = get_background_model(trian_candidates[m_id])
+    return DistributedTriangulation(map(get_triangulation,fields),model)
+  end
 
   @error "Cannot select a triangulation for the operation"
 end
