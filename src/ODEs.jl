@@ -56,7 +56,7 @@ end
 
 # SingleField CellField
 
-const DistributedTransientSingleFieldCellField{A} = DistributedCellField{A,<:AbstractArray{<:ODEs.TransientSingleFieldCellField}}
+const DistributedTransientSingleFieldCellField = DistributedCellField{<:AbstractArray{<:ODEs.TransientSingleFieldCellField}}
 
 function ODEs.TransientCellField(f::DistributedCellField,derivatives::Tuple)
   fields = map(local_views(f),map(local_views,derivatives)...) do f, derivatives...
@@ -124,13 +124,21 @@ function ODEs.TransientCellField(f::DistributedMultiFieldCellField,derivatives::
     ODEs.TransientCellField(f_i,df_i)
   end
   fields = to_parray_of_arrays(map(local_views,field_fe_fun))
-  part_fe_fun = map(MultiField.MultiFieldCellField,fields)
+  part_fe_fun = map(ODEs.TransientMultiFieldCellField,fields)
   DistributedMultiFieldCellField(field_fe_fun,part_fe_fun,f.metadata)
+end
+
+function ODEs.TransientMultiFieldCellField(fields::AbstractVector{<:ODEs.TransientSingleFieldCellField})
+  cellfield = MultiFieldCellField(map(f -> f.cellfield,fields))
+  n_derivatives = length(first(fields).derivatives)
+  @check all(map(f -> length(f.derivatives) == n_derivatives,fields))
+  derivatives = Tuple(map(i -> MultiFieldCellField(map(f -> f.derivatives[i],fields)),1:n_derivatives))
+  TransientMultiFieldCellField(cellfield,derivatives,fields)
 end
 
 function ODEs.time_derivative(f::DistributedTransientMultiFieldCellField)
   field_fe_fun = map(ODEs.time_derivative,f.field_fe_fun)
   fields = to_parray_of_arrays(map(local_views,field_fe_fun))
-  part_fe_fun = map(MultiField.MultiFieldCellField,fields)
+  part_fe_fun = map(ODEs.TransientMultiFieldCellField,fields)
   DistributedMultiFieldCellField(field_fe_fun,part_fe_fun)
 end

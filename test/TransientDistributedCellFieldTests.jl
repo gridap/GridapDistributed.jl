@@ -27,16 +27,13 @@ function main(distribute,parts)
   @test isa(dda(0),GridapDistributed.DistributedCellField)
 
   b(t) = TransientCellField(a(t),(da(t),dda(t)))
-  @test isa(b(0),GridapDistributed.TransientDistributedCellField)
-  @test isa(b(0),GridapDistributed.TransientSingleFieldDistributedCellField)
+  @test isa(b(0),GridapDistributed.DistributedTransientSingleFieldCellField)
 
   db(t) = ∂t(b(t))
-  @test isa(db(0),GridapDistributed.TransientDistributedCellField)
-  @test isa(db(0),GridapDistributed.TransientSingleFieldDistributedCellField)
+  @test isa(db(0),GridapDistributed.DistributedTransientSingleFieldCellField)
 
   ddb(t) = ∂t(db(t))
-  @test isa(ddb(0),GridapDistributed.TransientDistributedCellField)
-  @test isa(ddb(0),GridapDistributed.TransientSingleFieldDistributedCellField)
+  @test isa(ddb(0),GridapDistributed.DistributedTransientSingleFieldCellField)
 
   @test (∑(∫(a(0.5))dΩ)) ≈ 0.25
   @test (∑(∫(da(0.5))dΩ)) ≈ 1.0

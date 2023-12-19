@@ -36,28 +36,22 @@ function main(distribute,parts)
   @test isa(dda(0),GridapDistributed.DistributedMultiFieldFEFunction)
 
   b(t) = TransientCellField(a(t),(da(t),dda(t)))
-  @test isa(b(0),GridapDistributed.TransientDistributedCellField)
-  @test isa(b(0),GridapDistributed.TransientMultiFieldDistributedCellField)
+  @test isa(b(0),GridapDistributed.DistributedTransientMultiFieldCellField)
 
   db(t) = ∂t(b(t))
-  @test isa(db(0),GridapDistributed.TransientDistributedCellField)
-  @test isa(db(0),GridapDistributed.TransientMultiFieldDistributedCellField)
+  @test isa(db(0),GridapDistributed.DistributedTransientMultiFieldCellField)
 
   ddb(t) = ∂t(db(t))
-  @test isa(ddb(0),GridapDistributed.TransientDistributedCellField)
-  @test isa(ddb(0),GridapDistributed.TransientMultiFieldDistributedCellField)
+  @test isa(ddb(0),GridapDistributed.DistributedTransientMultiFieldCellField)
 
   b1(t) = b(t)[1]
-  @test isa(b1(0),GridapDistributed.TransientDistributedCellField)
-  @test isa(b1(0),GridapDistributed.TransientSingleFieldDistributedCellField)
+  @test isa(b1(0),GridapDistributed.DistributedTransientSingleFieldCellField)
 
   db1(t) = ∂t(b1(t))
-  @test isa(db1(0),GridapDistributed.TransientDistributedCellField)
-  @test isa(db1(0),GridapDistributed.TransientSingleFieldDistributedCellField)
+  @test isa(db1(0),GridapDistributed.DistributedTransientSingleFieldCellField)
 
   ddb1(t) = ∂t(db1(t))
-  @test isa(ddb1(0),GridapDistributed.TransientDistributedCellField)
-  @test isa(ddb1(0),GridapDistributed.TransientSingleFieldDistributedCellField)
+  @test isa(ddb1(0),GridapDistributed.DistributedTransientSingleFieldCellField)
 
   @test (∑(∫(b(0.5)[1])dΩ)) == (∑(∫(b1(0.5))dΩ))
   @test (∑(∫(db(0.5)[1])dΩ)) == (∑(∫(db1(0.5))dΩ))
