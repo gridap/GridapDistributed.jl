@@ -221,6 +221,8 @@ struct DistributedDomainContribution{A<:AbstractArray{<:DomainContribution}} <: 
   contribs::A
 end
 
+CellData.num_domains(a::DistributedDomainContribution) = CellData.num_domains(getany(local_views(a)))
+
 local_views(a::DistributedDomainContribution) = a.contribs
 
 function Base.getindex(c::DistributedDomainContribution,t::DistributedTriangulation)
@@ -276,6 +278,15 @@ function (*)(a::Number,b::DistributedDomainContribution)
 end
 
 (*)(a::DistributedDomainContribution,b::Number) = b*a
+
+# Jordi: This is ugly, but it is useful to re-use code from Gridap: 
+# A lot of the time, we create an empty DomainContribution and then add to it.
+# By dispatching here, this kind of code works verbatim for GridapDistributed. 
+# We could eventually replace this with an EmptyDomainContribution type.
+function (+)(a::CellData.DomainContribution,b::DistributedDomainContribution)
+  @assert iszero(CellData.num_domains(a))
+  return b
+end
 
 # Triangulation related
 

@@ -59,20 +59,16 @@ function main(distribute,parts)
   dΓ = Measure(Γ,degree)
 
   #
-  a(u,v) = ∫(∇(u)⊙∇(v))dΩ
-  b((v,q),t) = ∫(v⋅f(t))dΩ + ∫(q*g(t))dΩ + ∫(v⋅h(t))dΓ
-  m(ut,v) = ∫(ut⋅v)dΩ
+  a(t,u,v) = ∫(∇(u)⊙∇(v))dΩ
+  b(t,(v,q)) = ∫(v⋅f(t))dΩ + ∫(q*g(t))dΩ + ∫(v⋅h(t))dΓ
+  m(t,ut,v) = ∫(ut⋅v)dΩ
 
   X = TransientMultiFieldFESpace([U,P])
   Y = MultiFieldFESpace([V0,Q])
 
-  res(t,(u,p),(v,q)) = a(u,v) + m(∂t(u),v) - ∫((∇⋅v)*p)dΩ + ∫(q*(∇⋅u))dΩ - b((v,q),t)
-  jac(t,(u,p),(du,dp),(v,q)) = a(du,v) - ∫((∇⋅v)*dp)dΩ + ∫(q*(∇⋅du))dΩ
-  jac_t(t,(u,p),(dut,dpt),(v,q)) = m(dut,v)
-
-  b((v,q)) = b((v,q),0.0)
-
-  mat((du1,du2),(v1,v2)) = a(du1,v1)+a(du2,v2)
+  res(t,(u,p),(v,q)) = a(t,u,v) + m(t,∂t(u),v) - ∫((∇⋅v)*p)dΩ + ∫(q*(∇⋅u))dΩ - b(t,(v,q))
+  jac(t,(u,p),(du,dp),(v,q)) = a(t,du,v) - ∫((∇⋅v)*dp)dΩ + ∫(q*(∇⋅du))dΩ
+  jac_t(t,(u,p),(dut,dpt),(v,q)) = m(t,dut,v)
 
   U0 = U(0.0)
   P0 = P(0.0)
@@ -87,23 +83,18 @@ function main(distribute,parts)
   tF = 1.0
   dt = 0.1
 
-  ls = LUSolver()
-  ode_solver = ThetaMethod(ls,dt,θ)
+  ls  = LUSolver()
+  nls = NewtonRaphsonSolver(ls,1.0e-6,10)
+  ode_solver = ThetaMethod(nls,dt,θ)
 
   sol_t = solve(ode_solver,op,t0,tF,xh0)
 
   l2(w) = w⋅w
-
-
   tol = 1.0e-6
-  _t_n = t0
-
-  result = Base.iterate(sol_t)
-
-  for (xh_tn, tn) in sol_t
+  for (tn, xh_tn) in sol_t
     uh_tn = xh_tn[1]
     ph_tn = xh_tn[2]
-    writevtk(Ω,"output/tmp_stokes_OB_sol_$tn.vtu",cellfields=["u"=>uh_tn,"p"=>ph_tn])
+    #writevtk(Ω,"output/tmp_stokes_OB_sol_$tn.vtu",cellfields=["u"=>uh_tn,"p"=>ph_tn])
     e = u(tn) - uh_tn
     el2 = sqrt(sum( ∫(l2(e))dΩ ))
     e = p(tn) - ph_tn

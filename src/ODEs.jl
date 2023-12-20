@@ -2,19 +2,29 @@
 # Distributed FESpace commons
 
 function Arrays.evaluate!(transient_space::DistributedFESpace, space::DistributedFESpace, t::Real)
-  map(local_values(transient_space),local_views(space)) do transient_space, space
+  map(local_views(transient_space),local_views(space)) do transient_space, space
     Arrays.evaluate!(transient_space,space,t)
   end
-  return space
+  return transient_space
 end
 
 # SingleField FESpace
 
-const DistributedTransientTrialFESpace = DistributedSingleFieldFESpace{AbstractArray{<:ODEs.AbstractTransientTrialFESpace}}
+const DistributedTransientTrialFESpace = DistributedSingleFieldFESpace{<:AbstractArray{<:ODEs.TransientTrialFESpace}}
 
-function ODEs.TransientTrialFESpace(space::DistributedSingleFieldFESpace,args...)
+function ODEs.TransientTrialFESpace(space::DistributedSingleFieldFESpace,transient_dirichlet::Union{Function, AbstractVector{<:Function}})
   spaces = map(local_views(space)) do space
-    ODEs.TransientTrialFESpace(space,args...)
+    ODEs.TransientTrialFESpace(space,transient_dirichlet)
+  end
+  gids  = get_free_dof_ids(space)
+  trian = get_triangulation(space)
+  vector_type = get_vector_type(space)
+  DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
+end
+
+function ODEs.TransientTrialFESpace(space::DistributedSingleFieldFESpace)
+  spaces = map(local_views(space)) do space
+    ODEs.TransientTrialFESpace(space)
   end
   gids  = get_free_dof_ids(space)
   trian = get_triangulation(space)
@@ -32,7 +42,7 @@ function ODEs.allocate_space(space::DistributedTransientTrialFESpace)
   DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
 end
 
-function ODEs.time_derivative(space::DistributedTransientTrialFESpace)
+function ODEs.time_derivative(space::DistributedSingleFieldFESpace)
   spaces = map(ODEs.time_derivative,local_views(space))
   gids   = get_free_dof_ids(space)
   trian  = get_triangulation(space)
@@ -74,40 +84,49 @@ end
 
 # MultiField FESpace
 
-const DistributedTransientMultiFieldFESpace{MS,A} = 
-  DistributedMultiFieldFESpace{MS,A,<:AbstractArray{<:ODEs.TransientMultiFieldFESpace}}
-
-function ODEs.TransientMultiFieldFESpace(spaces::Vector{<:DistributedSingleFieldFESpace})
-  MultiFieldFESpace(spaces)
+function ODEs.has_transient(space::DistributedMultiFieldFESpace)
+  getany(map(ODEs.has_transient,local_views(space)))
 end
 
-function ODEs.allocate_space(space::DistributedTransientMultiFieldFESpace{MS}) where MS
-  field_fe_spaces = map(ODEs.allocate_space,space.field_fe_spaces)
-  spaces = to_parray_of_arrays(map(local_views,field_fe_spaces))
-  part_fe_spaces = map(s -> MultiFieldFESpace(s;style=MS()),spaces)
+function ODEs.allocate_space(space::DistributedMultiFieldFESpace)
+  if !ODEs.has_transient(space)
+    return space
+  end
+  field_fe_space = map(ODEs.allocate_space,space.field_fe_space)
+  style = MultiFieldStyle(space)
+  spaces = to_parray_of_arrays(map(local_views,field_fe_space))
+  part_fe_spaces = map(s -> MultiFieldFESpace(s;style),spaces)
   gids   = get_free_dof_ids(space)
   vector_type = get_vector_type(space)
-  DistributedMultiFieldFESpace(field_fe_spaces,part_fe_spaces,gids,vector_type)
+  DistributedMultiFieldFESpace(field_fe_space,part_fe_spaces,gids,vector_type)
 end
 
-function ODEs.time_derivative(f::DistributedTransientMultiFieldFESpace{MS}) where MS
-  field_fe_spaces = map(ODEs.time_derivative,f.field_fe_spaces)
-  spaces = to_parray_of_arrays(map(local_views,field_fe_spaces))
-  part_fe_spaces = map(s -> MultiFieldFESpace(s;style=MS()),spaces)
-  gids   = get_free_dof_ids(f)
-  vector_type = get_vector_type(f)
-  DistributedMultiFieldFESpace(field_fe_spaces,part_fe_spaces,gids,vector_type)
+function ODEs.time_derivative(space::DistributedMultiFieldFESpace)
+  if !ODEs.has_transient(space)
+    return space
+  end
+  field_fe_space = map(ODEs.time_derivative,space.field_fe_space)
+  style = MultiFieldStyle(space)
+  spaces = to_parray_of_arrays(map(local_views,field_fe_space))
+  part_fe_spaces = map(s -> MultiFieldFESpace(s;style),spaces)
+  gids   = get_free_dof_ids(space)
+  vector_type = get_vector_type(space)
+  DistributedMultiFieldFESpace(field_fe_space,part_fe_spaces,gids,vector_type)
 end
 
 for T in [:Real,:Nothing]
   @eval begin
-    function Arrays.evaluate(space::DistributedTransientMultiFieldFESpace{MS}, t::$T) where MS
-      field_fe_spaces = map(s->Arrays.evaluate(s,t),space.field_fe_spaces)
-      spaces = to_parray_of_arrays(map(local_views,field_fe_spaces))
-      part_fe_spaces = map(s -> MultiFieldFESpace(s;style=MS()),spaces)
+    function Arrays.evaluate(space::DistributedMultiFieldFESpace, t::$T)
+      if !ODEs.has_transient(space)
+        return space
+      end
+      field_fe_space = map(s->Arrays.evaluate(s,t),space.field_fe_space)
+      style = MultiFieldStyle(space)
+      spaces = to_parray_of_arrays(map(local_views,field_fe_space))
+      part_fe_spaces = map(s -> MultiFieldFESpace(s;style),spaces)
       gids = get_free_dof_ids(space)
       vector_type = get_vector_type(space)
-      DistributedMultiFieldFESpace(field_fe_spaces,part_fe_spaces,gids,vector_type)
+      DistributedMultiFieldFESpace(field_fe_space,part_fe_spaces,gids,vector_type)
     end
   end
 end

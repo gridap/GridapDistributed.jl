@@ -78,6 +78,7 @@ function CellData.get_triangulation(a::DistributedMultiFieldFESpace)
 end
 
 MultiField.MultiFieldStyle(::Type{<:DistributedMultiFieldFESpace{MS}}) where MS = MS()
+MultiField.MultiFieldStyle(a::DistributedMultiFieldFESpace) = MultiField.MultiFieldStyle(typeof(a))
 
 local_views(a::DistributedMultiFieldFESpace) = a.part_fe_space
 MultiField.num_fields(m::DistributedMultiFieldFESpace) = length(m.field_fe_space)

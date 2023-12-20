@@ -29,6 +29,46 @@ function Algebra.allocate_in_domain(matrix::BlockPMatrix)
   allocate_in_domain(BlockPVector{V},matrix)
 end
 
+# PartitionedArrays extras
+
+function LinearAlgebra.axpy!(α,x::PVector,y::PVector)
+  @check partition(axes(x,1)) === partition(axes(y,1))
+  map(partition(x),partition(y)) do x,y
+    LinearAlgebra.axpy!(α,x,y)
+  end
+  return y
+end
+
+function LinearAlgebra.axpy!(α,x::BlockPVector,y::BlockPVector)
+  map(blocks(x),blocks(y)) do x,y
+    LinearAlgebra.axpy!(α,x,y)
+  end
+  return y
+end
+
+function Algebra.axpy_entries!(
+  α::Number, A::PSparseMatrix, B::PSparseMatrix;
+  check::Bool=true
+)
+# We should definitely check here that the index partitions are the same. 
+# However: Because the different matrices are assembled separately, the objects are not the 
+# same (i.e can't use ===). Checking the index partitions would then be costly...
+  map(partition(A),partition(B)) do A, B
+    Algebra.axpy_entries!(α,A,B;check)
+  end
+  return B
+end
+
+function Algebra.axpy_entries!(
+  α::Number, A::BlockPMatrix, B::BlockPMatrix;
+  check::Bool=true
+)
+  map(blocks(A),blocks(B)) do A, B
+    Algebra.axpy_entries!(α,A,B;check)
+  end
+  return B
+end
+
 # This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.ArrayCounter,axes)
   @notimplemented
