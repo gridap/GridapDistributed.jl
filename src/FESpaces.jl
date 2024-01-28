@@ -621,7 +621,10 @@ end
 function FESpaces.symbolic_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
   rows = get_rows(a)
   cols = get_cols(a)
-  map(symbolic_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
+  Aviews=local_views(A,rows,cols)
+  bviews=local_views(b,rows)
+  aviews=local_views(a)
+  map(symbolic_loop_matrix_and_vector!,Aviews,bviews,aviews,data)  
 end
 
 function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
