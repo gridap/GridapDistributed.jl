@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added redistribution for MultiFieldFESpaces. Since PR [#140](https://github.com/gridap/GridapDistributed.jl/pull/140).
 
+### Fixed 
+
+- Fixed issue [#142](https://github.com/gridap/GridapDistributed.jl/issues/142). Since PR [#142](https://github.com/gridap/GridapDistributed.jl/pull/142).
+
 ## [0.3.5] - 2023-12-04
 
 ### Added
