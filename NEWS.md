@@ -5,11 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.3.6] 2024-01-28 
 
 ### Added
 
 - Added redistribution for MultiFieldFESpaces. Since PR [#140](https://github.com/gridap/GridapDistributed.jl/pull/140).
+
+### Fixed 
+
+- Fixed issue [#142](https://github.com/gridap/GridapDistributed.jl/issues/142). Since PR [#142](https://github.com/gridap/GridapDistributed.jl/pull/142).
 
 ## [0.3.5] - 2023-12-04
 

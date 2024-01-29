@@ -547,17 +547,17 @@ end
 
 function Algebra.create_from_nz(a::DistributedAllocationCOO{<:SubAssembledRows})
   f(x) = nothing
-  A, = _sa_create_from_nz_with_callback(f,f,a)
+  A, = _sa_create_from_nz_with_callback(f,f,a,nothing)
   return A
 end
 
 function Algebra.create_from_nz(a::ArrayBlock{<:DistributedAllocationCOO{<:SubAssembledRows}})
   f(x) = nothing
-  A, = _sa_create_from_nz_with_callback(f,f,a)
+  A, = _sa_create_from_nz_with_callback(f,f,a,nothing)
   return A
 end
 
-function _sa_create_from_nz_with_callback(callback,async_callback,a)
+function _sa_create_from_nz_with_callback(callback,async_callback,a,b)
   # Recover some data
   I,J,V = get_allocations(a)
   test_dofs_gids_prange = get_test_gids(a)
@@ -578,7 +578,10 @@ function _sa_create_from_nz_with_callback(callback,async_callback,a)
   # Here we can overlap computations
   # This is a good place to overlap since
   # sending the matrix rows is a lot of data
-  b = callback(rows)
+  if !isa(b,Nothing)
+    bprange=_setup_prange_from_pvector_allocation(b)
+    b = callback(bprange)
+  end
 
   # Wait the transfer to finish
   wait(t)
@@ -741,10 +744,10 @@ end
 
 function Algebra.create_from_nz(
   a::DistributedAllocationCOO{<:SubAssembledRows},
-  c_fespace::PVectorAllocationTrackOnlyValues{<:SubAssembledRows})
+  b::PVectorAllocationTrackTouchedAndValues)
 
   function callback(rows)
-    _rhs_callback(c_fespace,rows)
+    _rhs_callback(b,rows)
   end
 
   function async_callback(b)
@@ -752,7 +755,7 @@ function Algebra.create_from_nz(
     assemble!(b)
   end
 
-  A,b = _sa_create_from_nz_with_callback(callback,async_callback,a)
+  A,b = _sa_create_from_nz_with_callback(callback,async_callback,a,b)
   return A,b
 end
 
@@ -799,24 +802,31 @@ end
   nothing
 end
 
+
+function _setup_touched_and_allocations_arrays(values)
+  touched = map(values) do values
+    fill!(Vector{Bool}(undef,length(values)),false)
+  end
+  allocations = map(values,touched) do values,touched
+   ArrayAllocationTrackTouchedAndValues(touched,values)
+  end
+  touched, allocations
+end
+
 function Arrays.nz_allocation(a::DistributedCounterCOO{<:SubAssembledRows},
                               b::PVectorCounter{<:SubAssembledRows})
   A      = nz_allocation(a)
   dofs   = b.test_dofs_gids_prange
   values = map(nz_allocation,b.counters)
-  B = PVectorAllocationTrackOnlyValues(b.par_strategy,values,dofs)
+  touched,allocations=_setup_touched_and_allocations_arrays(values)
+  B = PVectorAllocationTrackTouchedAndValues(allocations,values,dofs)
   return A,B
 end
 
 function Arrays.nz_allocation(a::PVectorCounter{<:SubAssembledRows})
   dofs = a.test_dofs_gids_prange
   values = map(nz_allocation,a.counters)
-  touched = map(values) do values
-     fill!(Vector{Bool}(undef,length(values)),false)
-  end
-  allocations = map(values,touched) do values,touched
-    ArrayAllocationTrackTouchedAndValues(touched,values)
-  end
+  touched,allocations=_setup_touched_and_allocations_arrays(values)
   return PVectorAllocationTrackTouchedAndValues(allocations,values,dofs)
 end
 
@@ -824,7 +834,7 @@ function local_views(a::PVectorAllocationTrackTouchedAndValues)
   a.allocations
 end
 
-function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
+function _setup_prange_from_pvector_allocation(a::PVectorAllocationTrackTouchedAndValues)
   test_dofs_prange = a.test_dofs_gids_prange # dof ids of the test space
   ngrdofs = length(test_dofs_prange)
   
@@ -850,10 +860,13 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
   gids_ghost_to_global, gids_ghost_to_owner = map(
     find_gid_and_owner,I_ghost_lids_to_dofs_ghost_lids,indices) |> tuple_of_arrays
 
-  rows = _setup_prange_impl_(ngrdofs,indices,gids_ghost_to_global,gids_ghost_to_owner)
+  _setup_prange_impl_(ngrdofs,indices,gids_ghost_to_global,gids_ghost_to_owner)
+end
+
+function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
+  rows = _setup_prange_from_pvector_allocation(a)
   b    = _rhs_callback(a,rows)
   t2   = assemble!(b)
-
   # Wait the transfer to finish
   if t2 !== nothing
     wait(t2)
@@ -861,9 +874,7 @@ function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
   return b
 end
 
-
 # Common Assembly Utilities
-
 function first_gdof_from_ids(ids)
   if own_length(ids) == 0
     return 1
