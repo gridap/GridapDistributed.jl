@@ -58,6 +58,19 @@ function main(distribute,parts)
   u3 = CellField(2.0,Ω)
   u = _my_op∘(u1,u2,u3)
 
+  # Point δ
+  δ=DiracDelta{0}(model;tags=2)
+  @test sum(δ(f)) ≈ 4.0
+  @test sum(δ(3.0)) ≈ 3.0
+  @test sum(δ(x->2*x)) ≈ VectorValue(8.0,0.0)
+  
+  # Line δ
+  degree = 2
+  δ = DiracDelta{1}(model,degree,tags=5)
+  @test sum(δ(f)) ≈ 8.0
+  @test sum(δ(3.0)) ≈ 12.0
+  @test sum(δ(x->2*x)) ≈ VectorValue(16.0,0.0)
+
 end
 
 end # module
