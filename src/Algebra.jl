@@ -106,6 +106,24 @@ function to_parray_of_arrays(a::AbstractArray{<:DebugArray})
   end
 end
 
+function to_parray_of_arrays(a::NTuple{N,<:DebugArray}) where N
+  indices = linear_indices(first(a))
+  map(indices) do i
+    map(a) do aj
+      aj.items[i]
+    end
+  end
+end  
+
+function to_parray_of_arrays(a::NTuple{N,<:MPIArray}) where N
+  indices = linear_indices(first(a))
+  map(indices) do i
+    map(a) do aj
+      PartitionedArrays.getany(aj)
+    end
+  end
+end
+
 # This type is required because MPIArray from PArrays 
 # cannot be instantiated with a NULL communicator
 struct MPIVoidVector{T} <: AbstractVector{T}
