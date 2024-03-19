@@ -121,6 +121,23 @@ function FESpaces.FEFunction(f::DistributedMultiFieldFESpace,x::AbstractVector,i
   DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
 end
 
+function FESpaces.FEFunction(
+  f::DistributedMultiFieldFESpace,x::AbstractVector,
+  dirichlet_values::AbstractArray{<:AbstractVector},isconsistent=false
+  )
+  free_values  = GridapDistributed.change_ghost(x,f.gids;is_consistent=isconsistent,make_consistent=true)
+  part_fe_fun  = map(FEFunction,f.part_fe_space,partition(free_values))
+  field_fe_fun = DistributedSingleFieldFEFunction[]
+  for i in 1:num_fields(f)
+    free_values_i = restrict_to_field(f,free_values,i)
+    dirichlet_values_i = dirichlet_values[i]
+    fe_space_i = f.field_fe_space[i]
+    fe_fun_i = FEFunction(fe_space_i,free_values_i,dirichlet_values_i,true)
+    push!(field_fe_fun,fe_fun_i)
+  end
+  DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
+end
+
 function FESpaces.EvaluationFunction(f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
   free_values  = change_ghost(x,f.gids;is_consistent=isconsistent,make_consistent=true)
   part_fe_fun  = map(EvaluationFunction,f.part_fe_space,partition(free_values))
@@ -151,6 +168,24 @@ function FESpaces.interpolate!(objects,free_values::AbstractVector,fe::Distribut
     push!(field_fe_fun,fe_fun_i)
   end
   DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
+end
+
+function Gridap.FESpaces.interpolate!(
+  objects::Union{<:DistributedMultiFieldCellField,<:DistributedCellField},
+  free_values::AbstractVector,
+  fe::DistributedMultiFieldFESpace
+)
+  part_fe_fun = map(local_views(objects),partition(free_values),local_views(fe)) do objects,x,f
+    interpolate!(objects,x,f)
+  end
+  field_fe_fun = GridapDistributed.DistributedSingleFieldFEFunction[]
+  for i in 1:num_fields(fe)
+    free_values_i = Gridap.MultiField.restrict_to_field(fe,free_values,i)
+    fe_space_i = fe.field_fe_space[i]
+    fe_fun_i = FEFunction(fe_space_i,free_values_i)
+    push!(field_fe_fun,fe_fun_i)
+  end
+  GridapDistributed.DistributedMultiFieldFEFunction(field_fe_fun,part_fe_fun,free_values)
 end
 
 function FESpaces.interpolate_everywhere(objects,fe::DistributedMultiFieldFESpace)
