@@ -169,9 +169,11 @@ function i_am_in(comm::MPIVoidVector)
 end
 
 function change_parts(x::Union{MPIArray,DebugArray,Nothing,MPIVoidVector}, new_parts; default=nothing)
-  x_new = map(new_parts) do _p
-    if isa(x,MPIArray) || isa(x,DebugArray)
+  x_new = map(new_parts) do p
+    if isa(x,MPIArray)
       PartitionedArrays.getany(x)
+    elseif isa(x,DebugArray) && (p <= length(x.items))
+      x.items[p]
     else
       default
     end
