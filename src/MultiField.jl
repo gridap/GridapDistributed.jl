@@ -33,6 +33,11 @@ Base.iterate(m::DistributedMultiFieldCellField) = iterate(m.field_fe_fun)
 Base.iterate(m::DistributedMultiFieldCellField,state) = iterate(m.field_fe_fun,state)
 Base.getindex(m::DistributedMultiFieldCellField,field_id::Integer) = m.field_fe_fun[field_id]
 
+function LinearAlgebra.dot(a::DistributedMultiFieldCellField,b::DistributedMultiFieldCellField)
+  @check num_fields(a) == num_fields(b)
+  return sum(map(dot,a.field_fe_fun,b.field_fe_fun))
+end
+
 # DistributedMultiFieldFEFunction
 
 const DistributedMultiFieldFEFunction{A,B,T} = DistributedMultiFieldCellField{A,B,DistributedFEFunctionData{T}}

@@ -68,6 +68,14 @@ function main(distribute, parts, mfs)
   @test l2_error(p,ph1,dΩ) < 1.0e-9
   @test l2_error(u,uh2,dΩ) < 1.0e-9
   @test l2_error(p,ph2,dΩ) < 1.0e-9
+
+  a1(x,y) = ∫(x⋅y)dΩ
+  a2((u,p),(v,q)) = ∫(u⋅v + p⋅q)dΩ
+  A1 = assemble_matrix(a1,UxP,UxP)
+  A2 = assemble_matrix(a2,UxP,UxP)
+
+  x = prandn(partition(axes(A1,2)))
+  @test norm(A1*x-A2*x) < 1.0e-9
 end
 
 function main(distribute, parts)
