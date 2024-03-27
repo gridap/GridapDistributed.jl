@@ -7,13 +7,6 @@ using PartitionedArrays
 using Test
 using SparseArrays
 
-# Overload required for the tests below
-function Base.copy(a::PSparseMatrix)
-  a_matrix_partition = similar(a.matrix_partition)
-  copy!(a_matrix_partition, a.matrix_partition)
-  PSparseMatrix(a_matrix_partition,a.row_partition,a.col_partition)
-end
-
 function main(distribute,parts)
   main(distribute,parts,FullyAssembledRows(),SparseMatrixCSR{0,Float64,Int})
   main(distribute,parts,SubAssembledRows(),SparseMatrixCSC{Float64,Int})

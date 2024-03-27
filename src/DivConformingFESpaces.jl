@@ -27,8 +27,9 @@ function _common_fe_space_constructor(model,cell_reffes;conformity,kwargs...)
      FESpace(m, cell_fe; kwargs...)
   end
   gids = generate_gids(model,spaces)
+  trian = DistributedTriangulation(map(get_triangulation,spaces),model)
   vector_type = _find_vector_type(spaces,gids)
-  DistributedSingleFieldFESpace(spaces,gids,vector_type)
+  DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
 end
 
 function _generate_sign_flips(model,cell_reffes)

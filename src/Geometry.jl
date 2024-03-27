@@ -398,6 +398,10 @@ function Geometry.get_background_model(a::DistributedTriangulation)
   a.model
 end
 
+function Geometry.num_cells(a::DistributedTriangulation)
+  sum(map(trian->num_cells(trian),local_views(a)))
+end
+
 # Triangulation constructors
 
 function Geometry.Triangulation(

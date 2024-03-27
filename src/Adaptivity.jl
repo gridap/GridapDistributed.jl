@@ -3,9 +3,9 @@
 
 const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:AdaptedDiscreteModel{Dc,Dp}}}
 
-function DistributedAdaptedDiscreteModel(model  ::DistributedDiscreteModel,
-                                         parent ::DistributedDiscreteModel,
-                                         glue   ::AbstractArray{<:AdaptivityGlue})
+function DistributedAdaptedDiscreteModel(model  :: DistributedDiscreteModel,
+                                         parent :: DistributedDiscreteModel,
+                                         glue   :: AbstractArray{<:AdaptivityGlue})
   models = map(local_views(model),local_views(parent),glue) do model, parent, glue
     AdaptedDiscreteModel(model,parent,glue)
   end
