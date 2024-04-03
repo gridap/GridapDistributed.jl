@@ -156,17 +156,18 @@ function get_part_id(comm::MPI.Comm)
   id
 end
 
+"""
+    i_am_in(comm::MPIArray)
+    i_am_in(comm::DebugArray)
+  
+  Returns `true` if the processor is part of the subcommunicator `comm`.
+"""
 function i_am_in(comm::MPI.Comm)
   get_part_id(comm) >=0
 end
-
-function i_am_in(comm::MPIArray)
-  i_am_in(comm.comm)
-end
-
-function i_am_in(comm::MPIVoidVector)
-  i_am_in(comm.comm)
-end
+@inline i_am_in(comm::MPIArray) = i_am_in(comm.comm)
+@inline i_am_in(comm::MPIVoidVector) = i_am_in(comm.comm)
+@inline i_am_in(comm::DebugArray) = true
 
 function change_parts(x::Union{MPIArray,DebugArray,Nothing,MPIVoidVector}, new_parts; default=nothing)
   x_new = map(new_parts) do p
