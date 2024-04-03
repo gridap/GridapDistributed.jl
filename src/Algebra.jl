@@ -146,6 +146,9 @@ function num_parts(comm::MPI.Comm)
   end
   nparts
 end
+@inline num_parts(comm::MPIArray) = num_parts(comm.comm)
+@inline num_parts(comm::DebugArray) = length(comm.items)
+@inline num_parts(comm::MPIVoidVector) = num_parts(comm.comm)
 
 function get_part_id(comm::MPI.Comm)
   if comm != MPI.COMM_NULL
@@ -155,6 +158,8 @@ function get_part_id(comm::MPI.Comm)
   end
   id
 end
+@inline get_part_id(comm::MPIArray) = get_part_id(comm.comm)
+@inline get_part_id(comm::MPIVoidVector) = get_part_id(comm.comm)
 
 """
     i_am_in(comm::MPIArray)
