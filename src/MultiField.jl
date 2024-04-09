@@ -113,6 +113,10 @@ function FESpaces.zero_dirichlet_values(f::DistributedMultiFieldFESpace)
   map(zero_dirichlet_values,f.field_fe_space)
 end
 
+function FESpaces.get_dirichlet_dof_values(f::DistributedMultiFieldFESpace)
+  return map(get_dirichlet_dof_values,f.field_fe_space)
+end
+
 function FESpaces.FEFunction(f::DistributedMultiFieldFESpace,x::AbstractVector,isconsistent=false)
   free_values  = change_ghost(x,f.gids;is_consistent=isconsistent,make_consistent=true)
   part_fe_fun  = map(FEFunction,f.part_fe_space,partition(free_values))
@@ -129,9 +133,10 @@ end
 function FESpaces.FEFunction(
   f::DistributedMultiFieldFESpace,x::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},isconsistent=false
-  )
+)
   free_values  = GridapDistributed.change_ghost(x,f.gids;is_consistent=isconsistent,make_consistent=true)
-  part_fe_fun  = map(FEFunction,f.part_fe_space,partition(free_values))
+  part_dirvals = to_parray_of_arrays(dirichlet_values)
+  part_fe_fun  = map(FEFunction,f.part_fe_space,partition(free_values),part_dirvals)
   field_fe_fun = DistributedSingleFieldFEFunction[]
   for i in 1:num_fields(f)
     free_values_i = restrict_to_field(f,free_values,i)
