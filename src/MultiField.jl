@@ -101,8 +101,9 @@ function FESpaces.get_free_dof_ids(fs::DistributedMultiFieldFESpace)
 end
 
 function MultiField.restrict_to_field(
-  f::DistributedMultiFieldFESpace,free_values::AbstractVector,field::Integer)
-  values = map(f.part_fe_space,partition(free_values)) do u,x
+  f::DistributedMultiFieldFESpace,free_values::AbstractVector,field::Integer
+)
+  values = map(local_views(f),partition(free_values)) do u,x
     restrict_to_field(u,x,field)
   end
   gids = f.field_fe_space[field].gids

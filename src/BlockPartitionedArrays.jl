@@ -341,16 +341,19 @@ function Base.broadcasted(f, a::Union{BlockPArray,BlockPBroadcasted}, b::Number)
   return BlockPBroadcasted(blocks_out,blockaxes(a))
 end
 
-function Base.broadcasted(f,
-                        a::Union{BlockPArray,BlockPBroadcasted},
-                        b::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}})
+function Base.broadcasted(
+  f,
+  a::Union{BlockPArray,BlockPBroadcasted},
+  b::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}}
+)
   Base.broadcasted(f,a,Base.materialize(b))
 end
 
 function Base.broadcasted(
   f,
   a::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
-  b::Union{BlockPArray,BlockPBroadcasted})
+  b::Union{BlockPArray,BlockPBroadcasted}
+)
   Base.broadcasted(f,Base.materialize(a),b)
 end
 
