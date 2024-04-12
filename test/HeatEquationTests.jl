@@ -38,7 +38,7 @@ function main(distribute,parts)
 
   assembler = SparseMatrixAssembler(U,V0,SubAssembledRows())
   op_constant = TransientLinearFEOperator(
-    (a,m),(t,v) -> (-1)*b(t,v),U,V0,constant_forms=(true,true),assembler=assembler
+    (a,m),b,U,V0,constant_forms=(true,true),assembler=assembler
   )
 
   t0 = 0.0
