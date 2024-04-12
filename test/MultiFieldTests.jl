@@ -1,8 +1,7 @@
 module MultiFieldTests
 
 using Gridap
-using Gridap.FESpaces
-using Gridap.MultiField
+using Gridap.FESpaces, Gridap.MultiField, Gridap.Algebra
 using GridapDistributed
 using PartitionedArrays
 using Test
@@ -74,8 +73,9 @@ function main(distribute, parts, mfs)
   A1 = assemble_matrix(a1,UxP,UxP)
   A2 = assemble_matrix(a2,UxP,UxP)
 
-  x = prandn(partition(axes(A1,2)))
-  @test norm(A1*x-A2*x) < 1.0e-9
+  x1 = allocate_in_domain(A1); fill!(x1,1.0)
+  x2 = allocate_in_domain(A2); fill!(x2,1.0)
+  @test norm(A1*x1-A2*x2) < 1.0e-9
 end
 
 function main(distribute, parts)

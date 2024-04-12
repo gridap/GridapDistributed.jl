@@ -145,17 +145,19 @@ end
 
 function Base.copyto!(y::BlockPVector,x::BlockPVector)
   @check blocklength(x) == blocklength(y)
-  for i in blockaxes(x,1)
-    copyto!(y[i],x[i])
+  yb, xb = blocks(y), blocks(x)
+  for i in 1:blocksize(x,1)
+    copyto!(yb[i],xb[i])
   end
   return y
 end
 
 function Base.copyto!(y::BlockPMatrix,x::BlockPMatrix)
   @check blocksize(x) == blocksize(y)
-  for i in blockaxes(x,1)
-    for j in blockaxes(x,2)
-      copyto!(y[i,j],x[i,j])
+  yb, xb = blocks(y), blocks(x)
+  for i in 1:blocksize(x,1)
+    for j in 1:blocksize(x,2)
+      copyto!(yb[i,j],xb[i,j])
     end
   end
   return y
@@ -169,6 +171,8 @@ function Base.fill!(a::BlockPVector,v)
 end
 
 function Base.sum(a::BlockPArray)
+  # TODO: This could use a single communication, instead of one for each block
+  # TODO: We could implement a generic reduce, that we apply to sum, all, any, etc..
   return sum(map(sum,blocks(a)))
 end
 
@@ -284,15 +288,47 @@ end
 
 # LinearAlgebra API
 
-function LinearAlgebra.mul!(y::BlockPVector,A::BlockPMatrix,x::BlockPVector)
-  z = zero(eltype(y))
-  o = one(eltype(A))
-  for i in blockaxes(A,2)
-    fill!(y[i],z)
-    for j in blockaxes(A,2)
-      mul!(y[i],A[i,j],x[j],o,o)
+function Base.:*(a::Number,b::BlockArray)
+  mortar(map(bi -> a*bi,blocks(b)))
+end
+Base.:*(b::BlockPMatrix,a::Number) = a*b
+Base.:/(b::BlockPVector,a::Number) = (1/a)*b
+
+function Base.:*(a::BlockPMatrix,b::BlockPVector)
+  c = similar(b)
+  mul!(c,a,b)
+  return c
+end
+
+for op in (:+,:-)
+  @eval begin
+    function Base.$op(a::BlockPArray)
+      mortar(map($op,blocks(a)))
+    end
+    function Base.$op(a::BlockPArray,b::BlockPArray)
+      @assert blocksize(a) == blocksize(b)
+      mortar(map($op,blocks(a),blocks(b)))
     end
   end
+end
+
+function LinearAlgebra.mul!(y::BlockPVector,A::BlockPMatrix,x::BlockPVector)
+  o = one(eltype(A))
+  mul!(y,A,x,o,o)
+end
+
+function LinearAlgebra.mul!(y::BlockPVector,A::BlockPMatrix,x::BlockPVector,α::Number,β::Number)
+  yb, Ab, xb = blocks(y), blocks(A), blocks(x)
+  z = zero(eltype(y))
+  o = one(eltype(A))
+  for i in 1:blocksize(A,1)
+    fill!(yb[i],z)
+    for j in 1:blocksize(A,2)
+      mul!(yb[i],Ab[i,j],xb[j],α,o)
+    end
+    rmul!(yb[i],β)
+  end
+  return y
 end
 
 function LinearAlgebra.dot(x::BlockPVector,y::BlockPVector)
