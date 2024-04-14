@@ -29,6 +29,57 @@ function Algebra.allocate_in_domain(matrix::BlockPMatrix)
   allocate_in_domain(BlockPVector{V},matrix)
 end
 
+# PSparseMatrix copy
+
+function Base.copy(a::PSparseMatrix)
+  mats = map(copy,partition(a))
+  cache = map(PartitionedArrays.copy_cache,a.cache)
+  return PSparseMatrix(mats,partition(axes(a,1)),partition(axes(a,2)),cache)
+end
+
+# PartitionedArrays extras
+
+function LinearAlgebra.axpy!(α,x::PVector,y::PVector)
+  @check partition(axes(x,1)) === partition(axes(y,1))
+  map(partition(x),partition(y)) do x,y
+    LinearAlgebra.axpy!(α,x,y)
+  end
+  consistent!(y) |> wait
+  return y
+end
+
+function LinearAlgebra.axpy!(α,x::BlockPVector,y::BlockPVector)
+  map(blocks(x),blocks(y)) do x,y
+    LinearAlgebra.axpy!(α,x,y)
+  end
+  return y
+end
+
+function Algebra.axpy_entries!(
+  α::Number, A::PSparseMatrix, B::PSparseMatrix;
+  check::Bool=true
+)
+# We should definitely check here that the index partitions are the same. 
+# However: Because the different matrices are assembled separately, the objects are not the 
+# same (i.e can't use ===). Checking the index partitions would then be costly...
+  @assert reduce(&,map(PartitionedArrays.matching_local_indices,partition(axes(A,1)),partition(axes(B,1))))
+  @assert reduce(&,map(PartitionedArrays.matching_local_indices,partition(axes(A,2)),partition(axes(B,2))))
+  map(partition(A),partition(B)) do A, B
+    Algebra.axpy_entries!(α,A,B;check)
+  end
+  return B
+end
+
+function Algebra.axpy_entries!(
+  α::Number, A::BlockPMatrix, B::BlockPMatrix;
+  check::Bool=true
+)
+  map(blocks(A),blocks(B)) do A, B
+    Algebra.axpy_entries!(α,A,B;check)
+  end
+  return B
+end
+
 # This might go to Gridap in the future. We keep it here for the moment.
 function change_axes(a::Algebra.ArrayCounter,axes)
   @notimplemented
@@ -95,6 +146,9 @@ function num_parts(comm::MPI.Comm)
   end
   nparts
 end
+@inline num_parts(comm::MPIArray) = num_parts(comm.comm)
+@inline num_parts(comm::DebugArray) = length(comm.items)
+@inline num_parts(comm::MPIVoidVector) = num_parts(comm.comm)
 
 function get_part_id(comm::MPI.Comm)
   if comm != MPI.COMM_NULL
@@ -104,23 +158,28 @@ function get_part_id(comm::MPI.Comm)
   end
   id
 end
+@inline get_part_id(comm::MPIArray) = get_part_id(comm.comm)
+@inline get_part_id(comm::MPIVoidVector) = get_part_id(comm.comm)
 
+"""
+    i_am_in(comm::MPIArray)
+    i_am_in(comm::DebugArray)
+  
+  Returns `true` if the processor is part of the subcommunicator `comm`.
+"""
 function i_am_in(comm::MPI.Comm)
   get_part_id(comm) >=0
 end
-
-function i_am_in(comm::MPIArray)
-  i_am_in(comm.comm)
-end
-
-function i_am_in(comm::MPIVoidVector)
-  i_am_in(comm.comm)
-end
+@inline i_am_in(comm::MPIArray) = i_am_in(comm.comm)
+@inline i_am_in(comm::MPIVoidVector) = i_am_in(comm.comm)
+@inline i_am_in(comm::DebugArray) = true
 
 function change_parts(x::Union{MPIArray,DebugArray,Nothing,MPIVoidVector}, new_parts; default=nothing)
-  x_new = map(new_parts) do _p
-    if isa(x,MPIArray) || isa(x,DebugArray)
+  x_new = map(new_parts) do p
+    if isa(x,MPIArray)
       PartitionedArrays.getany(x)
+    elseif isa(x,DebugArray) && (p <= length(x.items))
+      x.items[p]
     else
       default
     end
@@ -314,7 +373,7 @@ end
 
 function local_views(a::BlockPMatrix,new_rows::BlockPRange,new_cols::BlockPRange)
   vals = map(CartesianIndices(blocksize(a))) do I
-    local_views(a[Block(I)],new_rows[Block(I[1])],new_cols[Block(I[2])])
+    local_views(blocks(a)[I],blocks(new_rows)[I],blocks(new_cols)[I])
   end |> to_parray_of_arrays
   return map(mortar,vals)
 end
@@ -795,12 +854,10 @@ function local_views(a::PVectorAllocationTrackTouchedAndValues)
 end
 
 function _setup_prange_from_pvector_allocation(a::PVectorAllocationTrackTouchedAndValues)
-  test_dofs_prange = a.test_dofs_gids_prange # dof ids of the test space
-  ngrdofs = length(test_dofs_prange)
-  
+
   # Find the ghost rows
   allocations = local_views(a.allocations)
-  indices = partition(test_dofs_prange)
+  indices = partition(a.test_dofs_gids_prange)
   I_ghost_lids_to_dofs_ghost_lids = map(allocations, indices) do allocation, indices
     dofs_lids_touched = findall(allocation.touched)
     loc_to_gho = local_to_ghost(indices)
@@ -817,10 +874,11 @@ function _setup_prange_from_pvector_allocation(a::PVectorAllocationTrackTouchedA
     I_ghost_lids
   end
 
-  gids_ghost_to_global, gids_ghost_to_owner = map(
+  ghost_to_global, ghost_to_owner = map(
     find_gid_and_owner,I_ghost_lids_to_dofs_ghost_lids,indices) |> tuple_of_arrays
 
-  _setup_prange_impl_(ngrdofs,indices,gids_ghost_to_global,gids_ghost_to_owner)
+  ngids = length(a.test_dofs_gids_prange)
+  _setup_prange_impl_(ngids,indices,ghost_to_global,ghost_to_owner)
 end
 
 function Algebra.create_from_nz(a::PVectorAllocationTrackTouchedAndValues)
@@ -848,7 +906,7 @@ function find_gid_and_owner(ighost_to_jghost,jindices)
   jghost_to_local  = ghost_to_local(jindices)
   jlocal_to_global = local_to_global(jindices)
   jlocal_to_owner  = local_to_owner(jindices)
-  ighost_to_jlocal = view(jghost_to_local,ighost_to_jghost)
+  ighost_to_jlocal = sort(view(jghost_to_local,ighost_to_jghost))
 
   ighost_to_global = jlocal_to_global[ighost_to_jlocal]
   ighost_to_owner  = jlocal_to_owner[ighost_to_jlocal]

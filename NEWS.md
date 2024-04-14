@@ -5,13 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.6] 2024-01-28 
+## [0.4.0] 2024-04-12
+
+### Changed
+
+- `DistributedCellField` now inherits from `CellField`. To accomodate the necessary API, we now save a pointer to the `DistributedTriangulation` where it is defined. This also requires `DistributedSingleFieldFESpace` to save the triangulation. Since PR[#141](https://github.com/gridap/GridapDistributed.jl/pull/141).
+- All the distributed `Multifield` cellfield types are now represented by a `DistributedMultiFieldCellField`. Both `DistributedMultiFieldFEFunction` and `DistributedMultiFieldFEBasis` structs have been removed and replaced with constant aliases, which makes it more consistent with single-field types. Since PR[#141](https://github.com/gridap/GridapDistributed.jl/pull/141).
+- Major refactor of ODE module. Implementation has been significantly simplified, while increasing the capability of the API. All `TransientDistributedObjects` structs have been removed, and replaced by `DistributedTransientObjects = DistributedObjects{TransientObject}`. Full support for EX/IM/IMEX methods. See Gridap's release for details. Since PR[#141](https://github.com/gridap/GridapDistributed.jl/pull/141).
+
+## [0.3.6] 2024-01-28
 
 ### Added
 
 - Added redistribution for MultiFieldFESpaces. Since PR [#140](https://github.com/gridap/GridapDistributed.jl/pull/140).
 
-### Fixed 
+### Fixed
 
 - Fixed issue [#142](https://github.com/gridap/GridapDistributed.jl/issues/142). Since PR [#142](https://github.com/gridap/GridapDistributed.jl/pull/142).
 
