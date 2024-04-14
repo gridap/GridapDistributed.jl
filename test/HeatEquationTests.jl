@@ -10,9 +10,10 @@ function main(distribute,parts)
   ranks = distribute(LinearIndices((prod(parts),)))
   θ = 0.2
 
-  u(x,t) = (1.0-x[1])*x[1]*(1.0-x[2])*x[2]*t
-  u(t::Real) = x -> u(x,t)
-  f(t) = x -> ∂t(u)(x,t)-Δ(u(t))(x)
+  ut(t) = x -> (1.0-x[1])*x[1]*(1.0-x[2])*x[2]*t
+  u = TimeSpaceFunction(ut)
+  ft(t) = x -> ∂t(u)(x,t)-Δ(u(t))(x)
+  f = TimeSpaceFunction(ft)
 
   domain = (0,1,0,1)
   model = CartesianDiscreteModel(ranks,parts,domain,(4,4))

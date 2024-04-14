@@ -12,16 +12,19 @@ function main(distribute,parts)
 
   θ = 0.5
 
-  u(x,t) = VectorValue(x[1],x[2])*t
-  u(t::Real) = x -> u(x,t)
+  ut(t) = x -> VectorValue(x[1],x[2])*t
+  u = TimeSpaceFunction(ut)
 
-  p(x,t) = (x[1]-x[2])*t
-  p(t::Real) = x -> p(x,t)
-  q(x) = t -> p(x,t)
+  pt(t) = x -> (x[1]-x[2])*t
+  p = TimeSpaceFunction(pt)
+  q(x) = t -> p(t,x)
 
-  f(t) = x -> ∂t(u)(t)(x)-Δ(u(t))(x)+ ∇(p(t))(x)
-  g(t) = x -> (∇⋅u(t))(x)
-  h(t) = x -> ∇(u(t))(x)⋅VectorValue(0.0,1.0) - p(t)(x)*VectorValue(0.0,1.0)
+  ft(t) = x -> ∂t(u)(t)(x)-Δ(u(t))(x)+ ∇(p(t))(x)
+  gt(t) = x -> (∇⋅u(t))(x)
+  ht(t) = x -> ∇(u(t))(x)⋅VectorValue(0.0,1.0) - p(t)(x)*VectorValue(0.0,1.0)
+  f = TimeSpaceFunction(ft)
+  g = TimeSpaceFunction(gt)
+  h = TimeSpaceFunction(ht)
 
   domain = (0,1,0,1)
   partition = (4,4)
