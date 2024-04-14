@@ -12,7 +12,7 @@ function main(distribute,parts)
 
   ut(t) = x -> (1.0-x[1])*x[1]*(1.0-x[2])*x[2]*t
   u = TimeSpaceFunction(ut)
-  ft(t) = x -> ∂t(u)(x,t)-Δ(u(t))(x)
+  ft(t) = x -> ∂t(u)(t,x) - Δ(u)(t,x)
   f = TimeSpaceFunction(ft)
 
   domain = (0,1,0,1)

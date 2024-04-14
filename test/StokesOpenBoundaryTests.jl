@@ -19,9 +19,9 @@ function main(distribute,parts)
   p = TimeSpaceFunction(pt)
   q(x) = t -> p(t,x)
 
-  ft(t) = x -> ∂t(u)(t)(x)-Δ(u(t))(x)+ ∇(p(t))(x)
-  gt(t) = x -> (∇⋅u(t))(x)
-  ht(t) = x -> ∇(u(t))(x)⋅VectorValue(0.0,1.0) - p(t)(x)*VectorValue(0.0,1.0)
+  ft(t) = x -> ∂t(u)(t,x) - Δ(u)(t,x) + ∇(p)(t,x)
+  gt(t) = x -> (∇⋅u)(t,x)
+  ht(t) = x -> ∇(u)(t,x)⋅VectorValue(0.0,1.0) - p(t,x)*VectorValue(0.0,1.0)
   f = TimeSpaceFunction(ft)
   g = TimeSpaceFunction(gt)
   h = TimeSpaceFunction(ht)
@@ -99,15 +99,11 @@ function main(distribute,parts)
     ph_tn = xh_tn[2]
     #writevtk(Ω,"output/tmp_stokes_OB_sol_$tn.vtu",cellfields=["u"=>uh_tn,"p"=>ph_tn])
     e = u(tn) - uh_tn
-    el2 = sqrt(sum( ∫(l2(e))dΩ ))
+    el2 = sqrt(sum(∫(l2(e))dΩ))
     e = p(tn) - ph_tn
-    el2 = sqrt(sum( ∫(l2(e))dΩ ))
+    el2 = sqrt(sum(∫(l2(e))dΩ))
     @test el2 < tol
   end
-end
-
-with_debug() do distribute
-  main(distribute,(2,2))
 end
 
 end #module
