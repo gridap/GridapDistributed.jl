@@ -288,7 +288,7 @@ end
 
 # LinearAlgebra API
 
-function Base.:*(a::Number,b::BlockArray)
+function Base.:*(a::Number,b::BlockPArray)
   mortar(map(bi -> a*bi,blocks(b)))
 end
 Base.:*(b::BlockPMatrix,a::Number) = a*b
