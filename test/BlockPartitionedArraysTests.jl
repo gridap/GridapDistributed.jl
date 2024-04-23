@@ -99,7 +99,7 @@ copy!(x,v)
 LinearAlgebra.fillstored!(__m,1.0)
 
 __v = BlockPVector{Vector{Float64}}(undef,block_range)
-#__m = BlockPMatrix{SparseMatrixCSC{Float64,Int64}}(undef,block_range,block_range)
+#__m = BlockPMatrix{SparseMatrixCSC{Float64,Int}}(undef,block_range,block_range)
 
 maximum(abs,v)
 minimum(abs,v)

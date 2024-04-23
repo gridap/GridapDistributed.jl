@@ -1158,7 +1158,7 @@ function _setup_prange_without_ghosts(dofs_gids_prange::PRange)
   indices = map(partition(dofs_gids_prange)) do dofs_indices 
     owner = part_id(dofs_indices)
     own_indices = OwnIndices(ngdofs,owner,own_to_global(dofs_indices))
-    ghost_indices = GhostIndices(ngdofs,Int64[],Int32[])
+    ghost_indices = GhostIndices(ngdofs,Int[],Int32[])
     OwnAndGhostIndices(own_indices,ghost_indices)
   end
   return PRange(indices)
@@ -1197,8 +1197,8 @@ function _setup_prange_with_ghosts(dofs_gids_prange::PRange,gids,owners)
   gids_ghost_to_global, gids_ghost_to_owner = map(
     gids,owners,dofs_gids_partition) do gids, owners, indices
     ghost_touched   = Dict{Int,Bool}()
-    ghost_to_global = Int64[] 
-    ghost_to_owner  = Int64[]
+    ghost_to_global = Int[]
+    ghost_to_owner  = Int[]
     me = part_id(indices)
     for (j,jo) in zip(gids,owners)
       if jo != me
