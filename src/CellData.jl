@@ -391,7 +391,11 @@ function Gridap.Arrays.evaluate!(caches,I::DistributedInterpolable,x::Point)
           -Inf
       end
   end
-  reduce(max,y)
+  # reduce(max,y)
+  z=gather(y)
+  map_main(local_views(z)) do zi
+      reduce(max,zi)
+    end
 end
 
 function Gridap.Arrays.evaluate!(caches,I::DistributedInterpolable,v::AbstractVector{<:Point})
@@ -407,6 +411,15 @@ function Gridap.Arrays.evaluate!(caches,I::DistributedInterpolable,v::AbstractVe
           end
       end
       return w
-  end
-  reduce((v,w)->broadcast(max,v,w),y)
+    end
+  # z=gather(y,destination=:all)
+  z=gather(y)
+  map_main(local_views(z)) do zi
+      w=Vector{Float64}(undef,m)
+      for i=0:m-1
+        w[i+1]=reduce(max,zi.data[zi.ptrs[1:n].+i])
+      end
+      return w
+    end
+  # reduce((v,w)->broadcast(max,v,w),y)
 end

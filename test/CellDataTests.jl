@@ -67,10 +67,16 @@ function main(distribute,parts)
   x3 = Point(0.9,0.9)
   v = [x1,x2,x3]
 
-  @test uh(x1) ==0.2
-  @test uh(x2) ==1.0
-  @test uh(v) ==[0.2,1.0,1.8]
- 
+  u1 = uh(x1)
+  u2 = uh(x2)
+  uv = uh(v)
+
+  map_main(u1,u2,uv) do u1,u2,v
+    @test u1 == 0.2
+    @test u2 == 1.0
+    @test v ==[0.2,1.0,1.8]
+  end
+
 end
 
 end # module
