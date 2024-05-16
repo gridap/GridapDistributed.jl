@@ -58,6 +58,19 @@ function main(distribute,parts)
   u3 = CellField(2.0,Ω)
   u = _my_op∘(u1,u2,u3)
 
+  order = 1
+  reffe = ReferenceFE(lagrangian,Float64,order)
+  V = TestFESpace(model,reffe)
+  uh = interpolate_everywhere(x->x[1]+x[2],V)
+  x1 = Point(0.1,0.1)
+  x2 = Point(0.1,0.9)
+  x3 = Point(0.9,0.9)
+  v = [x1,x2,x3]
+
+  @test uh(x1) ==0.2
+  @test uh(x2) ==1.0
+  @test uh(v) ==[0.2,1.0,1.8]
+ 
 end
 
 end # module

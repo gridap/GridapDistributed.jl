@@ -353,3 +353,60 @@ function Gridap.Arrays.evaluate!(cache, ::DistributedCellField, ::DistributedCel
   f(s) instead of s(f)?
   """
 end
+
+# Interpolation at arbitrary points (returns -Inf if the point is not found)
+Arrays.evaluate!(cache,f::DistributedCellField,x::Point) = evaluate!(cache,Interpolable(f),x)
+Arrays.evaluate!(cache,f::DistributedCellField,x::AbstractVector{<:Point}) = evaluate!(cache,Interpolable(f),x)
+
+struct DistributedInterpolable{A} <: Function
+  interps::A
+end
+local_views(a::DistributedInterpolable) = a.interps
+
+function Interpolable(f::DistributedCellField;kwargs...) 
+  interps = map(local_views(f)) do fun
+      Interpolable(fun,kwargs...)
+  end
+  DistributedInterpolable(interps)
+end
+
+(a::DistributedInterpolable)(x) = evaluate(a,x)
+
+function Gridap.Arrays.return_cache(I::DistributedInterpolable,x::Point)
+  caches = map(local_views(I)) do fi
+      trian = get_triangulation(fi.uh)
+      y=mean(testitem(get_cell_coordinates(trian)))
+      @check typeof(testitem(x)) == typeof(y) "Can only evaluate DistributedInterpolable at physical points of the same dimension of the underlying triangulation"
+      return_cache(fi,y)
+  end
+  caches 
+end
+Gridap.Arrays.return_cache(f::DistributedInterpolable,x::AbstractVector{<:Point}) = Gridap.Arrays.return_cache(f,testitem(x))
+
+function Gridap.Arrays.evaluate!(caches,I::DistributedInterpolable,x::Point)
+  y=map(local_views(I),local_views(caches)) do fi,cache
+      try
+          evaluate!(cache,fi,x)
+      catch
+          -Inf
+      end
+  end
+  reduce(max,y)
+end
+
+function Gridap.Arrays.evaluate!(caches,I::DistributedInterpolable,v::AbstractVector{<:Point})
+  n=length(local_views(I))
+  m=length(v)
+  y=map(local_views(I),local_views(caches)) do fi,cache
+      w=Vector{Float64}(undef,m)
+      for (i,x) in enumerate(v)
+          try
+              w[i]=evaluate!(cache,fi,x)
+          catch
+              w[i]=-Inf
+          end
+      end
+      return w
+  end
+  reduce((v,w)->broadcast(max,v,w),y)
+end
