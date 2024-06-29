@@ -3,13 +3,17 @@
 
 const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:AdaptedDiscreteModel{Dc,Dp}}}
 
-function DistributedAdaptedDiscreteModel(model  :: DistributedDiscreteModel,
-                                         parent :: DistributedDiscreteModel,
-                                         glue   :: AbstractArray{<:AdaptivityGlue})
+function DistributedAdaptedDiscreteModel(
+  model  :: DistributedDiscreteModel,
+  parent :: DistributedDiscreteModel,
+  glue   :: AbstractArray{<:AdaptivityGlue};
+)
   models = map(local_views(model),local_views(parent),glue) do model, parent, glue
     AdaptedDiscreteModel(model,parent,glue)
   end
-  return GenericDistributedDiscreteModel(models,get_cell_gids(model))
+  gids = get_cell_gids(model)
+  metadata = model.metadata
+  return GenericDistributedDiscreteModel(models,gids;metadata)
 end
 
 function Adaptivity.get_adaptivity_glue(model::DistributedAdaptedDiscreteModel)
@@ -426,3 +430,87 @@ function redistribute_free_values!(::Type{DistributedMultiFieldFESpace},
     redistribute_free_values!(DistributedSingleFieldFESpace,caches,fv_new_i,Uh_new_i,fv_old_i,dv_old_i,Uh_old_i,model_new,glue;reverse=reverse)
   end
 end
+
+
+# Cartesian Model uniform refinement
+
+function Adaptivity.refine(
+  cmodel::DistributedDiscreteModel{Dc},
+  refs::Integer = 2
+) where Dc
+  Adaptivity.refine(cmodel,Tuple(fill(refs,Dc)))
+end
+
+function Adaptivity.refine(
+  cmodel::DistributedAdaptedDiscreteModel{Dc},
+  refs::NTuple{Dc,<:Integer}
+) where Dc
+
+  # Local cmodels are AdaptedDiscreteModels. To correctly dispatch, we need to
+  # extract the underlying models, then refine.
+  _cmodel = GenericDistributedDiscreteModel(
+    map(get_model,local_views(cmodel)),
+    get_cell_gids(cmodel);
+    metadata=cmodel.metadata
+  )
+  _fmodel = refine(_cmodel,refs)
+
+  # Now the issue is that the local parents are not pointing to local_views(cmodel).
+  # We have to fix that...
+  fmodel = GenericDistributedDiscreteModel(
+    map(get_model,local_views(_fmodel)),
+    get_cell_gids(_fmodel);
+    metadata=_fmodel.metadata
+  )
+  glues = get_adaptivity_glue(_fmodel)
+  return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
+end
+
+function Adaptivity.refine(
+  cmodel::DistributedCartesianDiscreteModel{Dc},
+  refs::NTuple{Dc,<:Integer},
+) where Dc
+
+  ranks = linear_indices(local_views(cmodel))
+  desc, parts = cmodel.metadata.descriptor, cmodel.metadata.mesh_partition
+
+  nC = desc.partition
+  domain = Adaptivity._get_cartesian_domain(desc)
+  nF = nC .* refs
+  fmodel = CartesianDiscreteModel(ranks,parts,domain,nF)
+
+  glues = map(ranks,local_views(cmodel)) do rank,cmodel
+    # Glue for the local models, of size nC_local .* ref
+    desc_local = get_cartesian_descriptor(cmodel)
+    nC_local = desc_local.partition
+    nF_local = nC_local .* refs
+    f2c_map, child_map = Adaptivity._create_cartesian_f2c_maps(nC_local,refs)
+    
+    # Remove extra fine layers of ghosts
+    p = Tuple(CartesianIndices(parts)[rank])
+    periodic_ghosts = map((isp,np) -> (np==1) ? false : isp, desc.isperiodic, parts)
+    local_range = map(p,parts,periodic_ghosts,nF_local,refs) do p, np, pg, nFl, refs
+      has_ghost_start = (p != 1) || pg
+      has_ghost_stop  = (p != np) || pg
+      # If has coarse ghost layer, remove all fine layers but one at each end
+      start = 1 + has_ghost_start*(refs-1)
+      stop  = nFl - has_ghost_stop*(refs-1)
+      return start:stop
+    end
+
+    _indices = LinearIndices(nF_local)[local_range...]
+    indices = reshape(_indices,length(_indices))
+    f2c_cell_map = f2c_map[indices]
+    fcell_to_child_id = child_map[indices]
+  
+    faces_map = [(d==Dc) ? f2c_cell_map : Int[] for d in 0:Dc]
+    poly   = (Dc == 2) ? QUAD : HEX
+    reffe  = LagrangianRefFE(Float64,poly,1)
+    rrules = RefinementRule(reffe,refs)
+    return AdaptivityGlue(faces_map,fcell_to_child_id,rrules)
+  end
+
+  return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
+end
+
+
