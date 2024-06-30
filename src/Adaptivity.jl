@@ -3,13 +3,17 @@
 
 const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:AdaptedDiscreteModel{Dc,Dp}}}
 
-function DistributedAdaptedDiscreteModel(model  :: DistributedDiscreteModel,
-                                         parent :: DistributedDiscreteModel,
-                                         glue   :: AbstractArray{<:AdaptivityGlue})
+function DistributedAdaptedDiscreteModel(
+  model  :: DistributedDiscreteModel,
+  parent :: DistributedDiscreteModel,
+  glue   :: AbstractArray{<:AdaptivityGlue};
+)
   models = map(local_views(model),local_views(parent),glue) do model, parent, glue
     AdaptedDiscreteModel(model,parent,glue)
   end
-  return GenericDistributedDiscreteModel(models,get_cell_gids(model))
+  gids = get_cell_gids(model)
+  metadata = model.metadata
+  return GenericDistributedDiscreteModel(models,gids;metadata)
 end
 
 function Adaptivity.get_adaptivity_glue(model::DistributedAdaptedDiscreteModel)
@@ -80,6 +84,17 @@ end
 """
 function redistribute(::DistributedDiscreteModel,args...;kwargs...)
   @abstractmethod
+end
+
+function redistribute(model::DistributedAdaptedDiscreteModel,args...;kwargs...)
+  # Local cmodels are AdaptedDiscreteModels. To correctly dispatch, we need to
+  # extract the underlying models, then redistribute.
+  _model = GenericDistributedDiscreteModel(
+    map(get_model,local_views(model)),
+    get_cell_gids(model);
+    metadata=model.metadata
+  )
+  return redistribute(_model,args...;kwargs...)
 end
 
 # Redistribution of cell-wise dofs, free values and FEFunctions
@@ -425,4 +440,202 @@ function redistribute_free_values!(::Type{DistributedMultiFieldFESpace},
   map(Uh_new_i,Uh_old_i,fv_new_i,fv_old_i,dv_old_i,caches) do Uh_new_i,Uh_old_i,fv_new_i,fv_old_i,dv_old_i,caches
     redistribute_free_values!(DistributedSingleFieldFESpace,caches,fv_new_i,Uh_new_i,fv_old_i,dv_old_i,Uh_old_i,model_new,glue;reverse=reverse)
   end
+end
+
+
+# Cartesian Model uniform refinement
+
+function Adaptivity.refine(
+  cmodel::DistributedDiscreteModel{Dc},
+  refs::Integer = 2
+) where Dc
+  Adaptivity.refine(cmodel,Tuple(fill(refs,Dc)))
+end
+
+function Adaptivity.refine(
+  cmodel::DistributedAdaptedDiscreteModel{Dc},
+  refs::NTuple{Dc,<:Integer}
+) where Dc
+
+  # Local cmodels are AdaptedDiscreteModels. To correctly dispatch, we need to
+  # extract the underlying models, then refine.
+  _cmodel = GenericDistributedDiscreteModel(
+    map(get_model,local_views(cmodel)),
+    get_cell_gids(cmodel);
+    metadata=cmodel.metadata
+  )
+  _fmodel = refine(_cmodel,refs)
+
+  # Now the issue is that the local parents are not pointing to local_views(cmodel).
+  # We have to fix that...
+  fmodel = GenericDistributedDiscreteModel(
+    map(get_model,local_views(_fmodel)),
+    get_cell_gids(_fmodel);
+    metadata=_fmodel.metadata
+  )
+  glues = get_adaptivity_glue(_fmodel)
+  return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
+end
+
+function Adaptivity.refine(
+  cmodel::DistributedCartesianDiscreteModel{Dc},
+  refs::NTuple{Dc,<:Integer},
+) where Dc
+
+  ranks = linear_indices(local_views(cmodel))
+  desc, parts = cmodel.metadata.descriptor, cmodel.metadata.mesh_partition
+
+  nC = desc.partition
+  domain = Adaptivity._get_cartesian_domain(desc)
+  nF = nC .* refs
+  fmodel = CartesianDiscreteModel(ranks,parts,domain,nF)
+
+  glues = map(ranks,local_views(cmodel)) do rank,cmodel
+    # Glue for the local models, of size nC_local .* ref
+    desc_local = get_cartesian_descriptor(cmodel)
+    nC_local = desc_local.partition
+    nF_local = nC_local .* refs
+    f2c_map, child_map = Adaptivity._create_cartesian_f2c_maps(nC_local,refs)
+    
+    # Remove extra fine layers of ghosts
+    p = Tuple(CartesianIndices(parts)[rank])
+    periodic_ghosts = map((isp,np) -> (np==1) ? false : isp, desc.isperiodic, parts)
+    local_range = map(p,parts,periodic_ghosts,nF_local,refs) do p, np, pg, nFl, refs
+      has_ghost_start = (p != 1) || pg
+      has_ghost_stop  = (p != np) || pg
+      # If has coarse ghost layer, remove all fine layers but one at each end
+      start = 1 + has_ghost_start*(refs-1)
+      stop  = nFl - has_ghost_stop*(refs-1)
+      return start:stop
+    end
+
+    _indices = LinearIndices(nF_local)[local_range...]
+    indices = reshape(_indices,length(_indices))
+    f2c_cell_map = f2c_map[indices]
+    fcell_to_child_id = child_map[indices]
+  
+    faces_map = [(d==Dc) ? f2c_cell_map : Int[] for d in 0:Dc]
+    poly   = (Dc == 2) ? QUAD : HEX
+    reffe  = LagrangianRefFE(Float64,poly,1)
+    rrules = RefinementRule(reffe,refs)
+    return AdaptivityGlue(faces_map,fcell_to_child_id,rrules)
+  end
+
+  return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
+end
+
+# Cartesian Model redistribution
+
+function redistribute(
+  old_model::DistributedCartesianDiscreteModel,new_ranks,new_parts
+)
+  desc = old_model.metadata.descriptor
+  ncells = desc.partition
+  domain = Adaptivity._get_cartesian_domain(desc)
+  new_model = CartesianDiscreteModel(new_ranks,new_parts,domain,ncells)
+  old_ranks = linear_indices(local_views(old_model))
+  rglue = get_cartesian_redistribute_glue(new_ranks,old_ranks,new_model,old_model)
+  return new_model, rglue
+end
+
+function get_cartesian_owners(gids,nparts,ncells)
+  # This is currently O(sqrt(np)), but I believe we could make it 
+  # O(ln(np)) if we ensured the search is sorted. Even faster if we sort 
+  # the gids first, which progressively reduces the number of ranges to search.
+  ranges = map(nparts,ncells) do np, nc
+    map(p -> PartitionedArrays.local_range(p,np,nc,false,false), 1:np)
+  end
+  cart_ids = CartesianIndices(ncells)
+  owner_ids = LinearIndices(nparts)
+  owners = map(gids) do gid
+    gid_cart = Tuple(cart_ids[gid])
+    owner_cart = map((r,g) -> findfirst(ri -> g ∈ ri,r),ranges,gid_cart)
+    return owner_ids[owner_cart...]
+  end
+  return owners
+end
+
+function get_cartesian_redistribute_glue(
+  new_ranks, old_ranks, new_model, old_model
+)
+  desc = old_model.metadata.descriptor
+  ncells = desc.partition
+
+  old_parts = old_model.metadata.mesh_partition
+  new_parts = new_model.metadata.mesh_partition
+
+  old_ids = change_parts(partition(get_cell_gids(old_model)),new_ranks)
+  new_ids = partition(get_cell_gids(new_model))
+  old_models = change_parts(local_views(old_model),new_ranks)
+  new_models = local_views(new_model)
+
+  old2new,new2old,parts_rcv,parts_snd,lids_rcv,lids_snd = map(
+    new_ranks,new_models,old_models,new_ids,old_ids) do r, new_model, old_model, new_ids, old_ids
+
+    if !isnothing(old_ids)
+      # If I'm in the old subprocessor,
+      #   - I send all owned old cells that I don't own in the new model.
+      #   - I receive all owned new cells that I don't own in the old model.
+      old2new = replace(find_local_to_local_map(old_ids,new_ids), -1 => 0)
+      new2old = replace(find_local_to_local_map(new_ids,old_ids), -1 => 0)
+
+      new_l2o = local_to_own(new_ids)
+      old_l2o = local_to_own(old_ids)
+      mask_rcv = map(1:local_length(new_ids)) do new_lid
+        old_lid = new2old[new_lid]
+        A = !iszero(new_l2o[new_lid]) # I own this cell in the new model
+        B = (iszero(old_lid) || iszero(old_l2o[old_lid])) # I don't own this cell in the old model
+        return A && B
+      end
+      ids_rcv = findall(mask_rcv)
+
+      mask_snd = map(1:local_length(old_ids)) do old_lid
+        new_lid = old2new[old_lid]
+        A = !iszero(old_l2o[old_lid]) # I own this cell in the old model
+        B = (iszero(new_lid) || iszero(new_l2o[new_lid])) # I don't own this cell in the new model
+        return A && B
+      end
+      ids_snd = findall(mask_snd)
+    else
+      # If I'm not in the old subprocessor, 
+      #   - I don't send anything. 
+      #   - I receive all my owned cells in the new model.
+      old2new = Int[]
+      new2old = fill(0,num_cells(new_model))
+      ids_rcv = collect(own_to_local(new_ids))
+      ids_snd = Int[]
+    end
+
+    # When snd/rcv ids have been selected, we need to find their owners and prepare 
+    # the snd/rcv buffers.
+
+    # First, everyone can potentially receive stuff: 
+    to_global!(ids_rcv,new_ids)
+    ids_rcv_to_part = get_cartesian_owners(ids_rcv,old_parts,ncells)
+    to_local!(ids_rcv,new_ids)
+    parts_rcv = unique(ids_rcv_to_part)
+    lids_rcv = map(parts_rcv) do nbor
+      ids_rcv[findall(x -> x == nbor, ids_rcv_to_part)]
+    end
+    lids_rcv = convert(Vector{Vector{Int}}, lids_rcv)
+
+    # Then, only the old subprocessor can potentially send stuff:
+    if !isnothing(old_ids)
+      to_global!(ids_snd,old_ids)
+      ids_snd_to_part = get_cartesian_owners(ids_snd,new_parts,ncells)
+      to_local!(ids_snd,old_ids)
+      parts_snd = unique(ids_snd_to_part)
+      lids_snd = map(parts_snd) do nbor
+        ids_snd[findall(x -> x == nbor, ids_snd_to_part)]
+      end
+      lids_snd = convert(Vector{Vector{Int}}, lids_snd)
+    else
+      parts_snd = Int[]
+      lids_snd  = [Int[]]
+    end
+
+    return old2new, new2old, parts_rcv, parts_snd, JaggedArray(lids_rcv), JaggedArray(lids_snd)
+  end |> tuple_of_arrays;
+
+  return RedistributeGlue(new_ranks,old_ranks,parts_rcv,parts_snd,lids_rcv,lids_snd,old2new,new2old)
 end
