@@ -86,6 +86,17 @@ function redistribute(::DistributedDiscreteModel,args...;kwargs...)
   @abstractmethod
 end
 
+function redistribute(model::DistributedAdaptedDiscreteModel,args...;kwargs...)
+  # Local cmodels are AdaptedDiscreteModels. To correctly dispatch, we need to
+  # extract the underlying models, then redistribute.
+  _model = GenericDistributedDiscreteModel(
+    map(get_model,local_views(model)),
+    get_cell_gids(model);
+    metadata=model.metadata
+  )
+  return redistribute(_model,args...;kwargs...)
+end
+
 # Redistribution of cell-wise dofs, free values and FEFunctions
 
 function _allocate_cell_wise_dofs(cell_to_ldofs)
@@ -513,6 +524,20 @@ function Adaptivity.refine(
   return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
 end
 
+# Cartesian Model redistribution
+
+function redistribute(
+  old_model::DistributedCartesianDiscreteModel,new_ranks,new_parts
+)
+  desc = old_model.metadata.descriptor
+  ncells = desc.partition
+  domain = Adaptivity._get_cartesian_domain(desc)
+  new_model = CartesianDiscreteModel(new_ranks,new_parts,domain,ncells)
+  old_ranks = linear_indices(local_views(old_model))
+  rglue = get_cartesian_redistribute_glue(new_ranks,old_ranks,new_model,old_model)
+  return new_model, rglue
+end
+
 function get_cartesian_owners(gids,nparts,ncells)
   ranges = map(nparts,ncells) do np, nc
     map(p -> PartitionedArrays.local_range(p,np,nc,false,false), 1:np)
@@ -610,16 +635,4 @@ function get_cartesian_redistribute_glue(
   end |> tuple_of_arrays;
 
   return RedistributeGlue(new_ranks,old_ranks,parts_rcv,parts_snd,lids_rcv,lids_snd,old2new,new2old)
-end
-
-function redistribute(
-  old_model::DistributedCartesianDiscreteModel,new_ranks,new_parts
-)
-  desc = old_model.metadata.descriptor
-  ncells = desc.partition
-  domain = Adaptivity._get_cartesian_domain(desc)
-  new_model = CartesianDiscreteModel(new_ranks,new_parts,domain,ncells)
-  old_ranks = linear_indices(local_views(old_model))
-  rglue = get_cartesian_redistribute_glue(new_ranks,old_ranks,new_model,old_model)
-  return new_model, rglue
 end
