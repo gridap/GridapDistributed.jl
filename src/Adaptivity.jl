@@ -539,6 +539,9 @@ function redistribute(
 end
 
 function get_cartesian_owners(gids,nparts,ncells)
+  # This is currently O(sqrt(np)), but I believe we could make it 
+  # O(ln(np)) if we ensured the search is sorted. Even faster if we sort 
+  # the gids first, which progressively reduces the number of ranges to search.
   ranges = map(nparts,ncells) do np, nc
     map(p -> PartitionedArrays.local_range(p,np,nc,false,false), 1:np)
   end

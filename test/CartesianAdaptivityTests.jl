@@ -121,7 +121,7 @@ end
 
 ############################################################################################
 
-function main(distribute)
+function main(distribute,ncells,isperiodic)
   fine_parts = (2,2)
   fine_ranks = distribute(LinearIndices((4,)))
 
@@ -130,7 +130,7 @@ function main(distribute)
 
   # Create models and glues
   if i_am_in(coarse_ranks)
-    parent = CartesianDiscreteModel(coarse_ranks,coarse_parts,(0,1,0,1),(4,4))
+    parent = CartesianDiscreteModel(coarse_ranks,coarse_parts,(0,1,0,1),ncells;isperiodic)
     child  = refine(parent,(2,2))
     coarse_adaptivity_glue = get_adaptivity_glue(child)
   else
@@ -151,6 +151,13 @@ function main(distribute)
   test_adaptivity(coarse_ranks,parent,child,coarse_adaptivity_glue)
   test_adaptivity(fine_ranks,redist_parent,redist_child_1,fine_adaptivity_glue)
   return
+end
+
+function main(distribute)
+  main(distribute,(8,8),(false,false))
+  main(distribute,(8,8),(true,false))
+  main(distribute,(4,4),(false,true))
+  main(distribute,(4,4),(true,true))
 end
 
 end # module AdaptivityTests
