@@ -191,17 +191,40 @@ function _setup_face_gids!(dmodel::GenericDistributedDiscreteModel{Dc},dim) wher
 end
 
 # CartesianDiscreteModel
-struct DistributedCartesianDescriptor{A,B}
-  mesh_partition::A
-  descriptor::B
+struct DistributedCartesianDescriptor{A,B,C}
+  ranks::A
+  mesh_partition::B
+  descriptor::C
   function DistributedCartesianDescriptor(
+    ranks::AbstractArray{<:Integer},
     mesh_partition :: NTuple{Dc,<:Integer},
     descriptor :: CartesianDescriptor{Dc}
   ) where Dc
-    A = typeof(mesh_partition)
-    B = typeof(descriptor)
-    new{A,B}(mesh_partition,descriptor)
+    A = typeof(ranks)
+    B = typeof(mesh_partition)
+    C = typeof(descriptor)
+    new{A,B,C}(ranks,mesh_partition,descriptor)
   end
+end
+
+function emit_cartesian_descriptor(
+  pdesc::Union{<:DistributedCartesianDescriptor{Dc},Nothing},
+  new_ranks::AbstractArray{<:Integer},
+  new_mesh_partition
+) where Dc
+  f(a) = PartitionedArrays.getany(emit(a))
+  a, b, c, d = map(new_ranks) do rank
+    if rank == 1
+      desc = pdesc.descriptor
+      @assert desc.map === identity
+      (desc.origin.data, desc.sizes, desc.partition, desc.isperiodic)
+    else
+      (nothing, nothing, nothing, nothing)
+    end
+  end |> tuple_of_arrays
+  origin, sizes, partition, isperiodic = VectorValue(f(a)...), f(b), f(c), f(d)
+  new_desc = CartesianDescriptor(origin,sizes,partition;isperiodic)
+  return DistributedCartesianDescriptor(new_ranks,new_mesh_partition,new_desc)
 end
 
 const DistributedCartesianDiscreteModel{Dc,Dp,A,B,C} = 
@@ -232,7 +255,7 @@ function Geometry.CartesianDiscreteModel(
       CartesianDiscreteModel(desc,cmin,cmax)  
     end
     gids = PRange(upartition)
-    metadata = DistributedCartesianDescriptor(parts,desc)
+    metadata = DistributedCartesianDescriptor(ranks,parts,desc)
     return GenericDistributedDiscreteModel(models,gids;metadata)
   end
 end
@@ -280,7 +303,7 @@ function _cartesian_model_with_periodic_bcs(ranks,parts,desc)
     CartesianDiscreteModel(_desc,cmin,cmax,remove_boundary)
   end
   gids = PRange(global_partition)
-  metadata = DistributedCartesianDescriptor(parts,desc)
+  metadata = DistributedCartesianDescriptor(ranks,parts,desc)
   return GenericDistributedDiscreteModel(models,gids;metadata)
 end
 
