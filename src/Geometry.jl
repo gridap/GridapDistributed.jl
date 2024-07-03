@@ -212,14 +212,14 @@ function emit_cartesian_descriptor(
   new_ranks::AbstractArray{<:Integer},
   new_mesh_partition
 ) where Dc
-  f(a) = PartitionedArrays.getany(emit(a))
+  f(a) = Tuple(PartitionedArrays.getany(emit(a)))
   a, b, c, d = map(new_ranks) do rank
     if rank == 1
       desc = pdesc.descriptor
       @assert desc.map === identity
-      (desc.origin.data, desc.sizes, desc.partition, desc.isperiodic)
+      Float64[desc.origin.data...], Float64[desc.sizes...], Int[desc.partition...], Bool[desc.isperiodic...]
     else
-      (nothing, nothing, nothing, nothing)
+      Float64[], Float64[], Int[], Bool[]
     end
   end |> tuple_of_arrays
   origin, sizes, partition, isperiodic = VectorValue(f(a)...), f(b), f(c), f(d)

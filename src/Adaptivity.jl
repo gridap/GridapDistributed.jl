@@ -506,7 +506,9 @@ function Adaptivity.refine(
   nC = desc.partition
   domain = Adaptivity._get_cartesian_domain(desc)
   nF = nC .* refs
-  fmodel = CartesianDiscreteModel(ranks,parts,domain,nF)
+  fmodel = CartesianDiscreteModel(
+    ranks,parts,domain,nF;map=desc.map,isperiodic=desc.isperiodic
+  )
 
   glues = map(ranks,local_views(cmodel)) do rank,cmodel
     # Glue for the local models, of size nC_local .* ref
@@ -605,16 +607,19 @@ function get_cartesian_redistribute_glue(
   new_ranks = pdesc.ranks
 
   old_parts = map(new_ranks) do r
-    (r == 1) ? old_model.metadata.mesh_partition : nothing
+    (r == 1) ? Int[old_model.metadata.mesh_partition...] : Int[]
   end
-  old_parts = PartitionedArrays.getany(emit(old_parts))
+  old_parts = Tuple(PartitionedArrays.getany(emit(old_parts)))
   
   new_parts = new_model.metadata.mesh_partition
 
-  old_ids = change_parts(partition(get_cell_gids(old_model)),new_ranks)
   new_ids = partition(get_cell_gids(new_model))
-  old_models = change_parts(local_views(old_model),new_ranks)
   new_models = local_views(new_model)
+
+  _old_ids = isnothing(old_model) ? nothing : partition(get_cell_gids(old_model))
+  old_ids = change_parts(_old_ids,new_ranks)
+  _old_models = isnothing(old_model) ? nothing : local_views(old_model)
+  old_models = change_parts(_old_models,new_ranks)
 
   old2new,new2old,parts_rcv,parts_snd,lids_rcv,lids_snd = map(
     new_ranks,new_models,old_models,new_ids,old_ids) do r, new_model, old_model, new_ids, old_ids
