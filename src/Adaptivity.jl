@@ -503,6 +503,7 @@ function Adaptivity.refine(
   ranks = linear_indices(local_views(cmodel))
   desc, parts = cmodel.metadata.descriptor, cmodel.metadata.mesh_partition
 
+  # Create the new model
   nC = desc.partition
   domain = Adaptivity._get_cartesian_domain(desc)
   nF = nC .* refs
@@ -510,6 +511,13 @@ function Adaptivity.refine(
     ranks,parts,domain,nF;map=desc.map,isperiodic=desc.isperiodic
   )
 
+  # The idea for the glue is the following: 
+  #   For each coarse local model (owned + ghost), we can use the serial code to create
+  #   the glue. However, this glue is NOT fully correct. 
+  #   Why? Because all the children belonging to coarse ghost cells are in the glue. This 
+  #   is not correct, since we only want to keep the children which are ghosts in the new model.
+  #   To this end, we have to remove the extra fine layers of ghosts from the glue. This we 
+  #   can do thanks to how predictable the Cartesian model is.
   glues = map(ranks,local_views(cmodel)) do rank,cmodel
     # Glue for the local models, of size nC_local .* ref
     desc_local = get_cartesian_descriptor(cmodel)
@@ -521,8 +529,8 @@ function Adaptivity.refine(
     p = Tuple(CartesianIndices(parts)[rank])
     periodic_ghosts = map((isp,np) -> (np==1) ? false : isp, desc.isperiodic, parts)
     local_range = map(p,parts,periodic_ghosts,nF_local,refs) do p, np, pg, nFl, refs
-      has_ghost_start = (p != 1) || pg
-      has_ghost_stop  = (p != np) || pg
+      has_ghost_start = (np > 1) && ((p != 1)  || pg)
+      has_ghost_stop  = (np > 1) && ((p != np) || pg)
       # If has coarse ghost layer, remove all fine layers but one at each end
       start = 1 + has_ghost_start*(refs-1)
       stop  = nFl - has_ghost_stop*(refs-1)
@@ -534,6 +542,7 @@ function Adaptivity.refine(
     f2c_cell_map = f2c_map[indices]
     fcell_to_child_id = child_map[indices]
   
+    # Create the glue
     faces_map = [(d==Dc) ? f2c_cell_map : Int[] for d in 0:Dc]
     poly   = (Dc == 2) ? QUAD : HEX
     reffe  = LagrangianRefFE(Float64,poly,1)
@@ -553,6 +562,13 @@ end
   redistribute_cartesian(old_model,pdesc)
 end
 
+"""
+    redistribute_cartesian(old_model,new_ranks,new_parts)
+    redistribute_cartesian(old_model,pdesc::DistributedCartesianDescriptor)
+  
+  Redistributes a DistributedCartesianDiscreteModel to a new set of ranks and parts.
+  Only redistributes into a superset of the old_model ranks (i.e. towards more processors).
+"""
 function redistribute_cartesian(
   old_model::Union{DistributedCartesianDiscreteModel,Nothing},
   new_ranks,
@@ -604,23 +620,23 @@ function get_cartesian_redistribute_glue(
   desc  = pdesc.descriptor
   ncells = desc.partition
 
+  # Components in the new partition
   new_ranks = pdesc.ranks
-
-  old_parts = map(new_ranks) do r
-    (r == 1) ? Int[old_model.metadata.mesh_partition...] : Int[]
-  end
-  old_parts = Tuple(PartitionedArrays.getany(emit(old_parts)))
-  
   new_parts = new_model.metadata.mesh_partition
-
   new_ids = partition(get_cell_gids(new_model))
   new_models = local_views(new_model)
 
+  # Components in the old partition (if present)
+  _old_parts = map(new_ranks) do r
+    (r == 1) ? Int[old_model.metadata.mesh_partition...] : Int[]
+  end
+  old_parts = Tuple(PartitionedArrays.getany(emit(_old_parts)))
   _old_ids = isnothing(old_model) ? nothing : partition(get_cell_gids(old_model))
   old_ids = change_parts(_old_ids,new_ranks)
   _old_models = isnothing(old_model) ? nothing : local_views(old_model)
   old_models = change_parts(_old_models,new_ranks)
 
+  # Produce the glue components
   old2new,new2old,parts_rcv,parts_snd,lids_rcv,lids_snd = map(
     new_ranks,new_models,old_models,new_ids,old_ids) do r, new_model, old_model, new_ids, old_ids
 
@@ -687,7 +703,7 @@ function get_cartesian_redistribute_glue(
     end
 
     return old2new, new2old, parts_rcv, parts_snd, JaggedArray(lids_rcv), JaggedArray(lids_snd)
-  end |> tuple_of_arrays;
+  end |> tuple_of_arrays
 
   # WARNING: This will fail if compared (===) with get_parts(old_model)
   # Do we really require this in the glue? Could we remove the old ranks?
