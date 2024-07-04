@@ -16,6 +16,21 @@ function DistributedAdaptedDiscreteModel(
   return GenericDistributedDiscreteModel(models,gids;metadata)
 end
 
+function Adaptivity.get_model(model::DistributedAdaptedDiscreteModel)
+  GenericDistributedDiscreteModel(
+    map(get_model,local_views(model)),
+    get_cell_gids(model);
+    metadata=model.metadata
+  )
+end
+
+function Adaptivity.get_parent(model::DistributedAdaptedDiscreteModel)
+  msg = " Error: Cannot get global parent model. \n 
+          We do not keep the global ids of the parent model within the children.\n
+          You can extract the local parents with map(get_parent,local_views(model))"
+  @notimplemented msg
+end
+
 function Adaptivity.get_adaptivity_glue(model::DistributedAdaptedDiscreteModel)
   return map(Adaptivity.get_adaptivity_glue,local_views(model))
 end
@@ -48,6 +63,15 @@ struct RedistributeGlue
 end
 
 get_parts(g::RedistributeGlue) = get_parts(g.parts_rcv)
+
+function Base.reverse(g::RedistributeGlue)
+  RedistributeGlue(
+    g.old_parts,g.new_parts,
+    g.parts_snd,g.parts_rcv,
+    g.lids_snd,g.lids_rcv,
+    g.new2old,g.old2new
+  )
+end
 
 function get_old_and_new_parts(g::RedistributeGlue,reverse::Val{false})
   return g.old_parts, g.new_parts
@@ -477,11 +501,7 @@ function Adaptivity.refine(
 
   # Local cmodels are AdaptedDiscreteModels. To correctly dispatch, we need to
   # extract the underlying models, then refine.
-  _cmodel = GenericDistributedDiscreteModel(
-    map(get_model,local_views(cmodel)),
-    get_cell_gids(cmodel);
-    metadata=cmodel.metadata
-  )
+  _cmodel = get_model(cmodel)
   _fmodel = refine(_cmodel,refs)
 
   # Now the issue is that the local parents are not pointing to local_views(cmodel).
@@ -557,9 +577,10 @@ end
 
 @inline function redistribute(  
   old_model::Union{DistributedCartesianDiscreteModel,Nothing},
-  pdesc::DistributedCartesianDescriptor
+  pdesc::DistributedCartesianDescriptor;
+  old_ranks = nothing
 )
-  redistribute_cartesian(old_model,pdesc)
+  redistribute_cartesian(old_model,pdesc;old_ranks)
 end
 
 """
@@ -572,16 +593,18 @@ end
 function redistribute_cartesian(
   old_model::Union{DistributedCartesianDiscreteModel,Nothing},
   new_ranks,
-  new_parts
+  new_parts;
+  old_ranks = nothing
 )
   _pdesc = isnothing(old_model) ? nothing : old_model.metadata
   pdesc  = emit_cartesian_descriptor(_pdesc,new_ranks,new_parts)
-  redistribute_cartesian(old_model,pdesc)
+  redistribute_cartesian(old_model,pdesc;old_ranks)
 end
 
 function redistribute_cartesian(
   old_model::Union{DistributedCartesianDiscreteModel,Nothing},
-  pdesc::DistributedCartesianDescriptor{Dc},
+  pdesc::DistributedCartesianDescriptor{Dc};
+  old_ranks = nothing
 ) where Dc
   new_ranks = pdesc.ranks
   new_parts = pdesc.mesh_partition
@@ -591,7 +614,7 @@ function redistribute_cartesian(
   domain = Adaptivity._get_cartesian_domain(desc)
   new_model = CartesianDiscreteModel(new_ranks,new_parts,domain,ncells)
 
-  rglue = get_cartesian_redistribute_glue(new_model,old_model)
+  rglue = get_cartesian_redistribute_glue(new_model,old_model;old_ranks)
   return new_model, rglue
 end
 
@@ -614,7 +637,8 @@ end
 
 function get_cartesian_redistribute_glue(
   new_model::DistributedCartesianDiscreteModel{Dc},
-  old_model::Union{DistributedCartesianDiscreteModel{Dc},Nothing}
+  old_model::Union{DistributedCartesianDiscreteModel{Dc},Nothing};
+  old_ranks = nothing
 ) where Dc
   pdesc = new_model.metadata
   desc  = pdesc.descriptor
@@ -707,7 +731,9 @@ function get_cartesian_redistribute_glue(
 
   # WARNING: This will fail if compared (===) with get_parts(old_model)
   # Do we really require this in the glue? Could we remove the old ranks?
-  old_ranks = generate_subparts(new_ranks,prod(old_parts))
+  if isnothing(old_ranks)
+    old_ranks = generate_subparts(new_ranks,prod(old_parts))
+  end
 
   return RedistributeGlue(new_ranks,old_ranks,parts_rcv,parts_snd,lids_rcv,lids_snd,old2new,new2old)
 end
