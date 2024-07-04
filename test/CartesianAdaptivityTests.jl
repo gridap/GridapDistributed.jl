@@ -133,7 +133,7 @@ function main(distribute,ncells,isperiodic)
   coarse_ranks = generate_subparts(fine_ranks,2)
 
   map_main(fine_ranks) do r
-    println("Test: ncells = ", ncells, ", isperiodic = ", isperiodic)
+    println("CartesianAdaptivityTests: ncells = ", ncells, ", isperiodic = ", isperiodic)
   end
 
   # Create models and glues
