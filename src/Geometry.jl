@@ -140,16 +140,21 @@ end
 
 """
 """
-struct GenericDistributedDiscreteModel{Dc,Dp,A,B} <: DistributedDiscreteModel{Dc,Dp}
+struct GenericDistributedDiscreteModel{Dc,Dp,A,B,C} <: DistributedDiscreteModel{Dc,Dp}
   models::A
   face_gids::B
+  metadata::C
   function GenericDistributedDiscreteModel(
-    models::AbstractArray{<:DiscreteModel{Dc,Dp}}, gids::PRange) where {Dc,Dp}
-    A = typeof(models)
+    models::AbstractArray{<:DiscreteModel{Dc,Dp}},
+    gids::PRange;
+    metadata = nothing
+  ) where {Dc,Dp}
     face_gids=Vector{PRange}(undef,Dc+1)
-    face_gids[Dc+1]=gids
+    face_gids[Dc+1] = gids
+    A = typeof(models)
     B = typeof(face_gids)
-    new{Dc,Dp,A,B}(models,face_gids)
+    C = typeof(metadata)
+    new{Dc,Dp,A,B,C}(models,face_gids,metadata)
   end
 end
 
@@ -186,6 +191,45 @@ function _setup_face_gids!(dmodel::GenericDistributedDiscreteModel{Dc},dim) wher
 end
 
 # CartesianDiscreteModel
+struct DistributedCartesianDescriptor{A,B,C}
+  ranks::A
+  mesh_partition::B
+  descriptor::C
+  function DistributedCartesianDescriptor(
+    ranks::AbstractArray{<:Integer},
+    mesh_partition :: NTuple{Dc,<:Integer},
+    descriptor :: CartesianDescriptor{Dc}
+  ) where Dc
+    A = typeof(ranks)
+    B = typeof(mesh_partition)
+    C = typeof(descriptor)
+    new{A,B,C}(ranks,mesh_partition,descriptor)
+  end
+end
+
+function emit_cartesian_descriptor(
+  pdesc::Union{<:DistributedCartesianDescriptor{Dc},Nothing},
+  new_ranks::AbstractArray{<:Integer},
+  new_mesh_partition
+) where Dc
+  f(a) = Tuple(PartitionedArrays.getany(emit(a)))
+  a, b, c, d = map(new_ranks) do rank
+    if rank == 1
+      desc = pdesc.descriptor
+      @assert desc.map === identity
+      Float64[desc.origin.data...], Float64[desc.sizes...], Int[desc.partition...], Bool[desc.isperiodic...]
+    else
+      Float64[], Float64[], Int[], Bool[]
+    end
+  end |> tuple_of_arrays
+  origin, sizes, partition, isperiodic = VectorValue(f(a)...), f(b), f(c), f(d)
+  new_desc = CartesianDescriptor(origin,sizes,partition;isperiodic)
+  return DistributedCartesianDescriptor(new_ranks,new_mesh_partition,new_desc)
+end
+
+const DistributedCartesianDiscreteModel{Dc,Dp,A,B,C} = 
+  GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:CartesianDiscreteModel},B,<:DistributedCartesianDescriptor}
+
 function Geometry.CartesianDiscreteModel(
   ranks::AbstractArray{<:Integer}, # Distributed array with the rank IDs
   parts::NTuple{N,<:Integer},      # Number of ranks (parts) in each direction
@@ -211,7 +255,8 @@ function Geometry.CartesianDiscreteModel(
       CartesianDiscreteModel(desc,cmin,cmax)  
     end
     gids = PRange(upartition)
-    return GenericDistributedDiscreteModel(models,gids)
+    metadata = DistributedCartesianDescriptor(ranks,parts,desc)
+    return GenericDistributedDiscreteModel(models,gids;metadata)
   end
 end
 
@@ -258,7 +303,8 @@ function _cartesian_model_with_periodic_bcs(ranks,parts,desc)
     CartesianDiscreteModel(_desc,cmin,cmax,remove_boundary)
   end
   gids = PRange(global_partition)
-  return GenericDistributedDiscreteModel(models,gids)
+  metadata = DistributedCartesianDescriptor(ranks,parts,desc)
+  return GenericDistributedDiscreteModel(models,gids;metadata)
 end
 
 ## Helpers to partition a serial model

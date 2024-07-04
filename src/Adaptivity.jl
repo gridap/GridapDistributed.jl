@@ -3,13 +3,32 @@
 
 const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:AdaptedDiscreteModel{Dc,Dp}}}
 
-function DistributedAdaptedDiscreteModel(model  :: DistributedDiscreteModel,
-                                         parent :: DistributedDiscreteModel,
-                                         glue   :: AbstractArray{<:AdaptivityGlue})
+function DistributedAdaptedDiscreteModel(
+  model  :: DistributedDiscreteModel,
+  parent :: DistributedDiscreteModel,
+  glue   :: AbstractArray{<:AdaptivityGlue};
+)
   models = map(local_views(model),local_views(parent),glue) do model, parent, glue
     AdaptedDiscreteModel(model,parent,glue)
   end
-  return GenericDistributedDiscreteModel(models,get_cell_gids(model))
+  gids = get_cell_gids(model)
+  metadata = model.metadata
+  return GenericDistributedDiscreteModel(models,gids;metadata)
+end
+
+function Adaptivity.get_model(model::DistributedAdaptedDiscreteModel)
+  GenericDistributedDiscreteModel(
+    map(get_model,local_views(model)),
+    get_cell_gids(model);
+    metadata=model.metadata
+  )
+end
+
+function Adaptivity.get_parent(model::DistributedAdaptedDiscreteModel)
+  msg = " Error: Cannot get global parent model. \n 
+          We do not keep the global ids of the parent model within the children.\n
+          You can extract the local parents with map(get_parent,local_views(model))"
+  @notimplemented msg
 end
 
 function Adaptivity.get_adaptivity_glue(model::DistributedAdaptedDiscreteModel)
@@ -44,6 +63,15 @@ struct RedistributeGlue
 end
 
 get_parts(g::RedistributeGlue) = get_parts(g.parts_rcv)
+
+function Base.reverse(g::RedistributeGlue)
+  RedistributeGlue(
+    g.old_parts,g.new_parts,
+    g.parts_snd,g.parts_rcv,
+    g.lids_snd,g.lids_rcv,
+    g.new2old,g.old2new
+  )
+end
 
 function get_old_and_new_parts(g::RedistributeGlue,reverse::Val{false})
   return g.old_parts, g.new_parts
@@ -80,6 +108,17 @@ end
 """
 function redistribute(::DistributedDiscreteModel,args...;kwargs...)
   @abstractmethod
+end
+
+function redistribute(model::DistributedAdaptedDiscreteModel,args...;kwargs...)
+  # Local cmodels are AdaptedDiscreteModels. To correctly dispatch, we need to
+  # extract the underlying models, then redistribute.
+  _model = GenericDistributedDiscreteModel(
+    map(get_model,local_views(model)),
+    get_cell_gids(model);
+    metadata=model.metadata
+  )
+  return redistribute(_model,args...;kwargs...)
 end
 
 # Redistribution of cell-wise dofs, free values and FEFunctions
@@ -177,12 +216,13 @@ function _num_dofs_x_cell(cell_dofs_array,lids)
   end
 end
 
-function get_redistribute_cell_dofs_cache(cell_dof_values_old,
-                                          cell_dof_ids_new,
-                                          model_new,
-                                          glue::RedistributeGlue;
-                                          reverse=false)
-
+function get_redistribute_cell_dofs_cache(
+  cell_dof_values_old,
+  cell_dof_ids_new,
+  model_new,
+  glue::RedistributeGlue;
+  reverse=false
+)
   lids_rcv, lids_snd, parts_rcv, parts_snd, new2old = get_glue_components(glue,Val(reverse))
 
   cell_dof_values_old = change_parts(cell_dof_values_old,get_parts(glue);default=[])
@@ -199,25 +239,28 @@ function get_redistribute_cell_dofs_cache(cell_dof_values_old,
   return caches
 end
 
-function redistribute_cell_dofs(cell_dof_values_old,
-                                cell_dof_ids_new,
-                                model_new,
-                                glue::RedistributeGlue;
-                                reverse=false)
+function redistribute_cell_dofs(
+  cell_dof_values_old,
+  cell_dof_ids_new,
+  model_new,
+  glue::RedistributeGlue;
+  reverse=false
+)
   caches = get_redistribute_cell_dofs_cache(cell_dof_values_old,cell_dof_ids_new,model_new,glue;reverse=reverse)
   return redistribute_cell_dofs!(caches,cell_dof_values_old,cell_dof_ids_new,model_new,glue;reverse=reverse)
 end
 
-function redistribute_cell_dofs!(caches,
-                                 cell_dof_values_old,
-                                 cell_dof_ids_new,
-                                 model_new,
-                                 glue::RedistributeGlue;
-                                 reverse=false)
+function redistribute_cell_dofs!(
+  caches,
+  cell_dof_values_old,
+  cell_dof_ids_new,
+  model_new,
+  glue::RedistributeGlue;
+  reverse=false
+)
 
   snd_data, rcv_data, cell_dof_values_new = caches
   lids_rcv, lids_snd, parts_rcv, parts_snd, new2old = get_glue_components(glue,Val(reverse))
-  old_parts, new_parts = get_old_and_new_parts(glue,Val(reverse))
 
   cell_dof_values_old = change_parts(cell_dof_values_old,get_parts(glue);default=[])
   cell_dof_ids_new    = change_parts(cell_dof_ids_new,get_parts(glue);default=[[]])
@@ -231,15 +274,15 @@ function redistribute_cell_dofs!(caches,
   # We have to build the owned part of "cell_dof_values_new" out of
   #  1. cell_dof_values_old (for those cells s.t. new2old[:]!=0)
   #  2. cell_dof_values_new_rcv (for those cells s.t. new2old[:]=0)
-  _update_cell_dof_values_with_local_info!(cell_dof_values_new,
-                                           cell_dof_values_old,
-                                           new2old)
-
+  _update_cell_dof_values_with_local_info!(
+    cell_dof_values_new, cell_dof_values_old, new2old
+  )
   _unpack_rcv_data!(cell_dof_values_new,rcv_data,lids_rcv)
 
   # Now that every part knows it's new owned dofs, exchange ghosts
-  cell_dof_values_new = change_parts(cell_dof_values_new,new_parts)
-  if i_am_in(new_parts)
+  if !isnothing(model_new)
+    new_parts = get_parts(model_new)
+    cell_dof_values_new = change_parts(cell_dof_values_new,new_parts)
     cache = fetch_vector_ghost_values_cache(cell_dof_values_new,partition(get_cell_gids(model_new)))
     fetch_vector_ghost_values!(cell_dof_values_new,cache) |> wait
   end
@@ -260,11 +303,13 @@ function _get_cell_dof_ids_inner_space(s::TrialFESpace)
   _get_cell_dof_ids_inner_space(s.space)
 end
 
-function redistribute_fe_function(uh_old::Union{DistributedSingleFieldFEFunction,Nothing},
-                                  Uh_new::Union{DistributedSingleFieldFESpace,Nothing},
-                                  model_new,
-                                  glue::RedistributeGlue;
-                                  reverse=false)
+function redistribute_fe_function(
+  uh_old::Union{DistributedSingleFieldFEFunction,Nothing},
+  Uh_new::Union{DistributedSingleFieldFESpace,Nothing},
+  model_new,
+  glue::RedistributeGlue;
+  reverse=false
+)
 
   old_parts, new_parts = get_old_and_new_parts(glue,Val(reverse))
   cell_dof_values_old  = i_am_in(old_parts) ? map(get_cell_dof_values,local_views(uh_old)) : nothing
@@ -290,31 +335,37 @@ for T in [:DistributedSingleFieldFESpace,:DistributedMultiFieldFESpace]
   end
 end
 
-function redistribute_free_values(fv_new::Union{PVector,Nothing},
-                                  Uh_new::Union{DistributedSingleFieldFESpace,DistributedMultiFieldFESpace,Nothing},
-                                  fv_old::Union{PVector,Nothing},
-                                  dv_old::Union{AbstractArray,Nothing},
-                                  Uh_old::Union{DistributedSingleFieldFESpace,DistributedMultiFieldFESpace,Nothing},
-                                  model_new,
-                                  glue::RedistributeGlue;
-                                  reverse=false)
+function redistribute_free_values(
+  fv_new::Union{PVector,Nothing},
+  Uh_new::Union{DistributedSingleFieldFESpace,DistributedMultiFieldFESpace,Nothing},
+  fv_old::Union{PVector,Nothing},
+  dv_old::Union{AbstractArray,Nothing},
+  Uh_old::Union{DistributedSingleFieldFESpace,DistributedMultiFieldFESpace,Nothing},
+  model_new,
+  glue::RedistributeGlue;
+  reverse=false
+)
   caches = get_redistribute_free_values_cache(fv_new,Uh_new,fv_old,dv_old,Uh_old,model_new,glue;reverse=reverse)
   return redistribute_free_values!(caches,fv_new,Uh_new,fv_old,dv_old,Uh_old,model_new,glue;reverse=reverse)
 end
 
-function get_redistribute_free_values_cache(fv_new,Uh_new,
-                                            fv_old,dv_old,Uh_old,
-                                            model_new,glue::RedistributeGlue;
-                                            reverse=false)
+function get_redistribute_free_values_cache(
+  fv_new,Uh_new,
+  fv_old,dv_old,Uh_old,
+  model_new,glue::RedistributeGlue;
+  reverse=false
+)
   T = _get_fe_type(Uh_new,Uh_old)
   get_redistribute_free_values_cache(T,fv_new,Uh_new,fv_old,dv_old,Uh_old,model_new,glue;reverse=reverse)
 end
 
-function get_redistribute_free_values_cache(::Type{DistributedSingleFieldFESpace},
-                                            fv_new,Uh_new,
-                                            fv_old,dv_old,Uh_old,
-                                            model_new,glue::RedistributeGlue;
-                                            reverse=false)
+function get_redistribute_free_values_cache(
+  ::Type{DistributedSingleFieldFESpace},
+  fv_new,Uh_new,
+  fv_old,dv_old,Uh_old,
+  model_new,glue::RedistributeGlue;
+  reverse=false
+)
   old_parts, new_parts = get_old_and_new_parts(glue,Val(reverse))
   cell_dof_values_old = i_am_in(old_parts) ? map(scatter_free_and_dirichlet_values,local_views(Uh_old),local_views(fv_old),dv_old) : nothing
   cell_dof_ids_new    = i_am_in(new_parts) ? map(_get_cell_dof_ids_inner_space, local_views(Uh_new)) : nothing
@@ -322,11 +373,13 @@ function get_redistribute_free_values_cache(::Type{DistributedSingleFieldFESpace
   return caches
 end
 
-function get_redistribute_free_values_cache(::Type{DistributedMultiFieldFESpace},
-                                            fv_new,Uh_new,
-                                            fv_old,dv_old,Uh_old,
-                                            model_new,glue::RedistributeGlue;
-                                            reverse=false)
+function get_redistribute_free_values_cache(
+  ::Type{DistributedMultiFieldFESpace},
+  fv_new,Uh_new,
+  fv_old,dv_old,Uh_old,
+  model_new,glue::RedistributeGlue;
+  reverse=false
+)
   old_parts, new_parts = get_old_and_new_parts(glue,Val(reverse))
 
   if i_am_in(old_parts)
@@ -356,27 +409,30 @@ function get_redistribute_free_values_cache(::Type{DistributedMultiFieldFESpace}
   return caches
 end
 
-function redistribute_free_values!(caches,
-                                   fv_new,Uh_new,
-                                   fv_old,dv_old,Uh_old,
-                                   model_new,
-                                   glue::RedistributeGlue;
-                                   reverse=false)
+function redistribute_free_values!(
+  caches,
+  fv_new,Uh_new,
+  fv_old,dv_old,Uh_old,
+  model_new,
+  glue::RedistributeGlue;
+  reverse=false
+)
   T = _get_fe_type(Uh_new,Uh_old)
   redistribute_free_values!(T,caches,fv_new,Uh_new,fv_old,dv_old,Uh_old,model_new,glue;reverse=reverse)
 end
 
-function redistribute_free_values!(::Type{DistributedSingleFieldFESpace},
-                                   caches,
-                                   fv_new::Union{PVector,Nothing},
-                                   Uh_new::Union{DistributedSingleFieldFESpace,Nothing},
-                                   fv_old::Union{PVector,Nothing},
-                                   dv_old::Union{AbstractArray,Nothing},
-                                   Uh_old::Union{DistributedSingleFieldFESpace,Nothing},
-                                   model_new,
-                                   glue::RedistributeGlue;
-                                   reverse=false)
-
+function redistribute_free_values!(
+  ::Type{DistributedSingleFieldFESpace},
+  caches,
+  fv_new::Union{PVector,Nothing},
+  Uh_new::Union{DistributedSingleFieldFESpace,Nothing},
+  fv_old::Union{PVector,Nothing},
+  dv_old::Union{AbstractArray,Nothing},
+  Uh_old::Union{DistributedSingleFieldFESpace,Nothing},
+  model_new,
+  glue::RedistributeGlue;
+  reverse=false
+)
   old_parts, new_parts = get_old_and_new_parts(glue,Val(reverse))
   cell_dof_values_old = i_am_in(old_parts) ? map(scatter_free_and_dirichlet_values,local_views(Uh_old),local_views(fv_old),dv_old) : nothing
   cell_dof_ids_new    = i_am_in(new_parts) ? map(_get_cell_dof_ids_inner_space, local_views(Uh_new)) : nothing
@@ -389,17 +445,18 @@ function redistribute_free_values!(::Type{DistributedSingleFieldFESpace},
   return fv_new
 end
 
-function redistribute_free_values!(::Type{DistributedMultiFieldFESpace},
-                                   caches,
-                                   fv_new::Union{PVector,Nothing},
-                                   Uh_new::Union{DistributedMultiFieldFESpace,Nothing},
-                                   fv_old::Union{PVector,Nothing},
-                                   dv_old::Union{AbstractArray,Nothing},
-                                   Uh_old::Union{DistributedMultiFieldFESpace,Nothing},
-                                   model_new,
-                                   glue::RedistributeGlue;
-                                   reverse=false)
-
+function redistribute_free_values!(
+  ::Type{DistributedMultiFieldFESpace},
+  caches,
+  fv_new::Union{PVector,Nothing},
+  Uh_new::Union{DistributedMultiFieldFESpace,Nothing},
+  fv_old::Union{PVector,Nothing},
+  dv_old::Union{AbstractArray,Nothing},
+  Uh_old::Union{DistributedMultiFieldFESpace,Nothing},
+  model_new,
+  glue::RedistributeGlue;
+  reverse=false
+)
   old_parts, new_parts = get_old_and_new_parts(glue,Val(reverse))
 
   if i_am_in(old_parts)
@@ -425,4 +482,258 @@ function redistribute_free_values!(::Type{DistributedMultiFieldFESpace},
   map(Uh_new_i,Uh_old_i,fv_new_i,fv_old_i,dv_old_i,caches) do Uh_new_i,Uh_old_i,fv_new_i,fv_old_i,dv_old_i,caches
     redistribute_free_values!(DistributedSingleFieldFESpace,caches,fv_new_i,Uh_new_i,fv_old_i,dv_old_i,Uh_old_i,model_new,glue;reverse=reverse)
   end
+end
+
+
+# Cartesian Model uniform refinement
+
+function Adaptivity.refine(
+  cmodel::DistributedDiscreteModel{Dc},
+  refs::Integer = 2
+) where Dc
+  Adaptivity.refine(cmodel,Tuple(fill(refs,Dc)))
+end
+
+function Adaptivity.refine(
+  cmodel::DistributedAdaptedDiscreteModel{Dc},
+  refs::NTuple{Dc,<:Integer}
+) where Dc
+
+  # Local cmodels are AdaptedDiscreteModels. To correctly dispatch, we need to
+  # extract the underlying models, then refine.
+  _cmodel = get_model(cmodel)
+  _fmodel = refine(_cmodel,refs)
+
+  # Now the issue is that the local parents are not pointing to local_views(cmodel).
+  # We have to fix that...
+  fmodel = GenericDistributedDiscreteModel(
+    map(get_model,local_views(_fmodel)),
+    get_cell_gids(_fmodel);
+    metadata=_fmodel.metadata
+  )
+  glues = get_adaptivity_glue(_fmodel)
+  return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
+end
+
+function Adaptivity.refine(
+  cmodel::DistributedCartesianDiscreteModel{Dc},
+  refs::NTuple{Dc,<:Integer},
+) where Dc
+
+  ranks = linear_indices(local_views(cmodel))
+  desc, parts = cmodel.metadata.descriptor, cmodel.metadata.mesh_partition
+
+  # Create the new model
+  nC = desc.partition
+  domain = Adaptivity._get_cartesian_domain(desc)
+  nF = nC .* refs
+  fmodel = CartesianDiscreteModel(
+    ranks,parts,domain,nF;map=desc.map,isperiodic=desc.isperiodic
+  )
+
+  # The idea for the glue is the following: 
+  #   For each coarse local model (owned + ghost), we can use the serial code to create
+  #   the glue. However, this glue is NOT fully correct. 
+  #   Why? Because all the children belonging to coarse ghost cells are in the glue. This 
+  #   is not correct, since we only want to keep the children which are ghosts in the new model.
+  #   To this end, we have to remove the extra fine layers of ghosts from the glue. This we 
+  #   can do thanks to how predictable the Cartesian model is.
+  glues = map(ranks,local_views(cmodel)) do rank,cmodel
+    # Glue for the local models, of size nC_local .* ref
+    desc_local = get_cartesian_descriptor(cmodel)
+    nC_local = desc_local.partition
+    nF_local = nC_local .* refs
+    f2c_map, child_map = Adaptivity._create_cartesian_f2c_maps(nC_local,refs)
+    
+    # Remove extra fine layers of ghosts
+    p = Tuple(CartesianIndices(parts)[rank])
+    periodic_ghosts = map((isp,np) -> (np==1) ? false : isp, desc.isperiodic, parts)
+    local_range = map(p,parts,periodic_ghosts,nF_local,refs) do p, np, pg, nFl, refs
+      has_ghost_start = (np > 1) && ((p != 1)  || pg)
+      has_ghost_stop  = (np > 1) && ((p != np) || pg)
+      # If has coarse ghost layer, remove all fine layers but one at each end
+      start = 1 + has_ghost_start*(refs-1)
+      stop  = nFl - has_ghost_stop*(refs-1)
+      return start:stop
+    end
+
+    _indices = LinearIndices(nF_local)[local_range...]
+    indices = reshape(_indices,length(_indices))
+    f2c_cell_map = f2c_map[indices]
+    fcell_to_child_id = child_map[indices]
+  
+    # Create the glue
+    faces_map = [(d==Dc) ? f2c_cell_map : Int[] for d in 0:Dc]
+    poly   = (Dc == 2) ? QUAD : HEX
+    reffe  = LagrangianRefFE(Float64,poly,1)
+    rrules = RefinementRule(reffe,refs)
+    return AdaptivityGlue(faces_map,fcell_to_child_id,rrules)
+  end
+
+  return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
+end
+
+# Cartesian Model redistribution
+
+@inline function redistribute(  
+  old_model::Union{DistributedCartesianDiscreteModel,Nothing},
+  pdesc::DistributedCartesianDescriptor;
+  old_ranks = nothing
+)
+  redistribute_cartesian(old_model,pdesc;old_ranks)
+end
+
+"""
+    redistribute_cartesian(old_model,new_ranks,new_parts)
+    redistribute_cartesian(old_model,pdesc::DistributedCartesianDescriptor)
+  
+  Redistributes a DistributedCartesianDiscreteModel to a new set of ranks and parts.
+  Only redistributes into a superset of the old_model ranks (i.e. towards more processors).
+"""
+function redistribute_cartesian(
+  old_model::Union{DistributedCartesianDiscreteModel,Nothing},
+  new_ranks,
+  new_parts;
+  old_ranks = nothing
+)
+  _pdesc = isnothing(old_model) ? nothing : old_model.metadata
+  pdesc  = emit_cartesian_descriptor(_pdesc,new_ranks,new_parts)
+  redistribute_cartesian(old_model,pdesc;old_ranks)
+end
+
+function redistribute_cartesian(
+  old_model::Union{DistributedCartesianDiscreteModel,Nothing},
+  pdesc::DistributedCartesianDescriptor{Dc};
+  old_ranks = nothing
+) where Dc
+  new_ranks = pdesc.ranks
+  new_parts = pdesc.mesh_partition
+
+  desc = pdesc.descriptor
+  ncells = desc.partition
+  domain = Adaptivity._get_cartesian_domain(desc)
+  new_model = CartesianDiscreteModel(new_ranks,new_parts,domain,ncells)
+
+  rglue = get_cartesian_redistribute_glue(new_model,old_model;old_ranks)
+  return new_model, rglue
+end
+
+function get_cartesian_owners(gids,nparts,ncells)
+  # This is currently O(sqrt(np)), but I believe we could make it 
+  # O(ln(np)) if we ensured the search is sorted. Even faster if we sort 
+  # the gids first, which progressively reduces the number of ranges to search.
+  ranges = map(nparts,ncells) do np, nc
+    map(p -> PartitionedArrays.local_range(p,np,nc,false,false), 1:np)
+  end
+  cart_ids = CartesianIndices(ncells)
+  owner_ids = LinearIndices(nparts)
+  owners = map(gids) do gid
+    gid_cart = Tuple(cart_ids[gid])
+    owner_cart = map((r,g) -> findfirst(ri -> g ∈ ri,r),ranges,gid_cart)
+    return owner_ids[owner_cart...]
+  end
+  return owners
+end
+
+function get_cartesian_redistribute_glue(
+  new_model::DistributedCartesianDiscreteModel{Dc},
+  old_model::Union{DistributedCartesianDiscreteModel{Dc},Nothing};
+  old_ranks = nothing
+) where Dc
+  pdesc = new_model.metadata
+  desc  = pdesc.descriptor
+  ncells = desc.partition
+
+  # Components in the new partition
+  new_ranks = pdesc.ranks
+  new_parts = new_model.metadata.mesh_partition
+  new_ids = partition(get_cell_gids(new_model))
+  new_models = local_views(new_model)
+
+  # Components in the old partition (if present)
+  _old_parts = map(new_ranks) do r
+    (r == 1) ? Int[old_model.metadata.mesh_partition...] : Int[]
+  end
+  old_parts = Tuple(PartitionedArrays.getany(emit(_old_parts)))
+  _old_ids = isnothing(old_model) ? nothing : partition(get_cell_gids(old_model))
+  old_ids = change_parts(_old_ids,new_ranks)
+  _old_models = isnothing(old_model) ? nothing : local_views(old_model)
+  old_models = change_parts(_old_models,new_ranks)
+
+  # Produce the glue components
+  old2new,new2old,parts_rcv,parts_snd,lids_rcv,lids_snd = map(
+    new_ranks,new_models,old_models,new_ids,old_ids) do r, new_model, old_model, new_ids, old_ids
+
+    if !isnothing(old_ids)
+      # If I'm in the old subprocessor,
+      #   - I send all owned old cells that I don't own in the new model.
+      #   - I receive all owned new cells that I don't own in the old model.
+      old2new = replace(find_local_to_local_map(old_ids,new_ids), -1 => 0)
+      new2old = replace(find_local_to_local_map(new_ids,old_ids), -1 => 0)
+
+      new_l2o = local_to_own(new_ids)
+      old_l2o = local_to_own(old_ids)
+      mask_rcv = map(1:local_length(new_ids)) do new_lid
+        old_lid = new2old[new_lid]
+        A = !iszero(new_l2o[new_lid]) # I own this cell in the new model
+        B = (iszero(old_lid) || iszero(old_l2o[old_lid])) # I don't own this cell in the old model
+        return A && B
+      end
+      ids_rcv = findall(mask_rcv)
+
+      mask_snd = map(1:local_length(old_ids)) do old_lid
+        new_lid = old2new[old_lid]
+        A = !iszero(old_l2o[old_lid]) # I own this cell in the old model
+        B = (iszero(new_lid) || iszero(new_l2o[new_lid])) # I don't own this cell in the new model
+        return A && B
+      end
+      ids_snd = findall(mask_snd)
+    else
+      # If I'm not in the old subprocessor, 
+      #   - I don't send anything. 
+      #   - I receive all my owned cells in the new model.
+      old2new = Int[]
+      new2old = fill(0,num_cells(new_model))
+      ids_rcv = collect(own_to_local(new_ids))
+      ids_snd = Int[]
+    end
+
+    # When snd/rcv ids have been selected, we need to find their owners and prepare 
+    # the snd/rcv buffers.
+
+    # First, everyone can potentially receive stuff: 
+    to_global!(ids_rcv,new_ids)
+    ids_rcv_to_part = get_cartesian_owners(ids_rcv,old_parts,ncells)
+    to_local!(ids_rcv,new_ids)
+    parts_rcv = unique(ids_rcv_to_part)
+    lids_rcv = map(parts_rcv) do nbor
+      ids_rcv[findall(x -> x == nbor, ids_rcv_to_part)]
+    end
+    lids_rcv = convert(Vector{Vector{Int}}, lids_rcv)
+
+    # Then, only the old subprocessor can potentially send stuff:
+    if !isnothing(old_ids)
+      to_global!(ids_snd,old_ids)
+      ids_snd_to_part = get_cartesian_owners(ids_snd,new_parts,ncells)
+      to_local!(ids_snd,old_ids)
+      parts_snd = unique(ids_snd_to_part)
+      lids_snd = map(parts_snd) do nbor
+        ids_snd[findall(x -> x == nbor, ids_snd_to_part)]
+      end
+      lids_snd = convert(Vector{Vector{Int}}, lids_snd)
+    else
+      parts_snd = Int[]
+      lids_snd  = [Int[]]
+    end
+
+    return old2new, new2old, parts_rcv, parts_snd, JaggedArray(lids_rcv), JaggedArray(lids_snd)
+  end |> tuple_of_arrays
+
+  # WARNING: This will fail if compared (===) with get_parts(old_model)
+  # Do we really require this in the glue? Could we remove the old ranks?
+  if isnothing(old_ranks)
+    old_ranks = generate_subparts(new_ranks,prod(old_parts))
+  end
+
+  return RedistributeGlue(new_ranks,old_ranks,parts_rcv,parts_snd,lids_rcv,lids_snd,old2new,new2old)
 end
