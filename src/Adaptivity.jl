@@ -783,7 +783,7 @@ function get_redistributed_face_labeling(
   for Df in 0:Dc
 
     # Pack entity data
-    old_cell_to_face_entity, new_cell_to_face_entity = map(old_models,new_models) do old_model, new_model
+    old_cell_to_face_entity, new_cell_to_face_ids = map(old_models,new_models) do old_model, new_model
 
       if !isnothing(old_model)
         old_labels = get_face_labeling(old_model)
@@ -796,21 +796,19 @@ function get_redistributed_face_labeling(
           lazy_map(Reindex(old_face2entity),old_cell2face.data),
           old_cell2face.ptrs
         )
+      else
+        old_cell_to_face_entity = Int32[]
       end
 
       new_topo = get_grid_topology(new_model)
-      new_cell2face = Geometry.get_faces(new_topo,Dc,Df)
-      new_cell_to_face_entity = Table(
-        zeros(eltype(new_cell2face.data),length(new_cell2face.data)),
-        new_cell2face.ptrs
-      )
+      new_cell_to_face_ids = Geometry.get_faces(new_topo,Dc,Df)
 
-      return old_cell_to_face_entity, new_cell_to_face_entity
+      return old_cell_to_face_entity, new_cell_to_face_ids
     end |> tuple_of_arrays
 
     # Redistribute entity data
-    redistribute_cell_dofs(
-      old_cell_to_face_entity,new_cell_to_face_entity,new_model,glue
+    new_cell_to_face_entity = redistribute_cell_dofs(
+      old_cell_to_face_entity,new_cell_to_face_ids,new_model,glue
     )
 
     # Unpack entity data
@@ -835,16 +833,37 @@ function get_redistributed_face_labeling(
   end
 
   # Communicate entity tags
-  old_tag_to_name, old_tag_to_entities = map(new_models) do new_model
+  # The difficulty here is that String and Vector{Int32} are not isbits types.
+  # We have to convert them to isbits types, then convert them back.
+  name_data, name_ptrs, entities_data, entities_ptrs = map(new_models) do new_model
     if !isnothing(old_model)
       new_labels = get_face_labeling(new_model)
-      return new_labels.tag_to_name, new_labels.tag_to_entities
+      names = JaggedArray(map(collect,new_labels.tag_to_name))
+      entities = JaggedArray(new_labels.tag_to_entities)
+      return names.data, names.ptrs, entities.data, entities.ptrs
     else
-      return String[], Vector{Int32}[]
+      return Char[], Int32[], Int32[], Int32[]
     end
   end |> tuple_of_arrays
-  new_tag_to_name = emit(old_tag_to_name)
-  new_tag_to_entities = emit(old_tag_to_entities)
+
+  name_data = emit(name_data)
+  entities_data = emit(entities_data)
+  name_ptrs = emit(name_ptrs)
+  entities_ptrs = emit(entities_ptrs)
+  
+  new_tag_to_name, new_tag_to_entities = map(
+    name_data,name_ptrs,entities_data,entities_ptrs
+  ) do name_data, name_ptrs, entities_data, entities_ptrs
+    names = Vector{String}(undef,length(name_ptrs)-1)
+    for i = 1:length(names)
+      names[i] = join(Char.(name_data[name_ptrs[i]:name_ptrs[i+1]-1]))
+    end
+    entities = Vector{Vector{Int32}}(undef,length(entities_ptrs)-1)
+    for i = 1:length(entities)
+      entities[i] = entities_data[entities_ptrs[i]:entities_ptrs[i+1]-1]
+    end
+    return names, entities
+  end |> tuple_of_arrays
 
   new_labels = map(FaceLabeling,new_d_to_dface_to_entity,new_tag_to_entities,new_tag_to_name)
   return DistributedFaceLabeling(new_labels)
