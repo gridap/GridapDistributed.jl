@@ -1,4 +1,4 @@
-module CartesianAdaptivityTests
+module AdaptivityCartesianTests
 using Test
 
 using Gridap

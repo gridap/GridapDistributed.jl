@@ -12,7 +12,7 @@ module TestApp
   include("../../HeatEquationTests.jl")
   include("../../StokesOpenBoundaryTests.jl")
   include("../../AdaptivityTests.jl")
-  include("../../CartesianAdaptivityTests.jl")
+  include("../../AdaptivityCartesianTests.jl")
   include("../../AdaptivityMultiFieldTests.jl")
   include("../../BlockSparseMatrixAssemblersTests.jl")
 end

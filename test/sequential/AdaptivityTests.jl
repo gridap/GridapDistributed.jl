@@ -2,9 +2,9 @@ module AdaptivityTestsSeq
 
 using PartitionedArrays
 
-include("../CartesianAdaptivityTests.jl")
+include("../AdaptivityCartesianTests.jl")
 with_debug() do distribute
-  CartesianAdaptivityTests.main(distribute)
+  AdaptivityCartesianTests.main(distribute)
 end 
 
 end # module
