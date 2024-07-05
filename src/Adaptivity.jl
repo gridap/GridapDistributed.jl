@@ -570,7 +570,22 @@ function Adaptivity.refine(
     return AdaptivityGlue(faces_map,fcell_to_child_id,rrules)
   end
 
-  return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
+  # Finally, we need to propagate the face labelings to the new model,
+  # and create the local adapted models.
+  fmodels = map(local_views(fmodel),local_views(cmodel),glues) do fmodel, cmodel, glue
+    # Propagate face labels
+    clabels = get_face_labeling(cmodel)
+    ctopo   = get_grid_topology(cmodel)
+    ftopo   = get_grid_topology(fmodel)
+    flabels = Adaptivity._refine_face_labeling(clabels,glue,ctopo,ftopo)
+
+    _fmodel = CartesianDiscreteModel(get_grid(fmodel),ftopo,flabels)
+    return AdaptedDiscreteModel(_fmodel,cmodel,glue)
+  end
+
+  fgids = get_cell_gids(fmodel)
+  metadata = fmodel.metadata
+  return GenericDistributedDiscreteModel(fmodels,fgids;metadata)
 end
 
 # Cartesian Model redistribution
@@ -612,9 +627,19 @@ function redistribute_cartesian(
   desc = pdesc.descriptor
   ncells = desc.partition
   domain = Adaptivity._get_cartesian_domain(desc)
-  new_model = CartesianDiscreteModel(new_ranks,new_parts,domain,ncells)
+  _new_model = CartesianDiscreteModel(new_ranks,new_parts,domain,ncells)
 
-  rglue = get_cartesian_redistribute_glue(new_model,old_model;old_ranks)
+  rglue = get_cartesian_redistribute_glue(_new_model,old_model;old_ranks)
+
+  # Propagate face labelings to the new model
+  new_labels = get_redistributed_face_labeling(_new_model,old_model,rglue)
+  new_models = map(local_views(_new_model),local_views(new_labels)) do _new_model, new_labels
+    CartesianDiscreteModel(get_grid(_new_model),get_grid_topology(_new_model),new_labels)
+  end
+  new_model = GenericDistributedDiscreteModel(
+    new_models,get_cell_gids(_new_model);metadata=_new_model.metadata
+  )
+
   return new_model, rglue
 end
 
@@ -736,4 +761,91 @@ function get_cartesian_redistribute_glue(
   end
 
   return RedistributeGlue(new_ranks,old_ranks,parts_rcv,parts_snd,lids_rcv,lids_snd,old2new,new2old)
+end
+
+function get_redistributed_face_labeling(
+  new_model::DistributedCartesianDiscreteModel{Dc},
+  old_model::Union{DistributedCartesianDiscreteModel{Dc},Nothing},
+  glue::RedistributeGlue
+) where Dc
+
+  new_ranks = get_parts(new_model)
+
+  _old_models = !isnothing(old_model) ? local_views(old_model) : nothing
+  old_models = change_parts(_old_models,new_ranks)
+  new_models = local_views(new_model)
+  
+  # Communicate facet entities
+  new_d_to_dface_to_entity = map(new_models) do new_model
+    Vector{Vector{Int32}}(undef,Dc+1)
+  end
+
+  for Df in 0:Dc
+
+    # Pack entity data
+    old_cell_to_face_entity, new_cell_to_face_entity = map(old_models,new_models) do old_model, new_model
+
+      if !isnothing(old_model)
+        old_labels = get_face_labeling(old_model)
+        old_topo = get_grid_topology(old_model)
+
+        old_cell2face = Geometry.get_faces(old_topo,Dc,Df)
+        old_face2entity = old_labels.d_to_dface_to_entity[Df+1]
+
+        old_cell_to_face_entity = Table(
+          lazy_map(Reindex(old_face2entity),old_cell2face.data),
+          old_cell2face.ptrs
+        )
+      end
+
+      new_topo = get_grid_topology(new_model)
+      new_cell2face = Geometry.get_faces(new_topo,Dc,Df)
+      new_cell_to_face_entity = Table(
+        zeros(eltype(new_cell2face.data),length(new_cell2face.data)),
+        new_cell2face.ptrs
+      )
+
+      return old_cell_to_face_entity, new_cell_to_face_entity
+    end |> tuple_of_arrays
+
+    # Redistribute entity data
+    redistribute_cell_dofs(
+      old_cell_to_face_entity,new_cell_to_face_entity,new_model,glue
+    )
+
+    # Unpack entity data
+    new_face2entity = map(new_models,new_cell_to_face_entity) do new_model,new_cell_to_face_entity
+      new_topo = get_grid_topology(new_model)
+      new_cell2face = Geometry.get_faces(new_topo,Dc,Df)
+      
+      new_face2entity = zeros(eltype(new_cell2face.data),Geometry.num_faces(new_topo,Df))
+      for cell in 1:length(new_cell2face.ptrs)-1
+        for pos in new_cell2face.ptrs[cell]:new_cell2face.ptrs[cell+1]-1
+          face = new_cell2face.data[pos]
+          new_face2entity[face] = new_cell_to_face_entity.data[pos]
+        end
+      end
+
+      return new_face2entity
+    end
+
+    map(new_d_to_dface_to_entity,new_face2entity) do new_d_to_dface_to_entity,new_face2entity
+      new_d_to_dface_to_entity[Df+1] = new_face2entity
+    end
+  end
+
+  # Communicate entity tags
+  old_tag_to_name, old_tag_to_entities = map(new_models) do new_model
+    if !isnothing(old_model)
+      new_labels = get_face_labeling(new_model)
+      return new_labels.tag_to_name, new_labels.tag_to_entities
+    else
+      return String[], Vector{Int32}[]
+    end
+  end |> tuple_of_arrays
+  new_tag_to_name = emit(old_tag_to_name)
+  new_tag_to_entities = emit(old_tag_to_entities)
+
+  new_labels = map(FaceLabeling,new_d_to_dface_to_entity,new_tag_to_entities,new_tag_to_name)
+  return DistributedFaceLabeling(new_labels)
 end
