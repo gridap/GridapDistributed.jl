@@ -577,7 +577,7 @@ function Adaptivity.refine(
     clabels = get_face_labeling(cmodel)
     ctopo   = get_grid_topology(cmodel)
     ftopo   = get_grid_topology(fmodel)
-    flabels = Adaptivity._refine_face_labeling(clabels,glue,ctopo,ftopo)
+    flabels = Adaptivity.refine_face_labeling(clabels,glue,ctopo,ftopo)
 
     _fmodel = CartesianDiscreteModel(get_grid(fmodel),ftopo,flabels)
     return AdaptedDiscreteModel(_fmodel,cmodel,glue)
