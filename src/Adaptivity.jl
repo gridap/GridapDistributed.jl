@@ -12,7 +12,7 @@ function DistributedAdaptedDiscreteModel(
     AdaptedDiscreteModel(model,parent,glue)
   end
   gids = get_cell_gids(model)
-  metadata = model.metadata
+  metadata = hasproperty(model,:metadata) ? model.metadata : nothing
   return GenericDistributedDiscreteModel(models,gids;metadata)
 end
 
@@ -20,7 +20,7 @@ function Adaptivity.get_model(model::DistributedAdaptedDiscreteModel)
   GenericDistributedDiscreteModel(
     map(get_model,local_views(model)),
     get_cell_gids(model);
-    metadata=model.metadata
+    metadata = hasproperty(model,:metadata) ? model.metadata : nothing
   )
 end
 
