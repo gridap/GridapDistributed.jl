@@ -415,6 +415,18 @@ function Geometry.DiscreteModel(
   GenericDistributedDiscreteModel(models,gids)
 end
 
+# UnstructuredDiscreteModel
+
+const DistributedUnstructuredDiscreteModel{Dc,Dp,A,B,C} = 
+  GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:UnstructuredDiscreteModel},B,C}
+
+function Geometry.UnstructuredDiscreteModel(model::GenericDistributedDiscreteModel)
+  return GenericDistributedDiscreteModel(
+    map(UnstructuredDiscreteModel,local_views(model)),
+    get_cell_gids(model),
+  )
+end
+
 # Triangulation
 
 # We do not inherit from Triangulation on purpose.
