@@ -197,9 +197,9 @@ end
 
 local_views(a::DistributedMeasure) = a.measures
 
-function CellData.Measure(t::DistributedTriangulation,args...)
+function CellData.Measure(t::DistributedTriangulation,args...;kwargs...)
   measures = map(t.trians) do trian
-    Measure(trian,args...)
+    Measure(trian,args...;kwargs...)
   end
   DistributedMeasure(measures,t)
 end
