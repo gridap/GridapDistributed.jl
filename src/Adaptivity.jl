@@ -835,9 +835,9 @@ function get_redistributed_face_labeling(
   # Communicate entity tags
   # The difficulty here is that String and Vector{Int32} are not isbits types.
   # We have to convert them to isbits types, then convert them back.
-  name_data, name_ptrs, entities_data, entities_ptrs = map(new_models) do new_model
+  name_data, name_ptrs, entities_data, entities_ptrs = map(old_models) do old_model
     if !isnothing(old_model)
-      new_labels = get_face_labeling(new_model)
+      new_labels = get_face_labeling(old_model)
       names = JaggedArray(map(collect,new_labels.tag_to_name))
       entities = JaggedArray(new_labels.tag_to_entities)
       return names.data, names.ptrs, entities.data, entities.ptrs
