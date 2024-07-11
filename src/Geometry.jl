@@ -427,6 +427,14 @@ function Geometry.UnstructuredDiscreteModel(model::GenericDistributedDiscreteMod
   )
 end
 
+# Simplexify
+
+function Geometry.simplexify(model::DistributedDiscreteModel)
+  _model = UnstructuredDiscreteModel(model)
+  ref_model = refine(_model, refinement_method = "simplexify")
+  return Adaptivity.get_model(ref_model)
+end
+
 # Triangulation
 
 # We do not inherit from Triangulation on purpose.
