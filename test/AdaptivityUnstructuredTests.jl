@@ -1,18 +1,86 @@
-using FillArrays
-using PartitionedArrays, GridapDistributed
+module AdaptivityUnstructuredTests
+using Test
+
 using Gridap
-using Gridap.Adaptivity, Gridap.Arrays, Gridap.Geometry
+using Gridap.Geometry
+using Gridap.Adaptivity
+using Gridap.FESpaces
 
-using GridapDistributed: GenericDistributedDiscreteModel
+using MPI
+using GridapDistributed
+using PartitionedArrays
 
-ranks = with_debug() do distribute
-  distribute(LinearIndices((2,)))
+using GridapDistributed: i_am_in
+
+function test_adaptivity(ranks,cmodel,fmodel)
+  if i_am_in(ranks)
+    sol(x) = sum(x)
+    order  = 3
+    qorder = 2*order
+    reffe  = ReferenceFE(lagrangian,Float64,order)
+    amodel = fmodel
+
+    Ωf  = Triangulation(amodel)
+    dΩf = Measure(Ωf,qorder)
+    Vf  = FESpace(amodel,reffe)
+    Uf  = TrialFESpace(Vf)
+    uh_fine = interpolate(sol,Vf)
+
+    Ωc  = Triangulation(cmodel)
+    dΩc = Measure(Ωc,qorder)
+    Vc  = FESpace(cmodel,reffe)
+    Uc  = TrialFESpace(Vc)
+    uh_coarse = interpolate(sol,Vc)
+
+    dΩcf = Measure(Ωc,Ωf,qorder)
+
+    # Coarse to Fine projection
+    af(u,v) = ∫(u⋅v)*dΩf
+    lf(v) = ∫(uh_coarse*v)*dΩf
+    op = AffineFEOperator(af,lf,Uf,Vf)
+    uh_coarse_to_fine = solve(op)
+
+    eh = uh_fine - uh_coarse_to_fine
+    @test sum(∫(eh⋅eh)*dΩf) < 1e-6
+
+    # Fine to Coarse projection
+    ac(u,v) = ∫(u⋅v)*dΩc
+    lc(v) = ∫(uh_fine*v)*dΩcf
+    op = AffineFEOperator(ac,lc,Uc,Vc)
+    uh_fine_to_coarse = solve(op)
+
+    eh = uh_coarse - uh_fine_to_coarse
+    @test sum(∫(eh⋅eh)*dΩc) < 1e-6
+  end
+  return true
 end
 
-_cmodel = CartesianDiscreteModel(ranks,(2,1),(0,1,0,1),(4,4))
-cmodel = UnstructuredDiscreteModel(_cmodel)
+############################################################################################
 
-fmodel = refine(cmodel)
+function main(distribute,parts,ncells)
+  ranks = distribute(LinearIndices((prod(parts),)))
 
+  parent = UnstructuredDiscreteModel(
+    CartesianDiscreteModel(ranks,parts,(0,1,0,1),ncells)
+  )
 
+  child1 = refine(parent, refinement_method = "red_green" )
+  test_adaptivity(ranks,parent,child1)
 
+  child2 = refine(parent, refinement_method = "nvb" )
+  test_adaptivity(ranks,parent,child2)
+
+  child3 = refine(parent, refinement_method = "barycentric" )
+  test_adaptivity(ranks,parent,child3)
+
+  child4 = refine(parent, refinement_method = "simplexify" )
+  test_adaptivity(ranks,parent,child4)
+
+end
+
+function main(distribute)
+  main(distribute,(2,2),(8,8))
+  main(distribute,(2,2,1),(4,4,4))
+end
+
+end # module AdaptivityUnstructuredTests

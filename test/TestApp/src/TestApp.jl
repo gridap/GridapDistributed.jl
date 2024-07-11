@@ -13,6 +13,7 @@ module TestApp
   include("../../StokesOpenBoundaryTests.jl")
   include("../../AdaptivityTests.jl")
   include("../../AdaptivityCartesianTests.jl")
+  include("../../AdaptivityUnstructuredTests.jl")
   include("../../AdaptivityMultiFieldTests.jl")
   include("../../BlockSparseMatrixAssemblersTests.jl")
 end
