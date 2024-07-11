@@ -432,7 +432,7 @@ end
 function Geometry.simplexify(model::DistributedDiscreteModel)
   _model = UnstructuredDiscreteModel(model)
   ref_model = refine(_model, refinement_method = "simplexify")
-  return Adaptivity.get_model(ref_model)
+  return UnstructuredDiscreteModel(Adaptivity.get_model(ref_model))
 end
 
 # Triangulation

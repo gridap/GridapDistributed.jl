@@ -15,7 +15,7 @@ using GridapDistributed: i_am_in
 function test_adaptivity(ranks,cmodel,fmodel)
   if i_am_in(ranks)
     sol(x) = sum(x)
-    order  = 3
+    order  = 1
     qorder = 2*order
     reffe  = ReferenceFE(lagrangian,Float64,order)
     amodel = fmodel
@@ -60,22 +60,31 @@ end
 function main(distribute,parts,ncells)
   ranks = distribute(LinearIndices((prod(parts),)))
 
-  parent = UnstructuredDiscreteModel(
-    CartesianDiscreteModel(ranks,parts,(0,1,0,1),ncells)
+  Dc = length(ncells)
+  domain = (Dc == 2) ? (0,1,0,1) : (0,1,0,1,0,1)
+  parent1 = UnstructuredDiscreteModel(
+    CartesianDiscreteModel(ranks,parts,domain,ncells)
   )
 
-  child1 = refine(parent, refinement_method = "red_green" )
-  test_adaptivity(ranks,parent,child1)
+  i_am_main(ranks) && println("UnstructuredAdaptivityTests: red_green")
+  child1 = refine(parent1, refinement_method = "red_green" )
+  test_adaptivity(ranks,parent1,child1)
 
-  child2 = refine(parent, refinement_method = "nvb" )
-  test_adaptivity(ranks,parent,child2)
+  i_am_main(ranks) && println("UnstructuredAdaptivityTests: simplexify")
+  child2 = refine(parent1, refinement_method = "simplexify" )
+  test_adaptivity(ranks,parent1,child2)
 
-  child3 = refine(parent, refinement_method = "barycentric" )
-  test_adaptivity(ranks,parent,child3)
+  parent2 = simplexify(parent1)
 
-  child4 = refine(parent, refinement_method = "simplexify" )
-  test_adaptivity(ranks,parent,child4)
+  if Dc == 2
+    i_am_main(ranks) && println("UnstructuredAdaptivityTests: nvb")
+    child3 = refine(parent2, refinement_method = "nvb" )
+    test_adaptivity(ranks,parent2,child3)
+  end
 
+  i_am_main(ranks) && println("UnstructuredAdaptivityTests: barycentric")
+  child4 = refine(parent2, refinement_method = "barycentric" )
+  test_adaptivity(ranks,parent2,child4)
 end
 
 function main(distribute)

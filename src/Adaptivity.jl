@@ -907,7 +907,7 @@ function refine_local_models(
   end
 
   # Select fine cells we want to keep
-  Df = Dc-1 # Dimension used to find neighboring cells\
+  Df = 0 # Dimension used to find neighboring cells
   f_own_or_ghost_ids, f_own_ids = map(cgids,cmodels,fmodels) do cgids,cmodel,fmodel
     glue = get_adaptivity_glue(fmodel)
     f2c_map = glue.n2o_faces_map[Dc+1]
@@ -1068,7 +1068,10 @@ function refine_cell_gids(
   # We finally can create the global numeration of the fine cells by piecing together: 
   #   1. The (local ids,global ids) of the owned fine cells
   #   2. The (owners,local ids,global ids) of the ghost fine cells
-  fgids = map(ranks,f_own_to_local,own_fgids,lids_snd,child_gids_snd) do rank, own_lids, own_gids, ghost_lids, ghost_gids
+  fgids = map(
+    ranks,f_own_to_local,own_fgids,parts_snd,lids_snd,child_gids_snd
+  ) do rank,own_lids,own_gids,nbors,ghost_lids,ghost_gids
+
     own2global = own_to_global(own_gids)
   
     n_nbors = length(ghost_lids)
@@ -1084,8 +1087,8 @@ function refine_cell_gids(
     end
     
     # Ghost cells
-    for nbor in 1:n_nbors
-      for i in ghost_lids.ptrs[nbor]:ghost_lids.ptrs[nbor+1]-1
+    for (n,nbor) in enumerate(nbors)
+      for i in ghost_lids.ptrs[n]:ghost_lids.ptrs[n+1]-1
         lid = ghost_lids.data[i]
         gid = ghost_gids.data[i]
         local2global[lid] = gid
