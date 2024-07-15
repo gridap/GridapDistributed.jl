@@ -529,6 +529,13 @@ function Adaptivity.refine(
     ranks,parts,domain,nF;map=desc.map,isperiodic=desc.isperiodic
   )
 
+  map_main(ranks) do r
+    @debug " Refining DistributedCartesianModel:
+      > Parent: $(repr("text/plain",cmodel.metadata)) 
+      > Child:  $(repr("text/plain",fmodel.metadata))
+    "
+  end
+
   # The idea for the glue is the following: 
   #   For each coarse local model (owned + ghost), we can use the serial code to create
   #   the glue. However, this glue is NOT fully correct. 
@@ -536,7 +543,7 @@ function Adaptivity.refine(
   #   is not correct, since we only want to keep the children which are ghosts in the new model.
   #   To this end, we have to remove the extra fine layers of ghosts from the glue. This we 
   #   can do thanks to how predictable the Cartesian model is.
-  glues = map(ranks,local_views(cmodel)) do rank,cmodel
+  glues = map(ranks,local_views(cmodel),local_views(fmodel)) do rank,cmodel,fmodel
     # Glue for the local models, of size nC_local .* ref
     desc_local = get_cartesian_descriptor(cmodel)
     nC_local = desc_local.partition
@@ -554,6 +561,9 @@ function Adaptivity.refine(
       stop  = nFl - has_ghost_stop*(refs-1)
       return start:stop
     end
+    @debug "[$(rank)] nC_local=$(nC_local), nF_local = $(nF_local), refs=$(refs), periodic_ghosts=$(periodic_ghosts), local_range=$(local_range) \n"
+    _nF = get_cartesian_descriptor(fmodel).partition
+    @check all(map((n,r) -> n == length(r),_nF,local_range))
 
     _indices = LinearIndices(nF_local)[local_range...]
     indices = reshape(_indices,length(_indices))
@@ -564,7 +574,7 @@ function Adaptivity.refine(
     faces_map = [(d==Dc) ? f2c_cell_map : Int[] for d in 0:Dc]
     poly   = (Dc == 2) ? QUAD : HEX
     reffe  = LagrangianRefFE(Float64,poly,1)
-    rrules = RefinementRule(reffe,refs)
+    rrules = Fill(RefinementRule(reffe,refs),num_cells(cmodel))
     return AdaptivityGlue(faces_map,fcell_to_child_id,rrules)
   end
 
@@ -627,6 +637,13 @@ function redistribute_cartesian(
   domain = Adaptivity._get_cartesian_domain(desc)
   _new_model = CartesianDiscreteModel(new_ranks,new_parts,domain,ncells)
 
+  map_main(new_ranks) do r
+    @debug "Redistributing DistributedCartesianModel:
+      > Old: $(repr("text/plain",old_model.metadata))
+      > New: $(repr("text/plain",_new_model.metadata))
+    "
+  end
+
   rglue = get_cartesian_redistribute_glue(_new_model,old_model;old_ranks)
 
   # Propagate face labelings to the new model
@@ -672,6 +689,13 @@ function get_cartesian_redistribute_glue(
   new_parts = new_model.metadata.mesh_partition
   new_ids = partition(get_cell_gids(new_model))
   new_models = local_views(new_model)
+
+  map_main(new_ranks) do r
+    @debug "Creating RedistributeGlue:
+      > Old: $(repr("text/plain",old_model.metadata))
+      > New: $(repr("text/plain",new_model.metadata))
+    "
+  end
 
   # Components in the old partition (if present)
   _old_parts = map(new_ranks) do r
@@ -748,6 +772,7 @@ function get_cartesian_redistribute_glue(
       parts_snd = Int[]
       lids_snd  = [Int[]]
     end
+    @debug "[$(r)] parts_snd=$(parts_snd), parts_rcv=$(parts_rcv), n_lids_snd=$(map(length,lids_snd))), n_lids_rcv=$(map(length,lids_rcv))) \n"
 
     return old2new, new2old, parts_rcv, parts_snd, JaggedArray(lids_rcv), JaggedArray(lids_snd)
   end |> tuple_of_arrays
@@ -768,6 +793,12 @@ function get_redistributed_face_labeling(
 ) where Dc
 
   new_ranks = get_parts(new_model)
+  map_main(new_ranks) do r
+    @debug "Redistributing face labeling:
+      > Old: $(repr("text/plain",old_model.metadata))
+      > New: $(repr("text/plain",new_model.metadata))
+    "
+  end
 
   _old_models = !isnothing(old_model) ? local_views(old_model) : nothing
   old_models = change_parts(_old_models,new_ranks)
@@ -878,7 +909,7 @@ function Adaptivity.refine(
 end
 
 """
-    refine_coarse_models(cmodel::DistributedDiscreteModel{Dc},args...;kwargs...) where Dc
+    refine_local_models(cmodel::DistributedDiscreteModel{Dc},args...;kwargs...) where Dc
 
 Given a coarse model, returns the locally refined models. This is done by 
   - refining the local models serially

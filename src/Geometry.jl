@@ -197,13 +197,23 @@ struct DistributedCartesianDescriptor{A,B,C}
   descriptor::C
   function DistributedCartesianDescriptor(
     ranks::AbstractArray{<:Integer},
-    mesh_partition :: NTuple{Dc,<:Integer},
-    descriptor :: CartesianDescriptor{Dc}
+    mesh_partition::NTuple{Dc,<:Integer},
+    descriptor::CartesianDescriptor{Dc}
   ) where Dc
     A = typeof(ranks)
     B = typeof(mesh_partition)
     C = typeof(descriptor)
     new{A,B,C}(ranks,mesh_partition,descriptor)
+  end
+end
+
+function Base.show(io::IO,k::MIME"text/plain",desc::DistributedCartesianDescriptor)
+  ranks = desc.ranks
+  map_main(ranks) do r
+    nranks = desc.mesh_partition
+    ncells = desc.descriptor.partition
+    f(x) = join(x,"x")
+    print(io,"$(f(ncells)) CartesianDescriptor distributed in $(f(nranks)) ranks")
   end
 end
 
