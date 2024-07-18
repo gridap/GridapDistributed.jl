@@ -642,6 +642,10 @@ function redistribute_cartesian(
       > Old: $(repr("text/plain",old_model.metadata))
       > New: $(repr("text/plain",_new_model.metadata))
     "
+    msg1 = "Both models should have the same number of cells for redistribution!"
+    @check old_model.metadata.descriptor.partition == ncells msg1
+    msg2 = "Only redistribution to a higher number of processors is supported!"
+    @check prod(old_model.metadata.mesh_partition) <= prod(new_parts) msg2
   end
 
   rglue = get_cartesian_redistribute_glue(_new_model,old_model;old_ranks)
@@ -1105,7 +1109,6 @@ function refine_cell_gids(
 
     own2global = own_to_global(own_gids)
   
-    n_nbors = length(ghost_lids)
     n_own   = length(own_lids)
     n_ghost = length(ghost_lids.data)
     local2global = fill(0,n_own+n_ghost)
