@@ -12,6 +12,8 @@ using Test
 
 @time @testset "MultiField" begin include("MultiFieldTests.jl") end
 
+@time @testset "issue_142" begin include("issue_142.jl") end
+
 @time @testset "Poisson" begin include("PoissonTests.jl") end
 
 @time @testset "PLaplacian" begin include("PLaplacianTests.jl") end
@@ -36,6 +38,10 @@ end
 
 @time @testset "BlockSparseMatrixAssemblers" begin 
   include("BlockSparseMatrixAssemblersTests.jl") 
+end
+
+@time @testset "AdaptivityTests" begin
+  include("AdaptivityTests.jl")
 end
 
 end # module

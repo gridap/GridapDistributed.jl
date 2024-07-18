@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Added keyword arguments in the signature of the constructor of `DistributedMeasure`. Since PR[#150](https://github.com/gridap/GridapDistributed.jl/pull/150).
+
+## [0.4.2] 2024-07-4
+
+### Added
+
+- Added uniform anisotropic refinement of distributed cartesian meshes. Since PR[#148](https://github.com/gridap/GridapDistributed.jl/pull/148).
+
+## [0.4.1] 2024-06-25
+
+### Fixed
+
+- Fixed bug in block-assembly whenever owners of touched dofs were not present in the local portion of the FESpace. Since PR[#147](https://github.com/gridap/GridapDistributed.jl/pull/147).
+
+## [0.4.0] 2024-04-12
+
+### Changed
+
+- `DistributedCellField` now inherits from `CellField`. To accomodate the necessary API, we now save a pointer to the `DistributedTriangulation` where it is defined. This also requires `DistributedSingleFieldFESpace` to save the triangulation. Since PR[#141](https://github.com/gridap/GridapDistributed.jl/pull/141).
+- All the distributed `Multifield` cellfield types are now represented by a `DistributedMultiFieldCellField`. Both `DistributedMultiFieldFEFunction` and `DistributedMultiFieldFEBasis` structs have been removed and replaced with constant aliases, which makes it more consistent with single-field types. Since PR[#141](https://github.com/gridap/GridapDistributed.jl/pull/141).
+- Major refactor of ODE module. Implementation has been significantly simplified, while increasing the capability of the API. All `TransientDistributedObjects` structs have been removed, and replaced by `DistributedTransientObjects = DistributedObjects{TransientObject}`. Full support for EX/IM/IMEX methods. See Gridap's release for details. Since PR[#141](https://github.com/gridap/GridapDistributed.jl/pull/141).
+
+## [0.3.6] 2024-01-28
+
+### Added
+
+- Added redistribution for MultiFieldFESpaces. Since PR [#140](https://github.com/gridap/GridapDistributed.jl/pull/140).
+
+### Fixed
+
+- Fixed issue [#142](https://github.com/gridap/GridapDistributed.jl/issues/142). Since PR [#142](https://github.com/gridap/GridapDistributed.jl/pull/142).
+
+## [0.3.5] - 2023-12-04
+
+### Added
+
+- Added missing methods `allocate_in_range` and `allocate_in_domain` for distributed types. Since PR [#139](https://github.com/gridap/GridapDistributed.jl/pull/139).
+
+## [0.3.4] - 2023-11-24
+
+### Added
+
+- Exporting `redistribute` function. Since [PR 136](https://github.com/gridap/GridapDistributed.jl/pull/136).
+
+## [0.3.3] - 2023-11-22
+
+### Added
+
+- Added missing methods for `DistributedTransientFESpace`s. Since [PR 135](https://github.com/gridap/GridapDistributed.jl/pull/135).
+
 ## [0.3.2] - 2023-11-01
 
 ### Added

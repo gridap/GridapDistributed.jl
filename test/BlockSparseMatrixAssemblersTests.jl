@@ -3,11 +3,16 @@ module BlockSparseMatrixAssemblersTests
 using Test, LinearAlgebra, BlockArrays, SparseArrays
 
 using Gridap
-using Gridap.FESpaces, Gridap.ReferenceFEs, Gridap.MultiField
+using Gridap.FESpaces, Gridap.ReferenceFEs, Gridap.MultiField, Gridap.Algebra
 
 using GridapDistributed
 using PartitionedArrays
 using GridapDistributed: BlockPVector, BlockPMatrix
+
+get_edge_measures(Ω::Triangulation,dΩ) = sqrt∘CellField(get_array(∫(1)dΩ),Ω)
+function get_edge_measures(Ω::GridapDistributed.DistributedTriangulation,dΩ)
+  return sqrt∘CellField(map(get_array,local_views(∫(1)*dΩ)),Ω)
+end
 
 function is_same_vector(x::BlockPVector,y::PVector,Ub,U)
   y_fespace = GridapDistributed.change_ghost(y,U.gids)
@@ -22,18 +27,18 @@ function is_same_vector(x::BlockPVector,y::PVector,Ub,U)
 end
 
 function is_same_matrix(Ab::BlockPMatrix,A::PSparseMatrix,Xb,X)
-  yb = mortar(map(Aii->pfill(0.0,partition(axes(Aii,1))),diag(blocks(Ab))));
-  xb = mortar(map(Aii->pfill(1.0,partition(axes(Aii,2))),diag(blocks(Ab))));
+  yb = allocate_in_range(Ab)
+  xb = allocate_in_domain(Ab); fill!(xb,1.0)
   mul!(yb,Ab,xb)
 
-  y = pfill(0.0,partition(axes(A,1)))
-  x = pfill(1.0,partition(axes(A,2)))
+  y = allocate_in_range(A)
+  x = allocate_in_domain(A); fill!(x,1.0)
   mul!(y,A,x)
 
   return is_same_vector(yb,y,Xb,X)
 end
 
-function _main(n_spaces,mfs,weakform,Ω,dΩ,U,V)
+function _main(n_spaces,mfs,weakform,U,V)
   biform, liform = weakform
 
   # Normal assembly 
@@ -94,13 +99,14 @@ function main(distribute,parts)
   ranks = distribute(LinearIndices((prod(parts),)))
 
   model = CartesianDiscreteModel(ranks,parts,(0,1,0,1),(8,8))
-  Ω = Triangulation(model)
 
+  # Conforming tests
   sol(x) = sum(x)
   reffe  = LagrangianRefFE(Float64,QUAD,1)
-  V = FESpace(Ω, reffe; dirichlet_tags="boundary")
+  V = FESpace(model, reffe; dirichlet_tags="boundary")
   U = TrialFESpace(sol,V)
 
+  Ω = Triangulation(model)
   dΩ = Measure(Ω, 2)
   biform2((u1,u2),(v1,v2)) = ∫(∇(u1)⋅∇(v1) + u2⋅v2 + u1⋅v2)*dΩ
   liform2((v1,v2)) = ∫(v1 + v2)*dΩ
@@ -109,9 +115,37 @@ function main(distribute,parts)
 
   for (n_spaces,weakform) in zip([2,3],[(biform2,liform2),(biform3,liform3)])
     for mfs in [BlockMultiFieldStyle(),BlockMultiFieldStyle(2,(1,n_spaces-1))]
-      _main(n_spaces,mfs,weakform,Ω,dΩ,U,V)
+      _main(n_spaces,mfs,weakform,U,V)
     end
   end
+
+  # Non-conforming tests (tests whether we can fetch neighbors from non-ghosts)
+  reffe = ReferenceFE(raviart_thomas,Float64,0)
+  D = FESpace(model,reffe; dirichlet_tags="boundary")
+
+  β_U = 100.0
+  Γ = Boundary(model)
+  Λ = Skeleton(model)
+  n_Γ = get_normal_vector(Γ)
+  n_Λ = get_normal_vector(Λ)
+  dΓ = Measure(Γ,2)
+  dΛ = Measure(Λ,2)
+  h_e_Λ = get_edge_measures(Λ,dΛ)
+  h_e_Γ = get_edge_measures(Γ,dΓ)
+  lap_dg(u,v) = ∫(∇(u)⊙∇(v))dΩ -
+                ∫(jump(v⊗n_Λ)⊙(mean(∇(u))))dΛ -
+                ∫(mean(∇(v))⊙jump(u⊗n_Λ))dΛ -
+                ∫(v⋅(∇(u)⋅n_Γ))dΓ -
+                ∫((∇(v)⋅n_Γ)⋅u)dΓ +
+                ∫(jump(v⊗n_Λ)⊙((β_U/h_e_Λ*jump(u⊗n_Λ))))dΛ +
+                ∫(v⋅(β_U/h_e_Γ*u))dΓ
+
+  f = VectorValue(1.0,1.0)
+  biform4((u1,u2),(v1,v2)) = lap_dg(u1,v1) + lap_dg(u1,v1) + ∫(u2⋅v2)*dΩ
+  liform4((v1,v2)) = ∫(v1⋅f)*dΩ
+  _main(2,BlockMultiFieldStyle(),(biform4,liform4),D,D)
 end
+
+main(DebugArray, (2,2))
 
 end

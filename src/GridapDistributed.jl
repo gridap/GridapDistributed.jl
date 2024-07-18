@@ -12,12 +12,12 @@ using Gridap.CellData
 using Gridap.Visualization
 using Gridap.FESpaces
 using Gridap.MultiField
-using Gridap.ODEs.TransientFETools
-using Gridap.ODEs.ODETools
+using Gridap.ODEs
 
 using MPI
 using PartitionedArrays
 const PArrays = PartitionedArrays
+using PartitionedArrays: getany
 
 using SparseArrays
 using WriteVTK
@@ -29,7 +29,7 @@ import Gridap.TensorValues: inner, outer, double_contraction, symmetric_part
 import LinearAlgebra: det, tr, cross, dot, ⋅, diag
 import Base: inv, abs, abs2, *, +, -, /, adjoint, transpose, real, imag, conj, getproperty, propertynames
 import Gridap.Fields: grad2curl
-import Gridap.ODEs.ODETools: ∂t, ∂tt
+import Gridap.CellData: Interpolable
 
 export FullyAssembledRows
 export SubAssembledRows
@@ -39,6 +39,8 @@ export get_face_gids
 
 export local_views, get_parts
 export with_ghost, no_ghost
+
+export redistribute
 
 include("BlockPartitionedArrays.jl")
 
@@ -56,11 +58,7 @@ include("DivConformingFESpaces.jl")
 
 include("MultiField.jl")
 
-include("TransientDistributedCellField.jl")
-
-include("TransientMultiFieldDistributedCellField.jl")
-
-include("TransientFESpaces.jl")
+include("ODEs.jl")
 
 include("Adaptivity.jl")
 

@@ -58,6 +58,25 @@ function main(distribute,parts)
   u3 = CellField(2.0,Ω)
   u = _my_op∘(u1,u2,u3)
 
+ order = 1
+  reffe = ReferenceFE(lagrangian,Float64,order)
+  V = TestFESpace(model,reffe)
+  uh = interpolate_everywhere(x->x[1]+x[2],V)
+  x1 = Point(0.1,0.1)
+  x2 = Point(0.1,0.9)
+  x3 = Point(0.9,0.9)
+  v = [x1,x2,x3]
+
+  u1 = uh(x1)
+  u2 = uh(x2)
+  uv = uh(v)
+
+  map_main(u1,u2,uv) do u1,u2,v
+    @test u1 == 0.2
+    @test u2 == 1.0
+    @test v ==[0.2,1.0,1.8]
+  end
+
   # Point δ
   δ=DiracDelta{0}(model;tags=2)
   @test sum(δ(f)) ≈ 4.0
@@ -70,7 +89,7 @@ function main(distribute,parts)
   @test sum(δ(f)) ≈ 8.0
   @test sum(δ(3.0)) ≈ 12.0
   @test sum(δ(x->2*x)) ≈ VectorValue(16.0,0.0)
-
+ 
 end
 
 end # module
