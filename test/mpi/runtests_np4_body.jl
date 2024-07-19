@@ -42,8 +42,9 @@ function all_tests(distribute,parts)
 
   if prod(parts) == 4
     TestApp.AdaptivityTests.main(distribute)
-    TestApp.CartesianAdaptivityTests.main(distribute)
+    TestApp.AdaptivityCartesianTests.main(distribute)
     TestApp.AdaptivityMultiFieldTests.main(distribute)
+    TestApp.AdaptivityUnstructuredTests.main(distribute)
     PArrays.toc!(t,"Adaptivity")
   end
 

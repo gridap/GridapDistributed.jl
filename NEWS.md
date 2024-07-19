@@ -5,11 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.4.3] 2024-07-18
 
 ### Added
 
+- Added distributed refinement of unstructured meshes. Since PR[#149](https://github.com/gridap/GridapDistributed.jl/pull/149).
+
 - Added keyword arguments in the signature of the constructor of `DistributedMeasure`. Since PR[#150](https://github.com/gridap/GridapDistributed.jl/pull/150).
+
+- Added DiracDelta in distributed setting. Since PR[#133](https://github.com/gridap/GridapDistributed.jl/pull/133).
 
 ## [0.4.2] 2024-07-4
 

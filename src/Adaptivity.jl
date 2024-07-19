@@ -12,7 +12,7 @@ function DistributedAdaptedDiscreteModel(
     AdaptedDiscreteModel(model,parent,glue)
   end
   gids = get_cell_gids(model)
-  metadata = model.metadata
+  metadata = hasproperty(model,:metadata) ? model.metadata : nothing
   return GenericDistributedDiscreteModel(models,gids;metadata)
 end
 
@@ -20,7 +20,7 @@ function Adaptivity.get_model(model::DistributedAdaptedDiscreteModel)
   GenericDistributedDiscreteModel(
     map(get_model,local_views(model)),
     get_cell_gids(model);
-    metadata=model.metadata
+    metadata = hasproperty(model,:metadata) ? model.metadata : nothing
   )
 end
 
@@ -33,6 +33,25 @@ end
 
 function Adaptivity.get_adaptivity_glue(model::DistributedAdaptedDiscreteModel)
   return map(Adaptivity.get_adaptivity_glue,local_views(model))
+end
+
+function Adaptivity.refine(
+  cmodel::DistributedAdaptedDiscreteModel{Dc},args...;kwargs...
+) where Dc
+  # Local cmodels are AdaptedDiscreteModels. To correctly dispatch, we need to
+  # extract the underlying models, then refine.
+  _cmodel = get_model(cmodel)
+  _fmodel = refine(_cmodel,args...;kwargs...)
+
+  # Now the issue is that the local parents are not pointing to local_views(cmodel).
+  # We have to fix that...
+  fmodel = GenericDistributedDiscreteModel(
+    map(get_model,local_views(_fmodel)),
+    get_cell_gids(_fmodel);
+    metadata=_fmodel.metadata
+  )
+  glues = get_adaptivity_glue(_fmodel)
+  return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
 end
 
 # RedistributeGlue : Redistributing discrete models
@@ -495,27 +514,6 @@ function Adaptivity.refine(
 end
 
 function Adaptivity.refine(
-  cmodel::DistributedAdaptedDiscreteModel{Dc},
-  refs::NTuple{Dc,<:Integer}
-) where Dc
-
-  # Local cmodels are AdaptedDiscreteModels. To correctly dispatch, we need to
-  # extract the underlying models, then refine.
-  _cmodel = get_model(cmodel)
-  _fmodel = refine(_cmodel,refs)
-
-  # Now the issue is that the local parents are not pointing to local_views(cmodel).
-  # We have to fix that...
-  fmodel = GenericDistributedDiscreteModel(
-    map(get_model,local_views(_fmodel)),
-    get_cell_gids(_fmodel);
-    metadata=_fmodel.metadata
-  )
-  glues = get_adaptivity_glue(_fmodel)
-  return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
-end
-
-function Adaptivity.refine(
   cmodel::DistributedCartesianDiscreteModel{Dc},
   refs::NTuple{Dc,<:Integer},
 ) where Dc
@@ -531,6 +529,13 @@ function Adaptivity.refine(
     ranks,parts,domain,nF;map=desc.map,isperiodic=desc.isperiodic
   )
 
+  map_main(ranks) do r
+    @debug " Refining DistributedCartesianModel:
+      > Parent: $(repr("text/plain",cmodel.metadata)) 
+      > Child:  $(repr("text/plain",fmodel.metadata))
+    "
+  end
+
   # The idea for the glue is the following: 
   #   For each coarse local model (owned + ghost), we can use the serial code to create
   #   the glue. However, this glue is NOT fully correct. 
@@ -538,7 +543,7 @@ function Adaptivity.refine(
   #   is not correct, since we only want to keep the children which are ghosts in the new model.
   #   To this end, we have to remove the extra fine layers of ghosts from the glue. This we 
   #   can do thanks to how predictable the Cartesian model is.
-  glues = map(ranks,local_views(cmodel)) do rank,cmodel
+  glues = map(ranks,local_views(cmodel),local_views(fmodel)) do rank,cmodel,fmodel
     # Glue for the local models, of size nC_local .* ref
     desc_local = get_cartesian_descriptor(cmodel)
     nC_local = desc_local.partition
@@ -556,6 +561,9 @@ function Adaptivity.refine(
       stop  = nFl - has_ghost_stop*(refs-1)
       return start:stop
     end
+    @debug "[$(rank)] nC_local=$(nC_local), nF_local = $(nF_local), refs=$(refs), periodic_ghosts=$(periodic_ghosts), local_range=$(local_range) \n"
+    _nF = get_cartesian_descriptor(fmodel).partition
+    @check all(map((n,r) -> n == length(r),_nF,local_range))
 
     _indices = LinearIndices(nF_local)[local_range...]
     indices = reshape(_indices,length(_indices))
@@ -566,11 +574,26 @@ function Adaptivity.refine(
     faces_map = [(d==Dc) ? f2c_cell_map : Int[] for d in 0:Dc]
     poly   = (Dc == 2) ? QUAD : HEX
     reffe  = LagrangianRefFE(Float64,poly,1)
-    rrules = RefinementRule(reffe,refs)
+    rrules = Fill(RefinementRule(reffe,refs),num_cells(cmodel))
     return AdaptivityGlue(faces_map,fcell_to_child_id,rrules)
   end
 
-  return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
+  # Finally, we need to propagate the face labelings to the new model,
+  # and create the local adapted models.
+  fmodels = map(local_views(fmodel),local_views(cmodel),glues) do fmodel, cmodel, glue
+    # Propagate face labels
+    clabels = get_face_labeling(cmodel)
+    ctopo   = get_grid_topology(cmodel)
+    ftopo   = get_grid_topology(fmodel)
+    flabels = Adaptivity.refine_face_labeling(clabels,glue,ctopo,ftopo)
+
+    _fmodel = CartesianDiscreteModel(get_grid(fmodel),ftopo,flabels)
+    return AdaptedDiscreteModel(_fmodel,cmodel,glue)
+  end
+
+  fgids = get_cell_gids(fmodel)
+  metadata = fmodel.metadata
+  return GenericDistributedDiscreteModel(fmodels,fgids;metadata)
 end
 
 # Cartesian Model redistribution
@@ -612,9 +635,30 @@ function redistribute_cartesian(
   desc = pdesc.descriptor
   ncells = desc.partition
   domain = Adaptivity._get_cartesian_domain(desc)
-  new_model = CartesianDiscreteModel(new_ranks,new_parts,domain,ncells)
+  _new_model = CartesianDiscreteModel(new_ranks,new_parts,domain,ncells)
 
-  rglue = get_cartesian_redistribute_glue(new_model,old_model;old_ranks)
+  map_main(new_ranks) do r
+    @debug "Redistributing DistributedCartesianModel:
+      > Old: $(repr("text/plain",old_model.metadata))
+      > New: $(repr("text/plain",_new_model.metadata))
+    "
+    msg1 = "Both models should have the same number of cells for redistribution!"
+    @check old_model.metadata.descriptor.partition == ncells msg1
+    msg2 = "Only redistribution to a higher number of processors is supported!"
+    @check prod(old_model.metadata.mesh_partition) <= prod(new_parts) msg2
+  end
+
+  rglue = get_cartesian_redistribute_glue(_new_model,old_model;old_ranks)
+
+  # Propagate face labelings to the new model
+  new_labels = get_redistributed_face_labeling(_new_model,old_model,rglue)
+  new_models = map(local_views(_new_model),local_views(new_labels)) do _new_model, new_labels
+    CartesianDiscreteModel(get_grid(_new_model),get_grid_topology(_new_model),new_labels)
+  end
+  new_model = GenericDistributedDiscreteModel(
+    new_models,get_cell_gids(_new_model);metadata=_new_model.metadata
+  )
+
   return new_model, rglue
 end
 
@@ -649,6 +693,13 @@ function get_cartesian_redistribute_glue(
   new_parts = new_model.metadata.mesh_partition
   new_ids = partition(get_cell_gids(new_model))
   new_models = local_views(new_model)
+
+  map_main(new_ranks) do r
+    @debug "Creating RedistributeGlue:
+      > Old: $(repr("text/plain",old_model.metadata))
+      > New: $(repr("text/plain",new_model.metadata))
+    "
+  end
 
   # Components in the old partition (if present)
   _old_parts = map(new_ranks) do r
@@ -693,8 +744,8 @@ function get_cartesian_redistribute_glue(
       #   - I don't send anything. 
       #   - I receive all my owned cells in the new model.
       old2new = Int[]
-      new2old = fill(0,num_cells(new_model))
-      ids_rcv = collect(own_to_local(new_ids))
+      new2old = fill(zero(Int),num_cells(new_model))
+      ids_rcv = collect(Int,own_to_local(new_ids))
       ids_snd = Int[]
     end
 
@@ -725,6 +776,7 @@ function get_cartesian_redistribute_glue(
       parts_snd = Int[]
       lids_snd  = [Int[]]
     end
+    @debug "[$(r)] parts_snd=$(parts_snd), parts_rcv=$(parts_rcv), n_lids_snd=$(map(length,lids_snd))), n_lids_rcv=$(map(length,lids_rcv))) \n"
 
     return old2new, new2old, parts_rcv, parts_snd, JaggedArray(lids_rcv), JaggedArray(lids_snd)
   end |> tuple_of_arrays
@@ -736,4 +788,365 @@ function get_cartesian_redistribute_glue(
   end
 
   return RedistributeGlue(new_ranks,old_ranks,parts_rcv,parts_snd,lids_rcv,lids_snd,old2new,new2old)
+end
+
+function get_redistributed_face_labeling(
+  new_model::DistributedCartesianDiscreteModel{Dc},
+  old_model::Union{DistributedCartesianDiscreteModel{Dc},Nothing},
+  glue::RedistributeGlue
+) where Dc
+
+  new_ranks = get_parts(new_model)
+  map_main(new_ranks) do r
+    @debug "Redistributing face labeling:
+      > Old: $(repr("text/plain",old_model.metadata))
+      > New: $(repr("text/plain",new_model.metadata))
+    "
+  end
+
+  _old_models = !isnothing(old_model) ? local_views(old_model) : nothing
+  old_models = change_parts(_old_models,new_ranks)
+  new_models = local_views(new_model)
+  
+  # Communicate facet entities
+  new_d_to_dface_to_entity = map(new_models) do new_model
+    Vector{Vector{Int32}}(undef,Dc+1)
+  end
+
+  for Df in 0:Dc
+
+    # Pack entity data
+    old_cell_to_face_entity, new_cell_to_face_ids = map(old_models,new_models) do old_model, new_model
+
+      if !isnothing(old_model)
+        old_labels = get_face_labeling(old_model)
+        old_topo = get_grid_topology(old_model)
+
+        old_cell2face = Geometry.get_faces(old_topo,Dc,Df)
+        old_face2entity = old_labels.d_to_dface_to_entity[Df+1]
+
+        old_cell_to_face_entity = Table(
+          collect(Int32,lazy_map(Reindex(old_face2entity),old_cell2face.data)), # Avoid if possible
+          old_cell2face.ptrs
+        )
+      else
+        old_cell_to_face_entity = Int32[]
+      end
+
+      new_topo = get_grid_topology(new_model)
+      new_cell_to_face_ids = Geometry.get_faces(new_topo,Dc,Df)
+
+      return old_cell_to_face_entity, new_cell_to_face_ids
+    end |> tuple_of_arrays
+
+    # Redistribute entity data
+    new_cell_to_face_entity = redistribute_cell_dofs(
+      old_cell_to_face_entity,new_cell_to_face_ids,new_model,glue
+    )
+
+    # Unpack entity data
+    new_face2entity = map(new_models,new_cell_to_face_entity) do new_model,new_cell_to_face_entity
+      new_topo = get_grid_topology(new_model)
+      new_cell2face = Geometry.get_faces(new_topo,Dc,Df)
+      
+      new_face2entity = zeros(eltype(new_cell2face.data),Geometry.num_faces(new_topo,Df))
+      for cell in 1:length(new_cell2face.ptrs)-1
+        for pos in new_cell2face.ptrs[cell]:new_cell2face.ptrs[cell+1]-1
+          face = new_cell2face.data[pos]
+          new_face2entity[face] = new_cell_to_face_entity.data[pos]
+        end
+      end
+
+      return new_face2entity
+    end
+
+    map(new_d_to_dface_to_entity,new_face2entity) do new_d_to_dface_to_entity,new_face2entity
+      new_d_to_dface_to_entity[Df+1] = new_face2entity
+    end
+  end
+
+  # Communicate entity tags
+  # The difficulty here is that String and Vector{Int32} are not isbits types.
+  # We have to convert them to isbits types, then convert them back.
+  name_data, name_ptrs, entities_data, entities_ptrs = map(old_models) do old_model
+    if !isnothing(old_model)
+      new_labels = get_face_labeling(old_model)
+      names = JaggedArray(map(collect,new_labels.tag_to_name))
+      entities = JaggedArray(new_labels.tag_to_entities)
+      return names.data, names.ptrs, entities.data, entities.ptrs
+    else
+      return Char[], Int32[], Int32[], Int32[]
+    end
+  end |> tuple_of_arrays
+
+  name_data = emit(name_data)
+  entities_data = emit(entities_data)
+  name_ptrs = emit(name_ptrs)
+  entities_ptrs = emit(entities_ptrs)
+  
+  new_tag_to_name, new_tag_to_entities = map(
+    name_data,name_ptrs,entities_data,entities_ptrs
+  ) do name_data, name_ptrs, entities_data, entities_ptrs
+    names = Vector{String}(undef,length(name_ptrs)-1)
+    for i = 1:length(names)
+      names[i] = join(Char.(name_data[name_ptrs[i]:name_ptrs[i+1]-1]))
+    end
+    entities = Vector{Vector{Int32}}(undef,length(entities_ptrs)-1)
+    for i = 1:length(entities)
+      entities[i] = entities_data[entities_ptrs[i]:entities_ptrs[i+1]-1]
+    end
+    return names, entities
+  end |> tuple_of_arrays
+
+  new_labels = map(FaceLabeling,new_d_to_dface_to_entity,new_tag_to_entities,new_tag_to_name)
+  return DistributedFaceLabeling(new_labels)
+end
+
+# UnstructuredDiscreteModel refinement
+
+function Adaptivity.refine(
+  cmodel::DistributedUnstructuredDiscreteModel{Dc},args...;kwargs...
+) where Dc
+  fmodels, f_own_to_local = refine_local_models(cmodel,args...;kwargs...)
+  fgids = refine_cell_gids(cmodel,fmodels,f_own_to_local)
+  return GenericDistributedDiscreteModel(fmodels,fgids)
+end
+
+"""
+    refine_local_models(cmodel::DistributedDiscreteModel{Dc},args...;kwargs...) where Dc
+
+Given a coarse model, returns the locally refined models. This is done by 
+  - refining the local models serially
+  - filtering out the extra fine layers of ghosts
+We also return the ids of the owned fine cells.
+
+To find the fine cells we want to keep, we have the following criteria: 
+  - Given a fine cell, it is owned iff 
+    A) It's parent cell is owned
+  - Given a fine cell, it is a ghost iff not(A) and 
+    B) It has at least one neighbor with a non-ghost parent
+
+Instead of checking A and B, we do the following: 
+  - We mark fine owned cells by checking A 
+  - If a cell is owned, we set it's fine neighbors as owned or ghost
+"""
+function refine_local_models(
+  cmodel::DistributedDiscreteModel{Dc},args...;kwargs...
+) where Dc
+  cgids = partition(get_cell_gids(cmodel))
+  cmodels = local_views(cmodel)
+
+  # Refine models locally
+  fmodels = map(cmodels) do cmodel
+    refine(cmodel,args...;kwargs...)
+  end
+
+  # Select fine cells we want to keep
+  Df = 0 # Dimension used to find neighboring cells
+  f_own_or_ghost_ids, f_own_ids = map(cgids,cmodels,fmodels) do cgids,cmodel,fmodel
+    glue = get_adaptivity_glue(fmodel)
+    f2c_map = glue.n2o_faces_map[Dc+1]
+    child_map = glue.n2o_cell_to_child_id
+
+    ftopo = get_grid_topology(fmodel)
+    f_cell_to_facet = Geometry.get_faces(ftopo,Dc,Df)
+    f_facet_to_cell = Geometry.get_faces(ftopo,Df,Dc)
+    f_cell_to_facet_cache = array_cache(f_cell_to_facet)
+    f_facet_to_cell_cache = array_cache(f_facet_to_cell)
+    c_l2o_map = local_to_own(cgids)
+    
+    f_own_mask = fill(false,length(f2c_map))
+    f_own_or_ghost_mask = fill(false,length(f2c_map))
+    for (fcell,ccell) in enumerate(f2c_map)
+      if !iszero(c_l2o_map[ccell])
+        f_own_mask[fcell] = true
+        facets = getindex!(f_cell_to_facet_cache,f_cell_to_facet,fcell)
+        for facet in facets
+          facet_cells = getindex!(f_facet_to_cell_cache,f_facet_to_cell,facet)
+          for facet_cell in facet_cells
+            f_own_or_ghost_mask[facet_cell] = true
+          end
+        end
+      end
+    end
+
+    f_own_or_ghost_ids = findall(f_own_or_ghost_mask)
+    f_own_ids = findall(i -> f_own_mask[i],f_own_or_ghost_ids) # ModelPortion numeration
+
+    return f_own_or_ghost_ids, f_own_ids
+  end |> tuple_of_arrays
+
+  # Filter out local models
+  filtered_fmodels = map(fmodels,f_own_or_ghost_ids) do fmodel,f_own_or_ghost_ids
+    model = DiscreteModelPortion(get_model(fmodel),f_own_or_ghost_ids).model
+    parent = get_parent(fmodel)
+
+    _glue = get_adaptivity_glue(fmodel)
+    n2o_faces_map = Vector{Vector{Int}}(undef,Dc+1)
+    n2o_faces_map[Dc+1] = _glue.n2o_faces_map[Dc+1][f_own_or_ghost_ids]
+    n2o_cell_to_child_id = _glue.n2o_cell_to_child_id[f_own_or_ghost_ids]
+    rrules = _glue.refinement_rules
+    glue = AdaptivityGlue(n2o_faces_map,n2o_cell_to_child_id,rrules)
+    return AdaptedDiscreteModel(model,parent,glue)
+  end
+
+  return filtered_fmodels, f_own_ids
+end
+
+"""
+    refine_cell_gids(
+      cmodel::DistributedDiscreteModel{Dc},
+      fmodels::AbstractArray{<:DiscreteModel{Dc}}
+    ) where Dc
+
+Given a coarse model and it's local refined models, returns the gids of the fine model.
+The gids are computed as follows: 
+  - First, we create a global numbering for the owned cells by adding an owner-based offset to the local 
+    cell ids (such that cells belonging to the first processor are numbered first). This is 
+    quite standard.
+  - The complicated part is making this numeration consistent, i.e communicating gids of the 
+    ghost cells. To do so, each processor selects it's ghost fine cells, and requests their 
+    global ids by sending two keys:
+      1. The global id of the coarse parent
+      2. The child id of the fine cell
+"""
+function refine_cell_gids(
+  cmodel::DistributedDiscreteModel{Dc},
+  fmodels::AbstractArray{<:DiscreteModel{Dc}},
+  f_own_to_local::AbstractArray{<:AbstractArray{Int}},
+) where Dc
+
+  cgids = partition(get_cell_gids(cmodel))
+  cmodels = local_views(cmodel)
+  ranks = linear_indices(cgids)
+
+  # Create own numbering (without ghosts)
+  num_f_owned_cells = map(length,f_own_to_local)
+  num_f_gids = reduce(+,num_f_owned_cells)
+  first_f_gid = scan(+,num_f_owned_cells,type=:exclusive,init=1)
+  
+  own_fgids = map(ranks,first_f_gid,num_f_owned_cells) do rank,first_f_gid,num_f_owned_cells
+    f_o2g = collect(first_f_gid:first_f_gid+num_f_owned_cells-1)
+    own   = OwnIndices(num_f_gids,rank,f_o2g)
+    ghost = GhostIndices(num_f_gids) # No ghosts
+    return OwnAndGhostIndices(own,ghost)
+  end
+  
+  # Select ghost fine cells local ids
+  parts_rcv, parts_snd = assembly_neighbors(cgids);
+  lids_snd = map(parts_snd,cgids,fmodels) do parts_snd,cgids,fmodel
+    glue = get_adaptivity_glue(fmodel)
+    f2c_map = glue.n2o_faces_map[Dc+1]
+    c_owners = local_to_owner(cgids)
+    return JaggedArray(map(p -> findall(parent -> c_owners[parent] == p,f2c_map),parts_snd))
+  end
+  
+  # Given the local ids of the fine cells we want to get info on, we 
+  # collect two keys: 
+  #   1. The global id of the coarse parent
+  #   2. The child id of the fine cell
+  parent_gids_snd, child_ids_snd = map(cgids,cmodels,fmodels,lids_snd) do cgids,cmodel,fmodel,lids_snd
+    glue = get_adaptivity_glue(fmodel)
+    f2c_map = glue.n2o_faces_map[Dc+1]
+    child_map = glue.n2o_cell_to_child_id
+  
+    c_l2g_map = local_to_global(cgids)
+    c_owners  = local_to_owner(cgids)
+  
+    parent_gids, child_ids, owners = map(lids_snd.data) do fcell
+      ccell = f2c_map[fcell]
+      return c_l2g_map[ccell], child_map[fcell], c_owners[ccell]
+    end |> tuple_of_arrays
+  
+    ptrs = lids_snd.ptrs
+    return JaggedArray(parent_gids,ptrs), JaggedArray(child_ids,ptrs)
+  end |> tuple_of_arrays;
+  
+  # We exchange the keys
+  parts_rcv, parts_snd = assembly_neighbors(cgids);
+  graph = ExchangeGraph(parts_snd,parts_rcv)
+  t1 = exchange(parent_gids_snd,graph)
+  t2 = exchange(child_ids_snd,graph)
+  parent_gids_rcv = fetch(t1)
+  child_ids_rcv = fetch(t2)
+  
+  # We process the received keys, and collect the global ids of the fine cells
+  # that have been requested by our neighbors.
+  child_gids_rcv = map(
+    cgids,own_fgids,f_own_to_local,cmodels,fmodels,parent_gids_rcv,child_ids_rcv
+  ) do cgids,own_fgids,f_own_to_local,cmodel,fmodel,parent_gids_rcv,child_ids_rcv
+    glue = get_adaptivity_glue(fmodel)
+    c2f_map = glue.o2n_faces_map
+    child_map = glue.n2o_cell_to_child_id
+    c2f_map_cache = array_cache(c2f_map)
+  
+    parent_lids = to_local!(parent_gids_rcv.data,cgids)
+    child_ids = child_ids_rcv.data
+  
+    f_local_to_own = Arrays.find_inverse_index_map(f_own_to_local)
+  
+    child_lids = map(parent_lids,child_ids) do ccell, child_id
+      fcells = getindex!(c2f_map_cache,c2f_map,ccell)
+      pos = findfirst(fcell -> child_map[fcell] == child_id, fcells)
+      return f_local_to_own[fcells[pos]]
+    end
+  
+    child_gids = to_global!(child_lids,own_fgids)
+    return JaggedArray(child_gids,parent_gids_rcv.ptrs)
+  end
+  
+  # We exchange back the information
+  graph = ExchangeGraph(parts_rcv,parts_snd)
+  t = exchange(child_gids_rcv,graph)
+  child_gids_snd = fetch(t)
+  
+  # We finally can create the global numeration of the fine cells by piecing together: 
+  #   1. The (local ids,global ids) of the owned fine cells
+  #   2. The (owners,local ids,global ids) of the ghost fine cells
+  fgids = map(
+    ranks,f_own_to_local,own_fgids,parts_snd,lids_snd,child_gids_snd
+  ) do rank,own_lids,own_gids,nbors,ghost_lids,ghost_gids
+
+    own2global = own_to_global(own_gids)
+  
+    n_own   = length(own_lids)
+    n_ghost = length(ghost_lids.data)
+    local2global = fill(0,n_own+n_ghost)
+    local2owner = fill(0,n_own+n_ghost)
+  
+    # Own cells
+    for (oid,lid) in enumerate(own_lids)
+      local2global[lid] = own2global[oid]
+      local2owner[lid]  = rank
+    end
+    
+    # Ghost cells
+    for (n,nbor) in enumerate(nbors)
+      for i in ghost_lids.ptrs[n]:ghost_lids.ptrs[n+1]-1
+        lid = ghost_lids.data[i]
+        gid = ghost_gids.data[i]
+        local2global[lid] = gid
+        local2owner[lid]  = nbor
+      end
+    end
+    return LocalIndices(num_f_gids,rank,local2global,local2owner)
+  end
+
+  return PRange(fgids)
+end
+
+function refine_cell_gids(
+  cmodel::DistributedDiscreteModel{Dc},
+  fmodels::AbstractArray{<:DiscreteModel{Dc}}
+) where Dc
+  cgids = get_cell_gids(cmodel)
+  f_own_to_local = map(cgids,fmodels) do cgids,fmodel
+    glue = get_adaptivity_glue(fmodel)
+    f2c_map = glue.n2o_faces_map[Dc+1]
+    @assert isa(f2c_map,Vector) "Only uniform refinement is supported!"
+  
+    c_l2o_map = local_to_own(cgids)
+    return findall(parent -> !iszero(c_l2o_map[parent]),f2c_map)
+  end
+  return refine_cell_gids(cmodel,fmodels,f_own_to_local)
 end
