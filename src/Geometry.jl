@@ -439,9 +439,9 @@ end
 
 # Simplexify
 
-function Geometry.simplexify(model::DistributedDiscreteModel)
+function Geometry.simplexify(model::DistributedDiscreteModel;kwargs...)
   _model = UnstructuredDiscreteModel(model)
-  ref_model = refine(_model, refinement_method = "simplexify")
+  ref_model = refine(_model; refinement_method = "simplexify", kwargs...)
   return UnstructuredDiscreteModel(Adaptivity.get_model(ref_model))
 end
 
