@@ -74,7 +74,7 @@ function main(distribute,parts,ncells)
   child2 = refine(parent1, refinement_method = "simplexify" )
   test_adaptivity(ranks,parent1,child2)
 
-  parent2 = simplexify(parent1)
+  parent2 = simplexify(parent1,positive=true)
 
   if Dc == 2
     i_am_main(ranks) && println("UnstructuredAdaptivityTests: nvb")
