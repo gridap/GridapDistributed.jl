@@ -356,13 +356,13 @@ function _EvaluationFunction(func,
 end
 
 function FESpaces.get_fe_basis(f::DistributedSingleFieldFESpace)
-  fields = map(get_fe_basis,f.spaces)
+  fields = map(get_fe_basis,local_views(f))
   trian  = get_triangulation(f)
   DistributedCellField(fields,trian)
 end
 
 function FESpaces.get_trial_fe_basis(f::DistributedSingleFieldFESpace)
-  fields = map(get_trial_fe_basis,f.spaces)
+  fields = map(get_trial_fe_basis,local_views(f))
   trian  = get_triangulation(f)
   DistributedCellField(fields,trian)
 end
@@ -701,4 +701,33 @@ function FESpaces.SparseMatrixAssembler(
   T  = eltype(Tv)
   Tm = SparseMatrixCSC{T,Int}
   SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)
+end
+
+# ZeroMean FESpace
+
+#const DistributedZeroMeanFESpace = DistributedSingleFieldFESpace{}
+
+struct ZeroMeanCache{A}
+  vol_i::A
+  vol::Float64
+end
+
+function FESpaces.ZeroMeanFESpace(space::DistributedFESpace)#,dΩ::DistributedMeasure)
+  gids = get_free_dof_ids(space)
+  ranks = get_parts(space)
+  spaces = map(ranks,partition(gids),local_views(space)) do r, gids, lspace
+    fix_constant = isone(r) # Only main processor fixes the constant
+    dof_to_fix = Int(first(own_to_local(gids))) # Make sure it's an owned DoF
+    FESpaceWithConstantFixed(lspace,fix_constant,dof_to_fix)
+  end
+
+  #vol_i = assemble_vector(v->∫(v)*dΩ,space)
+  #vol = sum(vol_i)
+  #metadata = ZeroMeanCache(vol_i,vol)
+
+  trian = get_triangulation(space)
+  model = get_background_model(trian)
+  gids =  generate_gids(model,spaces)
+  vector_type = _find_vector_type(spaces,gids)
+  DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
 end
