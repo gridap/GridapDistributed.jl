@@ -355,8 +355,8 @@ f(s) instead of s(f)?
 end
 
 # Interpolation at arbitrary points (returns -Inf if the point is not found)
-Arrays.evaluate!(cache,f::DistributedCellField,x::Point) = evaluate!(cache,Interpolable(f),x)
-Arrays.evaluate!(cache,f::DistributedCellField,x::AbstractVector{<:Point}) = evaluate!(cache,Interpolable(f),x)
+Arrays.evaluate!(cache,f::DistributedCellField,x::Point) = evaluate(Interpolable(f),x)
+Arrays.evaluate!(cache,f::DistributedCellField,x::AbstractVector{<:Point}) = evaluate(Interpolable(f),x)
 
 struct DistributedInterpolable{Tx,Ty,A} <: Function
   interps::A
@@ -385,9 +385,8 @@ end
 
 (a::DistributedInterpolable)(x) = evaluate(a,x)
 
-Arrays.return_cache(f::DistributedInterpolable,x::Point) = Arrays.return_cache(f,[x])
-
-Arrays.evaluate!(caches,I::DistributedInterpolable,x::Point) = evaluate!(caches,I,[x])[1]
+Arrays.return_cache(f::DistributedInterpolable,x::Point) = return_cache(f,[x])
+Arrays.evaluate!(caches,I::DistributedInterpolable,x::Point) = first(evaluate!(caches,I,[x]))
 
 function Arrays.return_cache(I::DistributedInterpolable{Tx,Ty},x::AbstractVector{<:Point}) where {Tx,Ty}
   msg = "Can only evaluate DistributedInterpolable at physical points of the same dimension of the underlying triangulation"
@@ -400,7 +399,7 @@ function Arrays.return_cache(I::DistributedInterpolable{Tx,Ty},x::AbstractVector
   caches
 end
 
-function Gridap.Arrays.evaluate!(cache,I::DistributedInterpolable{Tx,Ty},x::AbstractVector{<:Point}) where {Tx,Ty}
+function Arrays.evaluate!(cache,I::DistributedInterpolable{Tx,Ty},x::AbstractVector{<:Point}) where {Tx,Ty}
   infty(::Type{T}) where T = -T(Inf)
   infty(::Type{VectorValue{D,T}}) where {D,T} = VectorValue(fill(infty(T),D)...)
   combine(a,b) = map(max,a,b)
