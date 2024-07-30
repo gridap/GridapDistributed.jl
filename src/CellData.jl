@@ -404,9 +404,10 @@ function Arrays.evaluate!(cache,I::DistributedInterpolable{Tx,Ty},x::AbstractVec
   infty(::Type{VectorValue{D,T}}) where {D,T} = VectorValue(fill(infty(T),D)...)
   combine(a,b) = map(max,a,b)
   function array_reduce(f,a)
+    T = getany(map(eltype,a))
     b = gather(a)
-    c = map_main(b) do b
-      c = fill(infty(eltype((first(b)))),length(first(b)))
+    c = map_main(b;otherwise=b->T[]) do b
+      c = fill(infty(T),length(first(b)))
       for bi in b
         c = f(c,bi)
       end
