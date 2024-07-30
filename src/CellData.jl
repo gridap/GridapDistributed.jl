@@ -400,7 +400,7 @@ function Arrays.return_cache(I::DistributedInterpolable{Tx,Ty},x::AbstractVector
 end
 
 function Arrays.evaluate!(cache,I::DistributedInterpolable{Tx,Ty},x::AbstractVector{<:Point}) where {Tx,Ty}
-  _allgather(x) = getdata(getany(gather(x;destination=:all)))
+  _allgather(x) = PartitionedArrays.getdata(getany(gather(x;destination=:all)))
 
   # Evaluate in local portions of the domain. Only keep points inside the domain.
   nx = length(x)
@@ -425,7 +425,7 @@ function Arrays.evaluate!(cache,I::DistributedInterpolable{Tx,Ty},x::AbstractVec
     resize!(ids,k-1)
     resize!(vals,k-1)
     return ids, vals
-  end
+  end |> tuple_of_arrays
 
   # Communicate results, so that every (id,value) pair is known by every process
   if Ty <: VectorValue
@@ -435,7 +435,7 @@ function Arrays.evaluate!(cache,I::DistributedInterpolable{Tx,Ty},x::AbstractVec
       my_vals_d = map(y_p -> map(y_p_i -> y_p_i[d],y_p),my_vals)
       vals_d[d] = _allgather(my_vals_d)
     end
-    vals = map(VectorValue,w_d...)
+    vals = map(VectorValue,vals_d...)
   else
     vals = _allgather(my_vals)
   end
