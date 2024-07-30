@@ -400,46 +400,51 @@ function Arrays.return_cache(I::DistributedInterpolable{Tx,Ty},x::AbstractVector
 end
 
 function Arrays.evaluate!(cache,I::DistributedInterpolable{Tx,Ty},x::AbstractVector{<:Point}) where {Tx,Ty}
-  infty(::Type{T}) where T = -T(Inf)
-  infty(::Type{VectorValue{D,T}}) where {D,T} = VectorValue(fill(infty(T),D)...)
-  combine(a,b) = map(max,a,b)
-  function array_reduce(f,a)
-    T = getany(map(eltype,a))
-    b = gather(a)
-    c = map_main(b;otherwise=b->T[]) do b
-      c = fill(infty(T),length(first(b)))
-      for bi in b
-        c = f(c,bi)
-      end
-      return c
-    end
-    return getany(emit(c))
-  end
+  _allgather(x) = getdata(getany(gather(x;destination=:all)))
 
-  # Evaluate in local portions of the domain. Set to -Inf if the point is not found.
+  # Evaluate in local portions of the domain. Only keep points inside the domain.
   nx = length(x)
-  y = map(local_views(I),local_views(cache)) do I, cache
-    y = Vector{Ty}(undef,nx)
+  my_ids, my_vals = map(local_views(I),local_views(cache)) do I, cache
+    ids  = Vector{Int}(undef,nx)
+    vals = Vector{Ty}(undef,nx)
+    k = 1
+    yi = zero(Ty)
     for (i,xi) in enumerate(x)
+      inside = true
       try
-        y[i] = evaluate!(cache,I,xi)
+        yi = evaluate!(cache,I,xi)
       catch
-        y[i] = infty(Ty)
+        inside = false
+      end
+      if inside
+        ids[k] = i
+        vals[k] = yi
+        k += 1
       end
     end
-    return y
+    resize!(ids,k-1)
+    resize!(vals,k-1)
+    return ids, vals
   end
 
-  # Combine the results
+  # Communicate results, so that every (id,value) pair is known by every process
   if Ty <: VectorValue
-    w_d = Vector{Vector{eltype(Ty)}}(undef,num_components(Ty))
-    for d in 1:num_components(Ty)
-      y_d = map(y_p -> map(y_p_i -> y_p_i[d],y_p),y)
-      w_d[d] = array_reduce(combine,y_d)
+    D = num_components(Ty)
+    vals_d = Vector{Vector{eltype(Ty)}}(undef,D)
+    for d in 1:D
+      my_vals_d = map(y_p -> map(y_p_i -> y_p_i[d],y_p),my_vals)
+      vals_d[d] = _allgather(my_vals_d)
     end
-    w = map(VectorValue,w_d...)
+    vals = map(VectorValue,w_d...)
   else
-    w = array_reduce(combine,y)
+    vals = _allgather(my_vals)
+  end
+  ids = _allgather(my_ids)
+
+  # Combine results
+  w = Vector{Ty}(undef,nx)
+  for (i,v) in zip(ids,vals)
+    w[i] = v
   end
 
   return w
