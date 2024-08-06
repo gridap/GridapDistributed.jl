@@ -597,6 +597,12 @@ function filter_cells_when_needed(
   remove_ghost_cells(trian,cell_gids)
 end
 
+function remove_ghost_cells(trian::DistributedTriangulation,gids)
+  trians = map(remove_ghost_cells,local_views(trian),partition(gids))
+  model  = get_background_model(trian)
+  return DistributedTriangulation(trians,model)
+end
+
 function remove_ghost_cells(trian::Triangulation,gids)
   model = get_background_model(trian)
   Dt    = num_cell_dims(trian)
