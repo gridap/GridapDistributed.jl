@@ -558,7 +558,8 @@ function _add_distributed_constraint(F::DistributedFESpace,order::Integer,constr
     V = F
   elseif constraint == :zeromean
     _trian = get_triangulation(F)
-    trian = remove_ghost_cells(_trian,get_free_dof_ids(F))
+    model = get_background_model(_trian)
+    trian = remove_ghost_cells(_trian,get_cell_gids(model))
     dΩ = Measure(trian,order)
     V = ZeroMeanFESpace(F,dΩ)
   else
@@ -765,12 +766,14 @@ end
 
 const DistributedZeroMeanFESpace{A,B,C,D,E,F} = DistributedSingleFieldFESpace{A,B,C,D,DistributedZeroMeanCache{E,F}}
 
-function FESpaces.ZeroMeanFESpace(space::DistributedFESpace,dΩ::DistributedMeasure)
+function FESpaces.FESpaceWithConstantFixed(
+  space::DistributedSingleFieldFESpace, 
+  gid_to_fix::Int = num_free_dofs(space)
+)
+  # Find the gid within the processors
   gids = get_free_dof_ids(space)
-
-  # We always fix the first gid
   lid_to_fix = map(partition(gids)) do gids
-    Int(global_to_local(gids)[1]) # returns 0 if not found in the processor
+    Int(global_to_local(gids)[gid_to_fix]) # returns 0 if not found in the processor
   end
 
   # Create local spaces
@@ -779,22 +782,29 @@ function FESpaces.ZeroMeanFESpace(space::DistributedFESpace,dΩ::DistributedMeas
     FESpaceWithConstantFixed(lspace,fix_constant,lid_to_fix)
   end
 
+  trian = get_triangulation(space)
+  model = get_background_model(trian)
+  gids  =  generate_gids(model,spaces)
+  vector_type = _find_vector_type(spaces,gids)
+  return DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
+end
+
+function FESpaces.ZeroMeanFESpace(space::DistributedSingleFieldFESpace,dΩ::DistributedMeasure)
+  # Create underlying space
+  _space = FESpaceWithConstantFixed(space,num_free_dofs(space))
+
   # Setup volume integration
-  _vol, _dvol = map(local_views(space),local_views(dΩ)) do lspace, dΩ
+  _vol, dvol = map(local_views(space),local_views(dΩ)) do lspace, dΩ
     dvol = assemble_vector(v -> ∫(v)dΩ, lspace)
     vol  = sum(dvol)
     return vol, dvol
   end |> tuple_of_arrays
   vol  = reduce(+,_vol,init=zero(eltype(vol)))
-  dvol = PVector(_dvol,partition(gids))
   metadata = DistributedZeroMeanCache(dvol,vol)
 
-  # Create the new global FESpace
-  trian = get_triangulation(space)
-  model = get_background_model(trian)
-  gids =  generate_gids(model,spaces)
-  vector_type = _find_vector_type(spaces,gids)
-  return DistributedSingleFieldFESpace(spaces,gids,trian,vector_type,metadata)
+  return DistributedSingleFieldFESpace(
+    _space.spaces,_space.gids,_space.trian,_space.vector_type,metadata
+  )
 end
 
 function FESpaces.FEFunction(
@@ -817,15 +827,28 @@ function FESpaces.FEFunction(
   c = _compute_new_distributed_fixedval(
     f,free_values,dirichlet_values
   )
-  fv = free_values .+ c
+  fv = free_values .+ c # TODO: Do we need to copy, or can we just modify? 
   dv = map(dirichlet_values) do dv
     dv .+ c
   end
   
   fields = map(FEFunction,f.spaces,partition(fv),dv)
   trian = get_triangulation(f)
-  metadata = DistributedFEFunctionData(free_values)
+  metadata = DistributedFEFunctionData(fv)
   DistributedCellField(fields,trian,metadata)
+end
+
+# This is required, otherwise we end up calling `FEFunction` with a fixed value of zero, 
+# which does not properly interpolate the function provided. 
+# With this change, we are interpolating in the unconstrained space and then
+# substracting the mean.
+function FESpaces.interpolate!(u,free_values::AbstractVector,f::DistributedZeroMeanFESpace)
+  dirichlet_values = get_dirichlet_dof_values(f)
+  interpolate_everywhere!(u,free_values,dirichlet_values,f)
+end
+function FESpaces.interpolate!(u::DistributedCellField,free_values::AbstractVector,f::DistributedZeroMeanFESpace)
+  dirichlet_values = get_dirichlet_dof_values(f)
+  interpolate_everywhere!(u,free_values,dirichlet_values,f)
 end
 
 function _compute_new_distributed_fixedval(
@@ -834,13 +857,15 @@ function _compute_new_distributed_fixedval(
   dvol = f.metadata.dvol
   vol  = f.metadata.vol
   
-  c_i = map(local_views(f),partition(fv),dv,partition(dvol)) do space,fv,dv,dvol
+  c_i = map(local_views(f),partition(fv),dv,dvol) do space,fv,dv,dvol
     if isa(FESpaces.ConstantApproach(space),FESpaces.FixConstant)
       lid_to_fix = space.dof_to_fix
       c = FESpaces._compute_new_fixedval(fv,dv,dvol,vol,lid_to_fix)
     else
       c = - dot(fv,dvol)/vol
     end
+    println("c = $c")
+    c
   end
   c = reduce(+,c_i,init=zero(eltype(c_i)))
   return c
