@@ -9,6 +9,7 @@ module TestApp
   include("../../SurfaceCouplingTests.jl")
   include("../../TransientDistributedCellFieldTests.jl")
   include("../../TransientMultiFieldDistributedCellFieldTests.jl")
+  include("../../ZeroMeanFESpacesTests.jl")
   include("../../HeatEquationTests.jl")
   include("../../StokesOpenBoundaryTests.jl")
   include("../../AdaptivityTests.jl")

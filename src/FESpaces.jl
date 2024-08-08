@@ -864,7 +864,6 @@ function _compute_new_distributed_fixedval(
     else
       c = - dot(fv,dvol)/vol
     end
-    println("c = $c")
     c
   end
   c = reduce(+,c_i,init=zero(eltype(c_i)))
