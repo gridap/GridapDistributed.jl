@@ -7,7 +7,8 @@ struct DistributedMultiFieldCellField{A,B,C} <: CellField
   function DistributedMultiFieldCellField(
     field_fe_fun::AbstractVector{<:DistributedCellField},
     part_fe_fun::AbstractArray{<:CellField},
-    metadata=nothing)
+    metadata=nothing
+  )
     A = typeof(field_fe_fun)
     B = typeof(part_fe_fun)
     C = typeof(metadata)
@@ -45,7 +46,8 @@ const DistributedMultiFieldFEFunction{A,B,T} = DistributedMultiFieldCellField{A,
 function DistributedMultiFieldFEFunction(
   field_fe_fun::AbstractVector{<:DistributedSingleFieldFEFunction},
   part_fe_fun::AbstractArray{<:MultiFieldFEFunction},
-  free_values::AbstractVector)
+  free_values::AbstractVector
+)
   metadata = DistributedFEFunctionData(free_values)
   DistributedMultiFieldCellField(field_fe_fun,part_fe_fun,metadata)
 end
