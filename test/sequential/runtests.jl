@@ -30,6 +30,8 @@ end
   include("TransientMultiFieldDistributedCellFieldTests.jl")
 end
 
+@time @testset "ZeroMeanFESpaces" begin include("ZeroMeanFESpacesTests.jl") end
+
 @time @testset "HeatEquation" begin include("HeatEquationTests.jl") end
 
 @time @testset "StokesOpenBoundary" begin include("StokesOpenBoundaryTests.jl") end
