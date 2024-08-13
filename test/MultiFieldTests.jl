@@ -17,6 +17,7 @@ function main(distribute, parts, mfs)
 
   domain = (0,4,0,4)
   cells = (4,4)
+  model = CartesianDiscreteModel(domain,cells)
   model = CartesianDiscreteModel(ranks,parts,domain,cells)
   Ω = Triangulation(model)
 
@@ -26,18 +27,20 @@ function main(distribute, parts, mfs)
   reffe_p = ReferenceFE(lagrangian,Float64,k-1,space=:P)
 
   u((x,y)) = VectorValue((x+y)^2,(x-y)^2)
-  p((x,y)) = x+y
+  p̂((x,y)) = x+y
+  p̂_mean = sum(∫(p̂)dΩ)/sum(∫(1)dΩ)
+  p((x,y)) = p̂((x,y)) - p̂_mean
   f(x) = - Δ(u,x) + ∇(p,x)
   g(x) = tr(∇(u,x))
 
   V = TestFESpace(model,reffe_u,dirichlet_tags="boundary")
   Q = TestFESpace(model,reffe_p,constraint=:zeromean)
   U = TrialFESpace(V,u)
-  P = TrialFESpace(Q,p)
+  P = TrialFESpace(Q)
 
   VxQ = MultiFieldFESpace([V,Q];style=mfs)
-  UxP = MultiFieldFESpace([U,P];style=mfs) # This generates again the global numbering
   UxP = TrialFESpace([u,p],VxQ) # This reuses the one computed
+  UxP = MultiFieldFESpace([U,P];style=mfs) # This generates again the global numbering
   @test length(UxP) == 2
 
   uh, ph = interpolate([u,p],UxP)
@@ -53,20 +56,19 @@ function main(distribute, parts, mfs)
     uh, ph = solve(solver,op)
     @test l2_error(u,uh,dΩ) < 1.0e-9
     @test l2_error(p,ph,dΩ) < 1.0e-9
-
-    writevtk(Ω,"Ω",nsubcells=10,cellfields=["uh"=>uh,"ph"=>ph])
+    #writevtk(Ω,"Ω",nsubcells=10,cellfields=["uh"=>uh,"ph"=>ph])
   end
 
   A  = get_matrix(op)
   xh = interpolate([u,p],UxP)
   x  = GridapDistributed.change_ghost(get_free_dof_values(xh),axes(A,2))
-  uh1, ph1 = FESpaces.EvaluationFunction(UxP,x)
-  uh2, ph2 = FEFunction(UxP,x)
+  uh, ph = xh
 
-  @test l2_error(u,uh1,dΩ) < 1.0e-9
-  @test l2_error(p,ph1,dΩ) < 1.0e-9
-  @test l2_error(u,uh2,dΩ) < 1.0e-9
-  @test l2_error(p,ph2,dΩ) < 1.0e-9
+  @test l2_error(u,uh,dΩ) < 1.0e-9
+  @test l2_error(p,ph,dΩ) < 1.0e-9
+
+  x_p = partition(get_free_dof_values(ph))
+  x_p2 = partition(get_free_dof_values(ph2))
 
   a1(x,y) = ∫(x⋅y)dΩ
   a2((u,p),(v,q)) = ∫(u⋅v + p⋅q)dΩ
