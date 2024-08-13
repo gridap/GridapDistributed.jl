@@ -355,73 +355,99 @@ f(s) instead of s(f)?
 end
 
 # Interpolation at arbitrary points (returns -Inf if the point is not found)
-Arrays.evaluate!(cache,f::DistributedCellField,x::Point) = evaluate!(cache,Interpolable(f),x)
-Arrays.evaluate!(cache,f::DistributedCellField,x::AbstractVector{<:Point}) = evaluate!(cache,Interpolable(f),x)
+Arrays.evaluate!(cache,f::DistributedCellField,x::Point) = evaluate(Interpolable(f),x)
+Arrays.evaluate!(cache,f::DistributedCellField,x::AbstractVector{<:Point}) = evaluate(Interpolable(f),x)
 
-struct DistributedInterpolable{A} <: Function
+struct DistributedInterpolable{Tx,Ty,A} <: Function
   interps::A
+  function DistributedInterpolable(interps::AbstractArray{<:Interpolable})
+    Tx,Ty = map(interps) do I
+      fi = I.uh
+      trian = get_triangulation(fi)
+      x = mean(testitem(get_cell_coordinates(trian)))
+      return typeof(x), return_type(fi,x)
+    end |> tuple_of_arrays
+    Tx = getany(Tx)
+    Ty = getany(Ty)
+    A  = typeof(interps)
+    new{Tx,Ty,A}(interps)
+  end
 end
+
 local_views(a::DistributedInterpolable) = a.interps
 
 function Interpolable(f::DistributedCellField;kwargs...) 
-  interps = map(local_views(f)) do fun
-      Interpolable(fun,kwargs...)
+  interps = map(local_views(f)) do f
+    Interpolable(f,kwargs...)
   end
   DistributedInterpolable(interps)
 end
 
 (a::DistributedInterpolable)(x) = evaluate(a,x)
 
-function Gridap.Arrays.return_cache(I::DistributedInterpolable,x::Point)
-  caches = map(local_views(I)) do fi
-      trian = get_triangulation(fi.uh)
-      y=mean(testitem(get_cell_coordinates(trian)))
-      @check typeof(testitem(x)) == typeof(y) "Can only evaluate DistributedInterpolable at physical points of the same dimension of the underlying triangulation"
-      return_cache(fi,y)
-  end
-  caches 
-end
-Gridap.Arrays.return_cache(f::DistributedInterpolable,x::AbstractVector{<:Point}) = Gridap.Arrays.return_cache(f,testitem(x))
+Arrays.return_cache(f::DistributedInterpolable,x::Point) = return_cache(f,[x])
+Arrays.evaluate!(caches,I::DistributedInterpolable,x::Point) = first(evaluate!(caches,I,[x]))
 
-function Gridap.Arrays.evaluate!(caches,I::DistributedInterpolable,x::Point)
-  y=map(local_views(I),local_views(caches)) do fi,cache
+function Arrays.return_cache(I::DistributedInterpolable{Tx,Ty},x::AbstractVector{<:Point}) where {Tx,Ty}
+  msg = "Can only evaluate DistributedInterpolable at physical points of the same dimension of the underlying triangulation"
+  @check Tx == eltype(x) msg
+  caches = map(local_views(I)) do I
+    trian = get_triangulation(I.uh)
+    y = mean(testitem(get_cell_coordinates(trian)))
+    return_cache(I,y)
+  end
+  caches
+end
+
+function Arrays.evaluate!(cache,I::DistributedInterpolable{Tx,Ty},x::AbstractVector{<:Point}) where {Tx,Ty}
+  _allgather(x) = PartitionedArrays.getdata(getany(gather(x;destination=:all)))
+
+  # Evaluate in local portions of the domain. Only keep points inside the domain.
+  nx = length(x)
+  my_ids, my_vals = map(local_views(I),local_views(cache)) do I, cache
+    ids  = Vector{Int}(undef,nx)
+    vals = Vector{Ty}(undef,nx)
+    k = 1
+    yi = zero(Ty)
+    for (i,xi) in enumerate(x)
+      inside = true
       try
-          evaluate!(cache,fi,x)
+        yi = evaluate!(cache,I,xi)
       catch
-          -Inf
+        inside = false
       end
-  end
-  # reduce(max,y)
-  z=gather(y)
-  map_main(local_views(z)) do zi
-      reduce(max,zi)
+      if inside
+        ids[k] = i
+        vals[k] = yi
+        k += 1
+      end
     end
-end
+    resize!(ids,k-1)
+    resize!(vals,k-1)
+    return ids, vals
+  end |> tuple_of_arrays
 
-function Gridap.Arrays.evaluate!(caches,I::DistributedInterpolable,v::AbstractVector{<:Point})
-  n=length(local_views(I))
-  m=length(v)
-  y=map(local_views(I),local_views(caches)) do fi,cache
-      w=Vector{Float64}(undef,m)
-      for (i,x) in enumerate(v)
-          try
-              w[i]=evaluate!(cache,fi,x)
-          catch
-              w[i]=-Inf
-          end
-      end
-      return w
+  # Communicate results, so that every (id,value) pair is known by every process
+  if Ty <: VectorValue
+    D = num_components(Ty)
+    vals_d = Vector{Vector{eltype(Ty)}}(undef,D)
+    for d in 1:D
+      my_vals_d = map(y_p -> map(y_p_i -> y_p_i[d],y_p),my_vals)
+      vals_d[d] = _allgather(my_vals_d)
     end
-  # z=gather(y,destination=:all)
-  z=gather(y)
-  map_main(local_views(z)) do zi
-      w=Vector{Float64}(undef,m)
-      for i=0:m-1
-        w[i+1]=reduce(max,zi.data[zi.ptrs[1:n].+i])
-      end
-      return w
-    end
-  # reduce((v,w)->broadcast(max,v,w),y)
+    vals = map(VectorValue,vals_d...)
+  else
+    vals = _allgather(my_vals)
+  end
+  ids = _allgather(my_ids)
+
+  # Combine results
+  w = Vector{Ty}(undef,nx)
+  for (i,v) in zip(ids,vals)
+    w[i] = v
+  end
+
+  return w
 end
 
 # Support for distributed Dirac deltas

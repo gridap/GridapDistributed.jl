@@ -237,13 +237,13 @@ function emit_cartesian_descriptor(
   return DistributedCartesianDescriptor(new_ranks,new_mesh_partition,new_desc)
 end
 
-const DistributedCartesianDiscreteModel{Dc,Dp,A,B,C} = 
+const DistributedCartesianDiscreteModel{Dc,Dp,A,B,C} =
   GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:CartesianDiscreteModel},B,<:DistributedCartesianDescriptor}
 
 function Geometry.CartesianDiscreteModel(
   ranks::AbstractArray{<:Integer}, # Distributed array with the rank IDs
   parts::NTuple{N,<:Integer},      # Number of ranks (parts) in each direction
-  args...;isperiodic=map(i->false,parts),kwargs...) where N 
+  args...;isperiodic=map(i->false,parts),kwargs...) where N
 
   desc = CartesianDescriptor(args...;isperiodic=isperiodic,kwargs...)
   nc = desc.partition
@@ -262,7 +262,7 @@ function Geometry.CartesianDiscreteModel(
     models = map(ranks,upartition) do rank, upartition
       cmin = gcids[first(upartition)]
       cmax = gcids[last(upartition)]
-      CartesianDiscreteModel(desc,cmin,cmax)  
+      CartesianDiscreteModel(desc,cmin,cmax)
     end
     gids = PRange(upartition)
     metadata = DistributedCartesianDescriptor(ranks,parts,desc)
@@ -271,10 +271,10 @@ function Geometry.CartesianDiscreteModel(
 end
 
 function _cartesian_model_with_periodic_bcs(ranks,parts,desc)
-  # We create and extended CartesianDescriptor for the local models: 
-  # If a direction is periodic and partitioned: 
+  # We create and extended CartesianDescriptor for the local models:
+  # If a direction is periodic and partitioned:
   #   - we add a ghost cell at either side, which will be made periodic by the index partition.
-  #   - We move the origin to accomodate the new cells. 
+  #   - We move the origin to accomodate the new cells.
   #   - We turn OFF the periodicity in the local model, since periodicity will be taken care of
   #     by the global index partition.
   _map = desc.map #! Important: the map should be periodic if you want to integrate on the ghost cells.
@@ -288,7 +288,7 @@ function _cartesian_model_with_periodic_bcs(ranks,parts,desc)
   end |> tuple_of_arrays
   _desc = CartesianDescriptor(Point(_origin),_sizes,_partition;map=_map,isperiodic=_isperiodic)
 
-  # We create the global index partition, which has the original number of cells per direction. 
+  # We create the global index partition, which has the original number of cells per direction.
   # Globally, the periodicity is turned ON in the directions which are periodic and partitioned
   # (if a direction is not partitioned, the periodicity is handled locally).
   ghost = map(i->true,parts)
@@ -399,7 +399,7 @@ function Geometry.DiscreteModel(
           cell_to_mask[jcell] = true
         end
       end
-    end 
+    end
     lcell_to_cell = findall(cell_to_mask)
     lcell_to_part = zeros(Int32,length(lcell_to_cell))
     lcell_to_part .= cell_to_part[lcell_to_cell]
@@ -408,11 +408,11 @@ function Geometry.DiscreteModel(
 
   partition = map(parts,lcell_to_cell,lcell_to_part) do part, lcell_to_cell, lcell_to_part
     LocalIndices(ncells, part, lcell_to_cell, lcell_to_part)
-  end 
+  end
 
-  # This is required to provide the hint that the communication 
-  # pattern underlying partition is symmetric, so that we do not have 
-  # to execute the algorithm the reconstructs the reciprocal in the 
+  # This is required to provide the hint that the communication
+  # pattern underlying partition is symmetric, so that we do not have
+  # to execute the algorithm the reconstructs the reciprocal in the
   # communication graph
   assembly_neighbors(partition;symmetric=true)
 
@@ -427,7 +427,7 @@ end
 
 # UnstructuredDiscreteModel
 
-const DistributedUnstructuredDiscreteModel{Dc,Dp,A,B,C} = 
+const DistributedUnstructuredDiscreteModel{Dc,Dp,A,B,C} =
   GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:UnstructuredDiscreteModel},B,C}
 
 function Geometry.UnstructuredDiscreteModel(model::GenericDistributedDiscreteModel)
@@ -439,9 +439,9 @@ end
 
 # Simplexify
 
-function Geometry.simplexify(model::DistributedDiscreteModel)
+function Geometry.simplexify(model::DistributedDiscreteModel;kwargs...)
   _model = UnstructuredDiscreteModel(model)
-  ref_model = refine(_model, refinement_method = "simplexify")
+  ref_model = refine(_model; refinement_method = "simplexify", kwargs...)
   return UnstructuredDiscreteModel(Adaptivity.get_model(ref_model))
 end
 
@@ -696,7 +696,7 @@ function add_ghost_cells(dmodel::DistributedDiscreteModel{Dm},
 
     cache=fetch_vector_ghost_values_cache(mcell_intrian,partition(gids))
     fetch_vector_ghost_values!(mcell_intrian,cache) |> wait
-    
+
     dreffes=map(local_views(dmodel)) do model
       ReferenceFE{Dt}
     end
@@ -721,7 +721,7 @@ function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
     # count number owned cells
     notcells, tcell_to_mcell = map(
       local_views(dmodel),local_views(dtrian),PArrays.partition(mgids)) do model,trian,partition
-      lid_to_owner = local_to_owner(partition)  
+      lid_to_owner = local_to_owner(partition)
       part = part_id(partition)
       glue = get_glue(trian,Val(Dt))
       @assert isa(glue,FaceToFaceGlue)
@@ -756,7 +756,7 @@ function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
 
     # Prepare new partition
     ngtcells = reduction(+,notcells,destination=:all,init=zero(eltype(notcells)))
-    partition = map(ngtcells, 
+    partition = map(ngtcells,
                     mcell_to_gtcell,
                     tcell_to_mcell,
                     PArrays.partition(mgids)) do ngtcells,mcell_to_gtcell,tcell_to_mcell,partition
