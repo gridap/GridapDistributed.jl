@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Added kwargs for VTK encoding options. Since PR[#156](https://github.com/gridap/GridapDistributed.jl/pull/156).
+
 ### Fixed
 
 - Fixed distributed interpolators for Vector-Valued FESpaces. Since PR[#152](https://github.com/gridap/GridapDistributed.jl/pull/152).
