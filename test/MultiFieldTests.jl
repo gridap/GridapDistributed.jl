@@ -67,9 +67,6 @@ function main(distribute, parts, mfs)
   @test l2_error(u,uh,dΩ) < 1.0e-9
   @test l2_error(p,ph,dΩ) < 1.0e-9
 
-  x_p = partition(get_free_dof_values(ph))
-  x_p2 = partition(get_free_dof_values(ph2))
-
   a1(x,y) = ∫(x⋅y)dΩ
   a2((u,p),(v,q)) = ∫(u⋅v + p⋅q)dΩ
   A1 = assemble_matrix(a1,UxP,UxP)
