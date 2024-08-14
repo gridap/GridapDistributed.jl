@@ -186,7 +186,7 @@ end
 
 function FESpaces.interpolate!(objects,free_values::AbstractVector,space::DistributedMultiFieldFESpace)
   msg = "free_values and FESpace have incompatible index partitions."
-  @check partition(axes(free_values,1)) === partition(space.gids) msg
+  @check PartitionedArrays.matching_local_indices(axes(free_values,1),get_free_dof_ids(space)) msg
 
   # Interpolate each field
   field_fe_fun = DistributedSingleFieldFEFunction[]
@@ -219,7 +219,7 @@ function FESpaces.interpolate_everywhere!(
   space::DistributedMultiFieldFESpace
 )
   msg = "free_values and FESpace have incompatible index partitions."
-  @check partition(axes(free_values,1)) === partition(space.gids) msg
+  @check PartitionedArrays.matching_local_indices(axes(free_values,1),get_free_dof_ids(space)) msg
   
   # Interpolate each field
   field_fe_fun = DistributedSingleFieldFEFunction[]

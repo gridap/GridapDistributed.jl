@@ -25,6 +25,21 @@ function Base.getindex(a::BlockPRange,inds::Block{1})
   a.ranges[inds.n...]
 end
 
+function PartitionedArrays.matching_local_indices(a::BlockPRange,b::BlockPRange)
+  c = map(PartitionedArrays.matching_local_indices,blocks(a),blocks(b))
+  reduce(&,c,init=true)
+end
+
+function PartitionedArrays.matching_own_indices(a::BlockPRange,b::BlockPRange)
+  c = map(PartitionedArrays.matching_own_indices,blocks(a),blocks(b))
+  reduce(&,c,init=true)
+end
+
+function PartitionedArrays.matching_ghost_indices(a::BlockPRange,b::BlockPRange)
+  c = map(PartitionedArrays.matching_ghost_indices,blocks(a),blocks(b))
+  reduce(&,c,init=true)
+end
+
 """
   struct BlockPArray{V,T,N,A,B} <: BlockArrays.AbstractBlockArray{T,N}
 """

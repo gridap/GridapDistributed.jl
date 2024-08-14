@@ -17,7 +17,6 @@ function main(distribute, parts, mfs)
 
   domain = (0,4,0,4)
   cells = (4,4)
-  model = CartesianDiscreteModel(domain,cells)
   model = CartesianDiscreteModel(ranks,parts,domain,cells)
   Ω = Triangulation(model)
 
