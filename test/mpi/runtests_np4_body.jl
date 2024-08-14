@@ -28,6 +28,9 @@ function all_tests(distribute,parts)
   TestApp.TransientMultiFieldDistributedCellFieldTests.main(distribute,parts)
   PArrays.toc!(t,"TransientMultiFieldDistributedCellField")
 
+  TestApp.ZeroMeanFESpacesTests.main(distribute,parts)
+  PArrays.toc!(t,"ZeroMeanFESpaces")
+
   TestApp.PeriodicBCsTests.main(distribute,parts)
   PArrays.toc!(t,"PeriodicBCs")
 
