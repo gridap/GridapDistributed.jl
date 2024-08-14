@@ -1,7 +1,7 @@
 name = "GridapDistributed"
 uuid = "f9701e48-63b3-45aa-9a63-9bc6c271f355"
 authors = ["S. Badia <santiago.badia@monash.edu>", "A. F. Martin <alberto.f.martin@anu.edu.au>", "F. Verdugo <f.verdugo.rojano@vu.nl>"]
-version = "0.4.3"
+version = "0.4.4"
 
 [deps]
 BlockArrays = "8e7c35d0-a365-5155-bbbb-fb81a777f24e"
