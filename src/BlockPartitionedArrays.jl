@@ -352,7 +352,9 @@ end
 
 function LinearAlgebra.norm(v::BlockPVector,p::Real=2)
   if p == 2
-    return sqrt(dot(v,v))
+    # More accurate, I think, given the fact we are not 
+    # repeating the sqrt(square(sqrt...)) process in every block and every processor
+    return sqrt(dot(v,v)) 
   end
   block_norms = map(vi->norm(vi,p),blocks(v))
   return sum(block_norms.^p)^(1/p)
