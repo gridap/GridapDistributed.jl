@@ -351,6 +351,9 @@ function LinearAlgebra.dot(x::BlockPVector,y::BlockPVector)
 end
 
 function LinearAlgebra.norm(v::BlockPVector,p::Real=2)
+  if p == 2
+    return sqrt(dot(v,v))
+  end
   block_norms = map(vi->norm(vi,p),blocks(v))
   return sum(block_norms.^p)^(1/p)
 end
