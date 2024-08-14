@@ -33,7 +33,8 @@ end
 function Visualization.visualization_data(
   model::DistributedDiscreteModel{Dc},
   filebase::AbstractString;
-  labels=get_face_labeling(model)) where Dc
+  labels=get_face_labeling(model)
+) where Dc
 
   cell_gids = get_cell_gids(model)
   vd = map(local_views(model),partition(cell_gids),labels.labels) do model,gids,labels
@@ -57,7 +58,8 @@ function Visualization.visualization_data(
   order=-1,
   nsubcells=-1,
   celldata=nothing,
-  cellfields=nothing)
+  cellfields=nothing
+)
 
   trians    = trian.trians
   cell_gids = get_cell_gids(trian.model)
@@ -145,8 +147,13 @@ end
 
 function Visualization.write_vtk_file(
   parts::AbstractArray,
-  grid::AbstractArray{<:Grid}, filebase; celldata, nodaldata)
-  pvtk = Visualization.create_vtk_file(parts,grid,filebase;celldata=celldata,nodaldata=nodaldata)
+  grid::AbstractArray{<:Grid}, filebase; celldata, nodaldata,
+  compress=false,append=true,ascii=false,vtkversion=:default
+  )
+  pvtk = Visualization.create_vtk_file(
+    parts,grid,filebase;celldata=celldata,nodaldata=nodaldata,
+    compress=compress,append=append,ascii=ascii,vtkversion=vtkversion
+  )
   map(vtk_save,pvtk)
 end
 
@@ -154,33 +161,47 @@ function Visualization.create_vtk_file(
   parts::AbstractArray,
   grid::AbstractArray{<:Grid}, 
   filebase; 
-  celldata, nodaldata)
+  celldata, nodaldata,
+  compress=false,append=true,ascii=false,vtkversion=:default
+)
   nparts = length(parts)
   map(parts,grid,celldata,nodaldata) do part,g,c,n
     Visualization.create_pvtk_file(
       g,filebase;
       part=part,nparts=nparts,
-      celldata=c,nodaldata=n)
+      celldata=c,nodaldata=n,
+      compress=compress,append=append,ascii=ascii,vtkversion=vtkversion
+    )
   end
 end
 
 const DistributedModelOrTriangulation = Union{DistributedDiscreteModel,DistributedTriangulation}
 
-function Visualization.writevtk(arg::DistributedModelOrTriangulation,args...;kwargs...)
+function Visualization.writevtk(
+  arg::DistributedModelOrTriangulation,args...;
+  compress=false,append=true,ascii=false,vtkversion=:default,kwargs...
+)
   parts=get_parts(arg)
   map(visualization_data(arg,args...;kwargs...)) do visdata
     write_vtk_file(
-    parts,visdata.grid,visdata.filebase,celldata=visdata.celldata,nodaldata=visdata.nodaldata)
+      parts,visdata.grid,visdata.filebase,celldata=visdata.celldata,nodaldata=visdata.nodaldata,
+      compress=compress, append=append, ascii=ascii, vtkversion=vtkversion
+    )
   end
 end
 
-function Visualization.createvtk(arg::DistributedModelOrTriangulation,args...;kwargs...)
+function Visualization.createvtk(
+  arg::DistributedModelOrTriangulation,args...;
+  compress=false,append=true,ascii=false,vtkversion=:default,kwargs...
+)
   v = visualization_data(arg,args...;kwargs...)
   parts=get_parts(arg)
   @notimplementedif length(v) != 1
   visdata = first(v)
   Visualization.create_vtk_file(
-    parts,visdata.grid,visdata.filebase,celldata=visdata.celldata,nodaldata=visdata.nodaldata)
+    parts,visdata.grid,visdata.filebase,celldata=visdata.celldata,nodaldata=visdata.nodaldata,
+    compress=compress, append=append, ascii=ascii, vtkversion=vtkversion
+  )
 end
 
 struct DistributedPvd{T<:AbstractArray}
