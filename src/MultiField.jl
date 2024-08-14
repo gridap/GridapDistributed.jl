@@ -215,7 +215,7 @@ end
 function FESpaces.interpolate_everywhere!(
   objects,
   free_values::AbstractVector,
-  dirichlet_values::Vector{AbstractArray{<:AbstractVector}},
+  dirichlet_values::Vector{<:AbstractArray{<:AbstractVector}},
   space::DistributedMultiFieldFESpace
 )
   msg = "free_values and FESpace have incompatible index partitions."
