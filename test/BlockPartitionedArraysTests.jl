@@ -76,7 +76,7 @@ t = assemble!(__v)
 assemble!(__m) |> wait
 fetch(t);
 
-PartitionedArrays.to_trivial_partition(m)
+PartitionedArrays.centralize(m)
 
 partition(v)
 partition(m)

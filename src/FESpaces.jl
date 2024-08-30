@@ -118,7 +118,7 @@ end
 
 function fetch_vector_ghost_values_cache(vector_partition,partition)
   cache = PArrays.p_vector_cache(vector_partition,partition)
-  map(reverse,cache)
+  reverse(cache)
 end
 
 function fetch_vector_ghost_values!(vector_partition,cache)
@@ -163,7 +163,7 @@ function generate_gids(
   #         swapped in the AssemblyCache of partition(cell_range)
 
   # Exchange the dof owners
-  cache_fetch=fetch_vector_ghost_values_cache(cell_ldofs_to_part,partition(cell_range))
+  cache_fetch = fetch_vector_ghost_values_cache(cell_ldofs_to_part,partition(cell_range))
   fetch_vector_ghost_values!(cell_ldofs_to_part,cache_fetch) |> wait
   
   cell_wise_to_dof_wise!(ldof_to_owner,
