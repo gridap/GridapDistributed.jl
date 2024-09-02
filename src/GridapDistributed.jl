@@ -31,8 +31,8 @@ import Base: inv, abs, abs2, *, +, -, /, adjoint, transpose, real, imag, conj, g
 import Gridap.Fields: grad2curl
 import Gridap.CellData: Interpolable
 
-export FullyAssembledRows
-export SubAssembledRows
+export LocallyAssembled
+export Assembled
 
 export get_cell_gids
 export get_face_gids
@@ -41,6 +41,8 @@ export local_views, get_parts
 export with_ghost, no_ghost
 
 export redistribute
+
+include("DistributedUtils.jl")
 
 include("BlockPartitionedArrays.jl")
 

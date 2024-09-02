@@ -56,36 +56,25 @@ function FESpaces.gather_free_and_dirichlet_values(f::DistributedFESpace,cell_va
   return free_values, dirichlet_values
 end
 
-function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_prange)
-  map(cell_wise_vector,
-          dof_wise_vector,
-          cell_to_ldofs,
-          partition(cell_prange)) do cwv,dwv,cell_to_ldofs,indices
+function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_ids)
+  map(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_ids) do cwv,dwv,cell_to_ldofs,cell_ids
     cache  = array_cache(cell_to_ldofs)
-    ncells = length(cell_to_ldofs)
-    ptrs = cwv.ptrs
-    data = cwv.data
-    cell_own_to_local = own_to_local(indices)
-    for cell in cell_own_to_local
+    for cell in cell_ids
       ldofs = getindex!(cache,cell_to_ldofs,cell)
-      p = ptrs[cell]-1
+      p = cwv.ptrs[cell]-1
       for (i,ldof) in enumerate(ldofs)
         if ldof > 0
-          data[i+p] = dwv[ldof]
+          cwv.data[i+p] = dwv[ldof]
         end
       end
     end
   end
 end
 
-function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_range)
-  map(dof_wise_vector,
-      cell_wise_vector,
-      cell_to_ldofs,
-      partition(cell_range)) do dwv,cwv,cell_to_ldofs,indices
+function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_ids)
+  map(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_ids) do dwv,cwv,cell_to_ldofs,cell_ids
     cache = array_cache(cell_to_ldofs)
-    cell_ghost_to_local = ghost_to_local(indices)
-    for cell in cell_ghost_to_local
+    for cell in cell_ids
       ldofs = getindex!(cache,cell_to_ldofs,cell)
       p = cwv.ptrs[cell]-1
       for (i,ldof) in enumerate(ldofs)
@@ -97,23 +86,14 @@ function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,c
   end
 end
 
-function dof_wise_to_cell_wise(dof_wise_vector,cell_to_ldofs,cell_prange)
-    cwv=map(cell_to_ldofs) do cell_to_ldofs
-      cache = array_cache(cell_to_ldofs)
-      ncells = length(cell_to_ldofs)
-      ptrs = Vector{Int32}(undef,ncells+1)
-      for cell in 1:ncells
-        ldofs = getindex!(cache,cell_to_ldofs,cell)
-        ptrs[cell+1] = length(ldofs)
-      end
-      PArrays.length_to_ptrs!(ptrs)
-      ndata = ptrs[end]-1
-      data = Vector{Int}(undef,ndata)
-      data .= -1
-      JaggedArray(data,ptrs)
-    end
-    dof_wise_to_cell_wise!(cwv,dof_wise_vector,cell_to_ldofs,cell_prange)
-    cwv
+function dof_wise_to_cell_wise(dof_wise_vector,cell_to_ldofs,cell_ids)
+  cwv = map(cell_to_ldofs) do cell_to_ldofs
+    ptrs = generate_ptrs(cell_to_ldofs)
+    data = fill(-1,ptrs[end]-1)
+    JaggedArray(data,ptrs)
+  end
+  dof_wise_to_cell_wise!(cwv,dof_wise_vector,cell_to_ldofs,cell_ids)
+  return cwv
 end
 
 function fetch_vector_ghost_values_cache(vector_partition,partition)
@@ -128,13 +108,15 @@ end
 function generate_gids(
   cell_range::PRange,
   cell_to_ldofs::AbstractArray{<:AbstractArray},
-  nldofs::AbstractArray{<:Integer})
+  nldofs::AbstractArray{<:Integer}
+)
+  ranks = linear_indices(partition(cell_range))
 
   # Find and count number owned dofs
   ldof_to_owner, nodofs = map(partition(cell_range),cell_to_ldofs,nldofs) do indices,cell_to_ldofs,nldofs
     ldof_to_owner = fill(Int32(0),nldofs)
-    cache = array_cache(cell_to_ldofs)
     lcell_to_owner = local_to_owner(indices)
+    cache = array_cache(cell_to_ldofs)
     for cell in 1:length(cell_to_ldofs)
       owner = lcell_to_owner[cell]
       ldofs = getindex!(cache,cell_to_ldofs,cell)
@@ -151,102 +133,54 @@ function generate_gids(
     ldof_to_owner, nodofs
   end |> tuple_of_arrays
 
-  cell_ldofs_to_part = dof_wise_to_cell_wise(ldof_to_owner,
-                                              cell_to_ldofs,
-                                              cell_range)
-
-  # Note1 : this call potentially updates cell_prange with the 
-  #         info required to exchange info among nearest neighbours
-  #         so that it can be re-used in the future for other exchanges
-
-  # Note2 : we need to call reverse() as the senders and receivers are 
-  #         swapped in the AssemblyCache of partition(cell_range)
-
-  # Exchange the dof owners
-  cache_fetch = fetch_vector_ghost_values_cache(cell_ldofs_to_part,partition(cell_range))
-  fetch_vector_ghost_values!(cell_ldofs_to_part,cache_fetch) |> wait
-  
-  cell_wise_to_dof_wise!(ldof_to_owner,
-                         cell_ldofs_to_part,
-                         cell_to_ldofs,
-                         cell_range)
-
   # Find the global range of owned dofs
   first_gdof = scan(+,nodofs,type=:exclusive,init=one(eltype(nodofs)))
+
+  # Exchange the dof owners. Cell owner always has correct dof owner.
+  cell_ldofs_to_owner = dof_wise_to_cell_wise(ldof_to_owner,cell_to_ldofs,own_to_local(cell_range))
+  consistent!(PVector(cell_ldofs_to_owner,partition(cell_range))) |> wait
+  cell_wise_to_dof_wise!(ldof_to_owner,cell_ldofs_to_owner,cell_to_ldofs,ghost_to_local(cell_range))
   
-  # Distribute gdofs to owned ones
-  ldof_to_gdof = map(first_gdof,ldof_to_owner,partition(cell_range)) do first_gdof,ldof_to_owner,indices
-    me = part_id(indices)
+  # Fill owned gids
+  ldof_to_gdof = map(ranks,first_gdof,ldof_to_owner) do rank,first_gdof,ldof_to_owner
+    ldof_to_gdof = fill(0,length(ldof_to_owner))
     offset = first_gdof-1
-    ldof_to_gdof = Vector{Int}(undef,length(ldof_to_owner))
     odof = 0
     for (ldof,owner) in enumerate(ldof_to_owner)
-      if owner == me
+      if owner == rank
         odof += 1
-        ldof_to_gdof[ldof] = odof
-      else
-        ldof_to_gdof[ldof] = 0
-      end
-    end
-    for (ldof,owner) in enumerate(ldof_to_owner)
-      if owner == me
-        ldof_to_gdof[ldof] += offset
+        ldof_to_gdof[ldof] = odof + offset
       end
     end
     ldof_to_gdof
   end
 
-  # Create cell-wise global dofs
-  cell_to_gdofs = dof_wise_to_cell_wise(ldof_to_gdof,
-                                        cell_to_ldofs,
-                                        cell_range)
+  # Exchange gids
+  cell_to_gdofs = dof_wise_to_cell_wise(ldof_to_gdof,cell_to_ldofs,own_to_local(cell_range))
+  consistent!(PVector(cell_to_gdofs,partition(cell_range))) |> wait
 
-  # Exchange the global dofs
-  fetch_vector_ghost_values!(cell_to_gdofs,cache_fetch) |> wait
-
-  # Distribute global dof ids also to ghost
+  # Fill ghost gids with exchanged information
   map(cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_owner,partition(cell_range)) do cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_owner,indices
-    gdof = 0
     cache = array_cache(cell_to_ldofs)
-    cell_ghost_to_local = ghost_to_local(indices)
     cell_local_to_owner = local_to_owner(indices)
-    for cell in cell_ghost_to_local
+    for cell in ghost_to_local(indices)
       ldofs = getindex!(cache,cell_to_ldofs,cell)
+      cell_owner = cell_local_to_owner[cell]
       p = cell_to_gdofs.ptrs[cell]-1
       for (i,ldof) in enumerate(ldofs)
-        if ldof > 0 && ldof_to_owner[ldof] == cell_local_to_owner[cell]
+        dof_owner = ldof_to_owner[ldof]
+        if ldof > 0 && (dof_owner == cell_owner)
           ldof_to_gdof[ldof] = cell_to_gdofs.data[i+p]
         end
       end
     end
   end
 
-  dof_wise_to_cell_wise!(cell_to_gdofs,
-                         ldof_to_gdof,
-                         cell_to_ldofs,
-                         cell_range)
-
-  fetch_vector_ghost_values!(cell_to_gdofs,cache_fetch) |> wait
-
-  cell_wise_to_dof_wise!(ldof_to_gdof,
-                         cell_to_gdofs,
-                         cell_to_ldofs,
-                         cell_range)
-
-  # Setup DoFs LocalIndices
-  ngdofs = reduction(+,nodofs,destination=:all,init=zero(eltype(nodofs)))
-  local_indices = map(ngdofs,partition(cell_range),ldof_to_gdof,ldof_to_owner) do ngdofs,
-                                                                                  indices,
-                                                                                  ldof_to_gdof,
-                                                                                  ldof_to_owner
-     me = part_id(indices)
-     LocalIndices(ngdofs,me,ldof_to_gdof,ldof_to_owner)
-  end
-
-  # Setup dof range
-  dofs_range = PRange(local_indices)
-
-  return dofs_range
+  # Setup DoFs AbstractLocalIndices
+  dof_ids = permuted_variable_partition(
+    nodofs,ldof_to_gdof,ldof_to_owner;start=first_gdof
+  )
+  return PRange(dof_ids)
 end
 
 # FEFunction related
@@ -576,12 +510,14 @@ end
 function FESpaces.collect_cell_matrix(
   trial::DistributedFESpace,
   test::DistributedFESpace,
-  a::DistributedDomainContribution)
+  a::DistributedDomainContribution
+)
   map(collect_cell_matrix,local_views(trial),local_views(test),local_views(a))
 end
 
 function FESpaces.collect_cell_vector(
-  test::DistributedFESpace, a::DistributedDomainContribution)
+  test::DistributedFESpace, a::DistributedDomainContribution
+)
   map(collect_cell_vector,local_views(test),local_views(a))
 end
 
@@ -589,12 +525,14 @@ function FESpaces.collect_cell_matrix_and_vector(
   trial::DistributedFESpace,
   test::DistributedFESpace,
   biform::DistributedDomainContribution,
-  liform::DistributedDomainContribution)
+  liform::DistributedDomainContribution
+)
   map(collect_cell_matrix_and_vector,
     local_views(trial),
     local_views(test),
     local_views(biform),
-    local_views(liform))
+    local_views(liform)
+  )
 end
 
 function FESpaces.collect_cell_matrix_and_vector(
@@ -602,17 +540,20 @@ function FESpaces.collect_cell_matrix_and_vector(
   test::DistributedFESpace,
   biform::DistributedDomainContribution,
   liform::DistributedDomainContribution,
-  uhd)
+  uhd
+)
   map(collect_cell_matrix_and_vector,
     local_views(trial),
     local_views(test),
     local_views(biform),
     local_views(liform),
-    local_views(uhd))
+    local_views(uhd)
+  )
 end
 
 function FESpaces.collect_cell_vector(
-  test::DistributedFESpace,l::Number)
+  test::DistributedFESpace,l::Number
+)
   map(local_views(test)) do s
     collect_cell_vector(s,l)
   end
@@ -622,7 +563,8 @@ function FESpaces.collect_cell_matrix_and_vector(
   trial::DistributedFESpace,
   test::DistributedFESpace,
   mat::DistributedDomainContribution,
-  l::Number)
+  l::Number
+)
   map(local_views(trial),local_views(test),local_views(mat)) do u,v,m
     collect_cell_matrix_and_vector(u,v,m,l)
   end
@@ -633,26 +575,29 @@ function FESpaces.collect_cell_matrix_and_vector(
   test::DistributedFESpace,
   mat::DistributedDomainContribution,
   l::Number,
-  uhd)
+  uhd
+)
   map(local_views(trial),local_views(test),local_views(mat),local_views(uhd)) do u,v,m,f
     collect_cell_matrix_and_vector(u,v,m,l,f)
   end
 end
+
 """
 """
-struct DistributedSparseMatrixAssembler{A,B,C,D,E,F} <: SparseMatrixAssembler
+struct DistributedSparseMatrixAssembler{A,B,C,D,E,F,G} <: SparseMatrixAssembler
   strategy::A
   assems::B
   matrix_builder::C
   vector_builder::D
-  test_dofs_gids_prange::E
-  trial_dofs_gids_prange::F
+  test_gids::E
+  trial_gids::F
+  caches::G
 end
 
 local_views(a::DistributedSparseMatrixAssembler) = a.assems
 
-FESpaces.get_rows(a::DistributedSparseMatrixAssembler) = a.test_dofs_gids_prange
-FESpaces.get_cols(a::DistributedSparseMatrixAssembler) = a.trial_dofs_gids_prange
+FESpaces.get_rows(a::DistributedSparseMatrixAssembler) = a.test_gids
+FESpaces.get_cols(a::DistributedSparseMatrixAssembler) = a.trial_gids
 FESpaces.get_matrix_builder(a::DistributedSparseMatrixAssembler) = a.matrix_builder
 FESpaces.get_vector_builder(a::DistributedSparseMatrixAssembler) = a.vector_builder
 FESpaces.get_assembly_strategy(a::DistributedSparseMatrixAssembler) = a.strategy
@@ -694,20 +639,43 @@ function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrix
   map(numeric_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
 end
 
+function FESpaces.assemble_matrix!(mat::PSparseMatrix,a::DistributedSparseMatrixAssembler,matdata)
+  @check !isnothing(a.caches) "Assembler is not reusable!"
+  @check haskey(a.caches,objectid(mat)) "Cache not found!"
+  cache = a.caches[objectid(mat)]
+
+  LinearAlgebra.fillstored!(mat,zero(eltype(mat)))
+
+  counter = nz_counter(get_matrix_builder(a),(get_rows(a),get_cols(a)))
+  map(local_views(counter),partition(mat)) do counter, mat
+    counter.nnz = nnz(mat)
+  end
+  allocs = nz_allocation(counter)
+  numeric_loop_matrix!(allocs,a,matdata)
+
+  create_from_nz!(mat,allocs,cache)
+end
+
+function create_from_nz!(A,a::DistributedAllocationCOO{<:Assembled},cache)
+  _,_,V = get_allocations(a)
+  psparse!(A,V,cache) |> wait
+  return A
+end
+
 # Parallel Assembly strategies
 
-function local_assembly_strategy(::SubAssembledRows,rows,cols)
+function local_assembly_strategy(::Assembled,rows,cols)
   DefaultAssemblyStrategy()
 end
 
 # When using this one, make sure that you also loop over ghost cells.
 # This is at your own risk.
-function local_assembly_strategy(::FullyAssembledRows,rows,cols)
+function local_assembly_strategy(::LocallyAssembled,rows,cols)
   rows_local_to_ghost = local_to_ghost(rows)
   GenericAssemblyStrategy(
     identity,
     identity,
-    row->rows_local_to_ghost[row]==0,
+    row->iszero(rows_local_to_ghost[row]),
     col->true
   )
 end
@@ -718,7 +686,8 @@ function FESpaces.SparseMatrixAssembler(
   local_vec_type,
   rows::PRange,
   cols::PRange,
-  par_strategy=SubAssembledRows()
+  par_strategy=Assembled();
+  reuse_caches=false
 )
   assems = map(partition(rows),partition(cols)) do rows,cols
     local_strategy = local_assembly_strategy(par_strategy,rows,cols)
@@ -732,7 +701,12 @@ function FESpaces.SparseMatrixAssembler(
   end
   mat_builder = PSparseMatrixBuilderCOO(local_mat_type,par_strategy)
   vec_builder = PVectorBuilder(local_vec_type,par_strategy)
-  return DistributedSparseMatrixAssembler(par_strategy,assems,mat_builder,vec_builder,rows,cols)
+  if reuse_caches
+    caches = Dict{UInt64,Any}()
+  else
+    caches = nothing
+  end
+  return DistributedSparseMatrixAssembler(par_strategy,assems,mat_builder,vec_builder,rows,cols,caches)
 end
 
 function FESpaces.SparseMatrixAssembler(
@@ -740,22 +714,24 @@ function FESpaces.SparseMatrixAssembler(
   local_vec_type,
   trial::DistributedFESpace,
   test::DistributedFESpace,
-  par_strategy=SubAssembledRows()
+  par_strategy::FESpaces.AssemblyStrategy=Assembled();
+  kwargs...
 )
   rows = get_free_dof_ids(test)
   cols = get_free_dof_ids(trial)
-  SparseMatrixAssembler(local_mat_type,local_vec_type,rows,cols,par_strategy)
+  SparseMatrixAssembler(local_mat_type,local_vec_type,rows,cols,par_strategy;kwargs...)
 end
 
 function FESpaces.SparseMatrixAssembler(
   trial::DistributedFESpace,
   test::DistributedFESpace,
-  par_strategy=SubAssembledRows()
+  par_strategy::FESpaces.AssemblyStrategy=Assembled();
+  kwargs...
 )
   Tv = PartitionedArrays.getany(map(get_vector_type,local_views(trial)))
   T  = eltype(Tv)
   Tm = SparseMatrixCSC{T,Int}
-  SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy)
+  SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy;kwargs...)
 end
 
 # ZeroMean FESpace
