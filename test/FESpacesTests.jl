@@ -71,8 +71,8 @@ function assemble_tests(das,dΩ,dΩass,U,V)
 end
 
 function main(distribute,parts)
-  main(distribute,parts,SubAssembledRows())
-  main(distribute,parts,FullyAssembledRows())
+  main(distribute,parts,Assembled())
+  main(distribute,parts,LocallyAssembled())
 end
 
 function main(distribute,parts,das)

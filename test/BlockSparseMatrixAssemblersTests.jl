@@ -52,7 +52,7 @@ function _main(n_spaces,mfs,weakform,U,V)
   matdata = collect_cell_matrix(X,Y,biform(u,v))
   vecdata = collect_cell_vector(Y,liform(v))  
 
-  assem = SparseMatrixAssembler(X,Y,FullyAssembledRows())
+  assem = SparseMatrixAssembler(X,Y,LocallyAssembled())
   A1 = assemble_matrix(assem,matdata)
   b1 = assemble_vector(assem,vecdata)
   A2,b2 = assemble_matrix_and_vector(assem,data);
@@ -68,7 +68,7 @@ function _main(n_spaces,mfs,weakform,U,V)
   bmatdata = collect_cell_matrix(Xb,Yb,biform(ub,vb))
   bvecdata = collect_cell_vector(Yb,liform(vb))
 
-  assem_blocks = SparseMatrixAssembler(Xb,Yb,FullyAssembledRows())
+  assem_blocks = SparseMatrixAssembler(Xb,Yb,LocallyAssembled())
   A1_blocks = assemble_matrix(assem_blocks,bmatdata);
   b1_blocks = assemble_vector(assem_blocks,bvecdata);
   @test is_same_vector(b1_blocks,b1,Yb,Y)

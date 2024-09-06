@@ -453,7 +453,7 @@ function FESpaces.SparseMatrixAssembler(
   local_vec_type,
   trial::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}},
   test::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}},
-  par_strategy=SubAssembledRows()) where {NB,SB,P}
+  par_strategy=Assembled()) where {NB,SB,P}
 
   block_idx  = CartesianIndices((NB,NB))
   block_rows = blocks(test.gids)

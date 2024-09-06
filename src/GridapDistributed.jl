@@ -42,11 +42,14 @@ export with_ghost, no_ghost
 
 export redistribute
 
-include("DistributedUtils.jl")
+include("GridapExtras.jl")
+include("PArraysExtras.jl")
 
 include("BlockPartitionedArrays.jl")
 
 include("Algebra.jl")
+
+include("Assembly.jl")
 
 include("Geometry.jl")
 
