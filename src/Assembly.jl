@@ -84,6 +84,20 @@ local_views(a::DistributedAllocation) = a.allocs
 const PVectorAllocation{S,T} = DistributedAllocation{S,T,1}
 const PSparseMatrixAllocation{S,T} = DistributedAllocation{S,T,2}
 
+function collect_touched_ids(a::PVectorAllocation{<:TrackedArrayAllocation})
+  map(local_views(a),partition(axes(a,1))) do a, ids
+    rows = remove_ghost(unpermute(ids))
+
+    ghost_lids = ghost_to_local(ids)
+    ghost_owners = ghost_to_owner(ids)
+    touched_ghost_lids = filter(lid -> a.touched[lid],ghost_lids)
+    touched_ghost_owners = collect(ghost_owners[touched_ghost_lids])
+    touched_ghost_gids = to_global!(touched_ghost_lids,ids)
+    ghost = GhostIndices(n_global,touched_ghost_gids,touched_ghost_owners)
+    return replace_ghost(rows,ghost)
+  end
+end
+
 # PSparseMatrix assembly chain
 #
 #   1 - nz_counter(PSparseMatrixBuilder) -> PSparseMatrixCounter
@@ -102,6 +116,21 @@ end
 function Algebra.nz_allocation(a::PSparseMatrixCounter)
   allocs = map(nz_allocation,local_views(a))
   DistributedAllocation(allocs,a.axes,a.strategy)
+end
+
+function Algebra.create_from_nz(a::PSparseMatrix)
+  assemble!(a) |> wait
+  return a
+end
+
+function Algebra.create_from_nz(a::PSparseMatrixAllocation{<:LocallyAssembled})
+  A, = create_from_nz_locally_assembled(a)
+  return A
+end
+
+function Algebra.create_from_nz(a::PSparseMatrixAllocation{<:Assembled})
+  A, = create_from_nz_assembled(a,nothing)
+  return A
 end
 
 # PVector assembly chain:
@@ -142,13 +171,16 @@ function Algebra.create_from_nz(a::PVectorAllocation{<:Assembled,<:AbstractVecto
 end
 
 function Algebra.create_from_nz(a::PVectorAllocation{<:LocallyAssembled,<:AbstractVector})
-  rows = _setup_prange_without_ghosts(axes(a,1))
-  _rhs_callback(a,rows)
+  rows = remove_ghost(unpermute(axes(a,1)))
+  values = local_views(a)
+  b = rhs_callback(values,rows)
+  return b
 end
 
 function Algebra.create_from_nz(a::PVectorAllocation{S,<:TrackedArrayAllocation}) where S
-  rows = _setup_prange_from_pvector_allocation(a)
-  b    = _rhs_callback(a,rows)
+  rows = collect_touched_ids(a)
+  values = map(ai -> ai.values, local_views(a))
+  b    = rhs_callback(values,rows)
   t2   = assemble!(b)
   if t2 !== nothing
     wait(t2)
@@ -162,7 +194,7 @@ end
 # overlap communications the assembly of the matrix and the vector.
 # Not only it is faster, but also necessary to ensure identical ghost indices 
 # in both the matrix and vector rows.
-# This is done by using the following specializations chain:
+# This is done by using the following specializations:
 
 function Arrays.nz_allocation(
   a::PSparseMatrixCounter{<:Assembled},
@@ -178,9 +210,12 @@ function Algebra.create_from_nz(
   b::PVectorAllocation{<:LocallyAssembled,<:AbstractVector}
 )
   function callback(rows)
-    _rhs_callback(b,rows)
+    new_indices = partition(rows)
+    values = local_views(b)
+    b_fespace = PVector(values,partition(axes(b,1)))
+    locally_repartition(b_fespace,new_indices)
   end
-  A, B = _fa_create_from_nz_with_callback(callback,a)
+  A, B = create_from_nz_locally_assembled(a,callback)
   return A, B
 end
 
@@ -189,11 +224,95 @@ function Algebra.create_from_nz(
   b::PVectorAllocation{<:Assembled,<:TrackedArrayAllocation}
 )
   function callback(rows)
-    _rhs_callback(b,rows)
+    new_indices = collect_touched_ids(b)
+    values = map(ai -> ai.values, local_views(b))
+    b_fespace = PVector(values,partition(axes(b,1)))
+    locally_repartition(b_fespace,new_indices)
   end
   function async_callback(b)
     assemble!(b)
   end
-  A, B = _sa_create_from_nz_with_callback(callback,async_callback,a,b)
+  A, B = create_from_nz_assembled(a,callback,async_callback)
   return A, B
+end
+
+# Assembly methods
+
+function create_from_nz_locally_assembled(
+  a,
+  callback::Function = rows -> nothing
+)
+  # Recover some data
+  I,J,V = get_allocations(a)
+  test_gids, trial_gids = axes(a)
+
+  rows = remove_ghost(unpermute(test_gids))
+  b = callback(rows)
+
+  # convert I and J to global dof ids
+  to_global_indices!(I,test_gids;ax=:rows)
+  to_global_indices!(J,trial_gids;ax=:cols)
+
+  # Create the range for cols
+  cols = _setup_prange(trial_gids,J;ax=:cols)
+
+  # Convert again I,J to local numeration
+  to_local_indices!(I,rows;ax=:rows)
+  to_local_indices!(J,cols;ax=:cols)
+
+  A = _setup_matrix(I,J,V,rows,cols)
+  return A, b
+end
+
+function create_from_nz_assembled(
+  a, 
+  callback::Function = rows -> nothing,
+  async_callback::Function = b -> nothing
+)
+  # Recover some data
+  I,J,V = get_allocations(a)
+  test_gids = get_test_gids(a)
+  trial_gids = get_trial_gids(a)
+
+  # convert I and J to global dof ids
+  to_global_indices!(I,test_gids;ax=:rows)
+  to_global_indices!(J,trial_gids;ax=:cols)
+
+  # Create the Prange for the rows
+  rows = _setup_prange(test_gids,I;ax=:rows)
+
+  # Move (I,J,V) triplets to the owner process of each row I.
+  # The triplets are accompanyed which Jo which is the process column owner
+  Jo = get_gid_owners(J,trial_gids;ax=:cols)
+  t  = _assemble_coo!(I,J,V,rows;owners=Jo)
+
+  # Here we can overlap computations
+  # This is a good place to overlap since
+  # sending the matrix rows is a lot of data
+  if !isa(b,Nothing)
+    bprange=_setup_prange_from_pvector_allocation(b)
+    b = callback(bprange)
+  end
+
+  # Wait the transfer to finish
+  wait(t)
+
+  # Create the Prange for the cols
+  cols = _setup_prange(trial_gids,J;ax=:cols,owners=Jo)
+
+  # Overlap rhs communications with CSC compression
+  t2 = async_callback(b)
+
+  # Convert again I,J to local numeration
+  to_local_indices!(I,rows;ax=:rows)
+  to_local_indices!(J,cols;ax=:cols)
+
+  A = _setup_matrix(a,I,J,V,rows,cols)
+
+  # Wait the transfer to finish
+  if !isa(t2,Nothing)
+    wait(t2)
+  end
+
+  return A, b
 end

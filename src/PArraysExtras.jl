@@ -45,10 +45,63 @@ function permuted_variable_partition(
   end
 end
 
+"""
+    unpermute(indices::AbstractLocalIndices)
+
+Given local indices, reorders them to (locally) have own indices first, 
+followed by ghost indices.
+"""
+function unpermute(indices::AbstractLocalIndices) 
+  @notimplemented
+end
+
+unpermute(indices::PermutedLocalIndices) = unpermute(indices.indices)
+unpermute(indices::PartitionedArrays.LocalIndicesInBlockPartition) = indices
+unpermute(indices::OwnAndGhostIndices) = indices
+
+function unpermute(indices::LocalIndices)
+  nglobal = global_length(indices)
+  rank = part_id(indices)
+  own = OwnIndices(nglobal,rank,own_to_global(indices))
+  ghost = GhostIndices(nglobal,ghost_to_global(indices),ghost_to_owner(indices))
+  OwnAndGhostIndices(own,ghost,global_to_owner(indices))
+end
+
+"""
+    locally_repartition(v::PVector,new_indices)
+
+Map the values of a PVector to a new partitioning of the indices.
+
+Similar to `PartitionedArrays.repartition`, but without any communications. Instead, 
+it is assumed that the local-to-local mapping can be done locally.
+"""
+function locally_repartition(v::PVector,new_indices)
+  w = similar(v,PRange(new_indices))
+  locally_repartition!(w,v)
+end
+
+function locally_repartition!(w::PVector,v::PVector)
+  # Fill own values
+  map(copy!,own_values(w),own_values(v))
+
+  # Fill ghost values
+  new_indices = partition(axes(w,1))
+  old_indices = partition(axes(v,1))
+  map(partition(w),partition(v),new_indices,old_indices) do w,v,new_ids,old_ids
+    old_gid_to_lid = global_to_local(old_ids)
+    for (lid,gid) in zip(ghost_to_local(new_ids),ghost_to_global(new_ids))
+      old_lid = old_gid_to_lid[gid]
+      w[lid] = v[old_lid]
+    end
+  end
+
+  return w
+end
+
 # Linear algebra
 
 function LinearAlgebra.axpy!(α,x::PVector,y::PVector)
-  @check partition(axes(x,1)) === partition(axes(y,1))
+  @check matching_local_indices(partition(axes(x,1)),partition(axes(y,1)))
   map(partition(x),partition(y)) do x,y
     LinearAlgebra.axpy!(α,x,y)
   end
