@@ -869,3 +869,22 @@ function _compute_new_distributed_fixedval(
   c = reduce(+,c_i,init=zero(eltype(c_i)))
   return c
 end
+
+function FESpaces.ConstantFESpace(model::DistributedDiscreteModel;kwargs...)
+  @warn "ConstantFESpace is NOT scalable in parallel. For testing purposes only."
+  spaces = map(local_views(model)) do model
+    ConstantFESpace(model;kwargs...)
+  end
+
+  # Single dof, owned by processor 1 (ghost for all other processors)
+  cell_gids = get_cell_gids(model)
+  indices = map(partition(cell_gids)) do cell_indices
+    me = part_id(cell_indices)
+    LocalIndices(1,me,Int[1],Int32[1])
+  end
+  gids = PRange(indices)
+
+  trian = DistributedTriangulation(map(get_triangulation,spaces),model)
+  vector_type = _find_vector_type(spaces,gids)
+  return DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
+end
