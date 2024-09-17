@@ -236,7 +236,7 @@ function Algebra.create_from_nz(
   return A, B
 end
 
-# Assembly methods
+# Low-level assembly methods
 
 function create_from_nz_locally_assembled(
   a,
