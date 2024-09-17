@@ -8,8 +8,8 @@ using Test
 using SparseArrays
 
 function main(distribute,parts)
-  main(distribute,parts,FullyAssembledRows(),SparseMatrixCSR{0,Float64,Int})
-  main(distribute,parts,SubAssembledRows(),SparseMatrixCSC{Float64,Int})
+  main(distribute,parts,LocallyAssembled(),SparseMatrixCSR{0,Float64,Int})
+  main(distribute,parts,Assembled(),SparseMatrixCSC{Float64,Int})
 end
 
 function main(distribute,parts,strategy,local_matrix_type)
