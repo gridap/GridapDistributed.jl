@@ -870,6 +870,22 @@ function _compute_new_distributed_fixedval(
   return c
 end
 
+"""
+    ConstantFESpace(
+      model::DistributedDiscreteModel; 
+      constraint_type=:global, 
+      kwargs...
+    )
+
+Distributed equivalent to `ConstantFESpace(model;kwargs...)`.
+
+With `constraint_type=:global`, a single dof is shared by all processors.
+This creates a global constraint, which is NOT scalable in parallel. Use at your own peril. 
+
+With `constraint_type=:local`, a single dof is owned by each processor and shared with no one else.
+This space is locally-constant in each processor, and therefore scalable (but not equivalent
+to its serial counterpart). 
+"""
 function FESpaces.ConstantFESpace(
   model::DistributedDiscreteModel;
   constraint_type=:global,kwargs...
