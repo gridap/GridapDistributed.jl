@@ -1,3 +1,5 @@
+module ConstantFESpacesTests
+
 using Test
 using Gridap
 using GridapDistributed, PartitionedArrays
@@ -33,6 +35,4 @@ function main(distribute,np)
   A2 = assemble_matrix(a,X2,X2)
 end
 
-with_debug() do distribute
-  main(distribute,(2,2))
 end
