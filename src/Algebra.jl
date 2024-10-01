@@ -1213,6 +1213,9 @@ function _setup_prange_with_ghosts(dofs_gids_prange::PRange,gids,owners)
         end
       end
     end
+    perm = sortperm(ghost_to_global)
+    permute!(ghost_to_global,perm)
+    permute!(ghost_to_owner,perm)
     ghost_to_global, ghost_to_owner
   end |> tuple_of_arrays
 
