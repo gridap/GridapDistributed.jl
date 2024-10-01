@@ -482,7 +482,7 @@ end
 
 function Geometry.Triangulation(
   model::DistributedDiscreteModel;kwargs...)
-  D=num_cell_dims(model)
+  D = num_cell_dims(model)
   Triangulation(no_ghost,ReferenceFE{D},model;kwargs...)
 end
 

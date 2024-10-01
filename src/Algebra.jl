@@ -373,7 +373,7 @@ end
 
 function local_views(a::BlockPMatrix,new_rows::BlockPRange,new_cols::BlockPRange)
   vals = map(CartesianIndices(blocksize(a))) do I
-    local_views(blocks(a)[I],blocks(new_rows)[I],blocks(new_cols)[I])
+    local_views(blocks(a)[I],blocks(new_rows)[I[1]],blocks(new_cols)[I[2]])
   end |> to_parray_of_arrays
   return map(mortar,vals)
 end
