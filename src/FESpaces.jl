@@ -870,17 +870,29 @@ function _compute_new_distributed_fixedval(
   return c
 end
 
-function FESpaces.ConstantFESpace(model::DistributedDiscreteModel;kwargs...)
-  @warn "ConstantFESpace is NOT scalable in parallel. For testing purposes only."
+function FESpaces.ConstantFESpace(
+  model::DistributedDiscreteModel;
+  constraint_type=:global,kwargs...
+)
+  @assert constraint_type ∈ [:global,:local]
+  if constraint_type == :global
+    @warn "ConstantFESpace is NOT scalable in parallel. For testing purposes only."
+  end
+
   spaces = map(local_views(model)) do model
     ConstantFESpace(model;kwargs...)
   end
 
   # Single dof, owned by processor 1 (ghost for all other processors)
+  nranks = length(spaces)
   cell_gids = get_cell_gids(model)
   indices = map(partition(cell_gids)) do cell_indices
     me = part_id(cell_indices)
-    LocalIndices(1,me,Int[1],Int32[1])
+    if constraint_type == :global
+      LocalIndices(1,me,Int[1],Int32[1])
+    else
+      LocalIndices(nranks,me,Int[me],Int32[me])
+    end
   end
   gids = PRange(indices)
 
