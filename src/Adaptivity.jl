@@ -3,6 +3,12 @@
 
 const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:AdaptedDiscreteModel{Dc,Dp}}}
 
+struct DistributedAdaptedDiscreteModelCache{A,B,C}
+  model_matedata::A
+  parent_metadata::B
+  parent_gids::C
+end
+
 function DistributedAdaptedDiscreteModel(
   model  :: DistributedDiscreteModel,
   parent :: DistributedDiscreteModel,
@@ -12,7 +18,9 @@ function DistributedAdaptedDiscreteModel(
     AdaptedDiscreteModel(model,parent,glue)
   end
   gids = get_cell_gids(model)
-  metadata = hasproperty(model,:metadata) ? model.metadata : nothing
+  metadata = DistributedAdaptedDiscreteModelCache(
+    model.metadata,parent.metadata,get_cell_gids(parent)
+  )
   return GenericDistributedDiscreteModel(models,gids;metadata)
 end
 
@@ -20,15 +28,16 @@ function Adaptivity.get_model(model::DistributedAdaptedDiscreteModel)
   GenericDistributedDiscreteModel(
     map(get_model,local_views(model)),
     get_cell_gids(model);
-    metadata = hasproperty(model,:metadata) ? model.metadata : nothing
+    metadata = model.metadata.model_metadata
   )
 end
 
 function Adaptivity.get_parent(model::DistributedAdaptedDiscreteModel)
-  msg = " Error: Cannot get global parent model. \n 
-          We do not keep the global ids of the parent model within the children.\n
-          You can extract the local parents with map(get_parent,local_views(model))"
-  @notimplemented msg
+  GenericDistributedDiscreteModel(
+    map(get_parent,local_views(model)),
+    model.metadata.parent_gids;
+    metadata = model.metadata.parent_metadata
+  )
 end
 
 function Adaptivity.get_adaptivity_glue(model::DistributedAdaptedDiscreteModel)
@@ -48,7 +57,7 @@ function Adaptivity.refine(
   fmodel = GenericDistributedDiscreteModel(
     map(get_model,local_views(_fmodel)),
     get_cell_gids(_fmodel);
-    metadata=_fmodel.metadata
+    metadata=_fmodel.metadata.model_metadata
   )
   glues = get_adaptivity_glue(_fmodel)
   return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
@@ -592,7 +601,9 @@ function Adaptivity.refine(
   end
 
   fgids = get_cell_gids(fmodel)
-  metadata = fmodel.metadata
+  metadata = DistributedAdaptedDiscreteModelCache(
+    fmodel.metadata,cmodel.metadata,get_cell_gids(cmodel)
+  )
   return GenericDistributedDiscreteModel(fmodels,fgids;metadata)
 end
 
@@ -909,7 +920,10 @@ function Adaptivity.refine(
 ) where Dc
   fmodels, f_own_to_local = refine_local_models(cmodel,args...;kwargs...)
   fgids = refine_cell_gids(cmodel,fmodels,f_own_to_local)
-  return GenericDistributedDiscreteModel(fmodels,fgids)
+  metadata = DistributedAdaptedDiscreteModelCache(
+    nothing,cmodel.metadata,get_cell_gids(cmodel)
+  )
+  return GenericDistributedDiscreteModel(fmodels,fgids;metadata)
 end
 
 """
