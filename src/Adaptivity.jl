@@ -4,7 +4,7 @@
 const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:AdaptedDiscreteModel{Dc,Dp}}}
 
 struct DistributedAdaptedDiscreteModelCache{A,B,C}
-  model_matedata::A
+  model_metadata::A
   parent_metadata::B
   parent_gids::C
 end
