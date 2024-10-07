@@ -44,6 +44,10 @@ function Adaptivity.get_adaptivity_glue(model::DistributedAdaptedDiscreteModel)
   return map(Adaptivity.get_adaptivity_glue,local_views(model))
 end
 
+function Adaptivity.is_child(m1::DistributedDiscreteModel,m2::DistributedDiscreteModel)
+  reduce(&,map(Adaptivity.is_child,local_views(m1),local_views(m2)))
+end
+
 function Adaptivity.refine(
   cmodel::DistributedAdaptedDiscreteModel{Dc},args...;kwargs...
 ) where Dc
