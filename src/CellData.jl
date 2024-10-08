@@ -362,10 +362,9 @@ struct DistributedInterpolable{Tx,Ty,A} <: Function
   interps::A
   function DistributedInterpolable(interps::AbstractArray{<:Interpolable})
     Tx,Ty = map(interps) do I
-      fi = I.uh
-      trian = get_triangulation(fi)
+      trian = get_triangulation(I.uh)
       x = mean(testitem(get_cell_coordinates(trian)))
-      return typeof(x), return_type(fi,x)
+      return typeof(x), return_type(I,x)
     end |> tuple_of_arrays
     Tx = getany(Tx)
     Ty = getany(Ty)
