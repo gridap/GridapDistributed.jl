@@ -417,7 +417,7 @@ function Arrays.evaluate!(cache,I::DistributedInterpolable{Tx,Ty},x::AbstractVec
       end
       if inside
         ids[k] = i
-        vals[k] = yi
+        vals[k] = copy(yi)
         k += 1
       end
     end
