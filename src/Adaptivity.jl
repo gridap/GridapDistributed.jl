@@ -520,7 +520,7 @@ end
 # Cartesian Model uniform refinement
 
 function Adaptivity.refine(
-  cmodel::DistributedDiscreteModel{Dc},
+  cmodel::DistributedCartesianDiscreteModel{Dc},
   refs::Integer = 2
 ) where Dc
   Adaptivity.refine(cmodel,Tuple(fill(refs,Dc)))
