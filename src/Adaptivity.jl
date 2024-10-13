@@ -996,7 +996,9 @@ function refine_local_models(
 
   # Filter out local models
   filtered_fmodels = map(fmodels,f_own_or_ghost_ids) do fmodel,f_own_or_ghost_ids
-    model = DiscreteModelPortion(get_model(fmodel),f_own_or_ghost_ids).model
+    model = UnstructuredDiscreteModel( # Necessary to keep the same type
+      DiscreteModelPortion(get_model(fmodel),f_own_or_ghost_ids)
+    )
     parent = get_parent(fmodel)
 
     _glue = get_adaptivity_glue(fmodel)
