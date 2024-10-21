@@ -603,15 +603,11 @@ FESpaces.get_vector_builder(a::DistributedSparseMatrixAssembler) = a.vector_buil
 FESpaces.get_assembly_strategy(a::DistributedSparseMatrixAssembler) = a.strategy
 
 function FESpaces.symbolic_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
-  rows = get_rows(a)
-  cols = get_cols(a)
-  map(symbolic_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
+  map(symbolic_loop_matrix!,local_views(A),local_views(a),matdata)
 end
 
 function FESpaces.numeric_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
-  rows = get_rows(a)
-  cols = get_cols(a)
-  map(numeric_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
+  map(numeric_loop_matrix!,local_views(A),local_views(a),matdata)
 end
 
 function FESpaces.symbolic_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
@@ -656,7 +652,7 @@ function FESpaces.assemble_matrix!(mat::PSparseMatrix,a::DistributedSparseMatrix
   create_from_nz!(mat,allocs,cache)
 end
 
-function create_from_nz!(A,a::DistributedAllocationCOO{<:Assembled},cache)
+function create_from_nz!(A,a::DistributedAllocation{<:Assembled},cache)
   _,_,V = get_allocations(a)
   psparse!(A,V,cache) |> wait
   return A
@@ -699,7 +695,7 @@ function FESpaces.SparseMatrixAssembler(
       local_strategy
     )
   end
-  mat_builder = PSparseMatrixBuilderCOO(local_mat_type,par_strategy)
+  mat_builder = PSparseMatrixBuilder(local_mat_type,par_strategy)
   vec_builder = PVectorBuilder(local_vec_type,par_strategy)
   if reuse_caches
     caches = Dict{UInt64,Any}()

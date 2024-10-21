@@ -42,7 +42,7 @@ struct DistributedCounter{S,T,N,A,B} <: GridapType
   function DistributedCounter(
     counters :: AbstractArray{T},
     axes     :: NTuple{N,<:PRange},
-    strategy :: Algebra.AssemblyStrategy
+    strategy :: AssemblyStrategy
   ) where {T,N}
     A, B, S = typeof(counters), typeof(axes), typeof(strategy)
     new{S,T,N,A,B}(counters,axes,strategy)
@@ -52,10 +52,10 @@ end
 Base.axes(a::DistributedCounter) = a.axes
 local_views(a::DistributedCounter) = a.counters
 
-const PVectorCounter{S,T} = DistributedCounter{S,T<:Algebra.ArrayCounter,1}
+const PVectorCounter{S,T,A,B} = DistributedCounter{S,T,1,A,B}
 Algebra.LoopStyle(::Type{<:PVectorCounter}) = DoNotLoop()
 
-const PSparseMatrixCounter{S,T} = DistributedCounter{S,T<:Algebra.CounterCOO,2}
+const PSparseMatrixCounter{S,T,A,B} = DistributedCounter{S,T,2,A,B}
 Algebra.LoopStyle(::Type{<:PSparseMatrixCounter}) = Loop()
 
 """
@@ -71,7 +71,7 @@ struct DistributedAllocation{S,T,N,A,B} <: GridapType
   function DistributedAllocation(
     allocs   :: AbstractArray{T},
     axes     :: NTuple{N,<:PRange},
-    strategy :: Algebra.AssemblyStrategy
+    strategy :: AssemblyStrategy
   ) where {T,N}
     A, B, S = typeof(allocs), typeof(axes), typeof(strategy)
     new{S,T,N,A,B}(allocs,axes,strategy)
@@ -83,6 +83,13 @@ local_views(a::DistributedAllocation) = a.allocs
 
 const PVectorAllocation{S,T} = DistributedAllocation{S,T,1}
 const PSparseMatrixAllocation{S,T} = DistributedAllocation{S,T,2}
+
+function get_allocations(a::PSparseMatrixAllocation{S,<:Algebra.AllocationCOO}) where S
+  I,J,V = map(local_views(a)) do alloc
+    alloc.I, alloc.J, alloc.V
+  end |> tuple_of_arrays
+  return I,J,V
+end
 
 function collect_touched_ids(a::PVectorAllocation{<:TrackedArrayAllocation})
   map(local_views(a),partition(axes(a,1))) do a, ids
@@ -104,13 +111,13 @@ end
 #   2 - nz_allocation(PSparseMatrixCounter) -> PSparseMatrixAllocation
 #   3 - create_from_nz(PSparseMatrixAllocation) -> PSparseMatrix
 
-function Algebra.nz_counter(builder::PSparseMatrixBuilder,axs::NTuple{2,<:PRange})
+function Algebra.nz_counter(builder::PSparseMatrixBuilder{MT},axs::NTuple{2,<:PRange}) where MT
   rows, cols = axs # test ids, trial ids
-  counters = map(partition(rows),partition(cols)) do rows,cols
-    axs = (Base.OneTo(local_length(rows)),Base.OneTo(local_length(cols)))
-    Algebra.CounterCOO{A}(axs)
+  counters = map(partition(rows),partition(cols)) do rows, cols
+    local_axs = (Base.OneTo(local_length(rows)),Base.OneTo(local_length(cols)))
+    Algebra.CounterCOO{MT}(local_axs)
   end
-  DistributedCounter(builder.par_strategy,counters,rows,cols)
+  DistributedCounter(counters,axs,builder.strategy)
 end
 
 function Algebra.nz_allocation(a::PSparseMatrixCounter)
@@ -129,7 +136,9 @@ function Algebra.create_from_nz(a::PSparseMatrixAllocation{<:LocallyAssembled})
 end
 
 function Algebra.create_from_nz(a::PSparseMatrixAllocation{<:Assembled})
-  A, = create_from_nz_assembled(a,nothing)
+  callback(rows) = nothing
+  async_callback(b) = nothing
+  A, = create_from_nz_assembled(a,callback,async_callback)
   return A
 end
 
@@ -180,8 +189,8 @@ end
 function Algebra.create_from_nz(a::PVectorAllocation{S,<:TrackedArrayAllocation}) where S
   rows = collect_touched_ids(a)
   values = map(ai -> ai.values, local_views(a))
-  b    = rhs_callback(values,rows)
-  t2   = assemble!(b)
+  b  = rhs_callback(values,rows)
+  t2 = assemble!(b)
   if t2 !== nothing
     wait(t2)
   end
@@ -271,19 +280,19 @@ function create_from_nz_assembled(
 )
   # Recover some data
   I,J,V = get_allocations(a)
-  test_gids = get_test_gids(a)
-  trial_gids = get_trial_gids(a)
+  test_gids, trial_gids = axes(a)
 
   # convert I and J to global dof ids
   to_global_indices!(I,test_gids;ax=:rows)
   to_global_indices!(J,trial_gids;ax=:cols)
 
   # Create the Prange for the rows
-  rows = _setup_prange(test_gids,I;ax=:rows)
+  rows = unpermute(test_gids)
+  # rows = replace_ghost(unpermute(test_gids),I,find_owner(test_gids,I))
 
   # Move (I,J,V) triplets to the owner process of each row I.
-  # The triplets are accompanyed which Jo which is the process column owner
-  Jo = get_gid_owners(J,trial_gids;ax=:cols)
+  J_owners = find_owner(trial_gids,J)
+  cols = union_ghost(unpermute(trial_gids),J,J_owners)
   t  = _assemble_coo!(I,J,V,rows;owners=Jo)
 
   # Here we can overlap computations

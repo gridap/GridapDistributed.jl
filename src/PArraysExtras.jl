@@ -161,6 +161,36 @@ function to_parray_of_arrays(a::AbstractArray{<:DebugArray})
   end
 end
 
+# To local/to global for blocks 
+
+function to_local_indices!(I,ids::PRange;kwargs...)
+  map(to_local!,I,partition(ids))
+end
+
+function to_global_indices!(I,ids::PRange;kwargs...)
+  map(to_global!,I,partition(ids))
+end
+for f in [:to_local_indices!, :to_global_indices!, :get_gid_owners]
+  @eval begin
+    function $f(I::Vector,ids::AbstractVector{<:PRange};kwargs...)
+      map($f,I,ids)
+    end
+
+    function $f(I::Matrix,ids::AbstractVector{<:PRange};ax=:rows)
+      @check ax ∈ [:rows,:cols]
+      block_ids = CartesianIndices(I)
+      map(block_ids) do id
+        i = id[1]; j = id[2];
+        if ax == :rows
+          $f(I[i,j],ids[i])
+        else
+          $f(I[i,j],ids[j])
+        end
+      end
+    end
+  end
+end
+
 # This type is required because MPIArray from PArrays 
 # cannot be instantiated with a NULL communicator
 struct MPIVoidVector{T} <: AbstractVector{T}
