@@ -63,7 +63,7 @@ function f(model,reffe)
     V = FESpace(model,reffe,conformity=:Hdiv)
     U = TrialFESpace(V)
 
-    das = FullyAssembledRows()
+    das = LocallyAssembled()
     trian = Triangulation(das,model)
     degree = 2
     dΩ = Measure(trian,degree)
