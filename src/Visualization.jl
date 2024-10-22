@@ -154,7 +154,11 @@ function Visualization.write_vtk_file(
     parts,grid,filebase;celldata=celldata,nodaldata=nodaldata,
     compress=compress,append=append,ascii=ascii,vtkversion=vtkversion
   )
-  map(vtk_save,pvtk)
+  map(pvtk) do pvtk
+    if !isnothing(pvtk)
+      vtk_save(pvtk)
+    end
+  end
 end
 
 function Visualization.create_vtk_file(
@@ -164,15 +168,27 @@ function Visualization.create_vtk_file(
   celldata, nodaldata,
   compress=false,append=true,ascii=false,vtkversion=:default
 )
-  nparts = length(parts)
-  map(parts,grid,celldata,nodaldata) do part,g,c,n
-    Visualization.create_pvtk_file(
-      g,filebase;
-      part=part,nparts=nparts,
-      celldata=c,nodaldata=n,
-      compress=compress,append=append,ascii=ascii,vtkversion=vtkversion
-    )
+  nparts, new_parts = filter_empty_parts(parts,grid)
+  map(new_parts,grid,celldata,nodaldata) do part,g,c,n
+    if part > 0
+      Visualization.create_pvtk_file(
+        g,filebase;
+        part=part,nparts=nparts,
+        celldata=c,nodaldata=n,
+        compress=compress,append=append,ascii=ascii,vtkversion=vtkversion
+      )
+    end
   end
+end
+
+function filter_empty_parts(parts,grid)
+  notempty = map(g -> Int(num_cells(g) > 0), grid)
+  new_parts = scan(+,notempty,type=:inclusive,init=0)
+  new_parts = map(new_parts,notempty) do part, e
+    iszero(e) ? -1 : part
+  end
+  nparts = reduce(+,notempty)
+  return nparts, new_parts
 end
 
 const DistributedModelOrTriangulation = Union{DistributedDiscreteModel,DistributedTriangulation}
@@ -181,7 +197,7 @@ function Visualization.writevtk(
   arg::DistributedModelOrTriangulation,args...;
   compress=false,append=true,ascii=false,vtkversion=:default,kwargs...
 )
-  parts=get_parts(arg)
+  parts = get_parts(arg)
   map(visualization_data(arg,args...;kwargs...)) do visdata
     write_vtk_file(
       parts,visdata.grid,visdata.filebase,celldata=visdata.celldata,nodaldata=visdata.nodaldata,
@@ -195,7 +211,7 @@ function Visualization.createvtk(
   compress=false,append=true,ascii=false,vtkversion=:default,kwargs...
 )
   v = visualization_data(arg,args...;kwargs...)
-  parts=get_parts(arg)
+  parts = get_parts(arg)
   @notimplementedif length(v) != 1
   visdata = first(v)
   Visualization.create_vtk_file(

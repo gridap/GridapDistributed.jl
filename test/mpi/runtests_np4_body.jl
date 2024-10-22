@@ -54,5 +54,10 @@ function all_tests(distribute,parts)
   TestApp.BlockSparseMatrixAssemblersTests.main(distribute,parts)
   PArrays.toc!(t,"BlockSparseMatrixAssemblers")
 
+  if prod(parts) == 4
+    TestApp.VisualizationTests.main(distribute,parts)
+    PArrays.toc!(t,"Visualization")
+  end
+
   display(t)
 end
