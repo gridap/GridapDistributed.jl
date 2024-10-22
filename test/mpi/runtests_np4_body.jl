@@ -58,6 +58,11 @@ function all_tests(distribute,parts)
     TestApp.ConstantFESpacesTests.main(distribute,parts)
     PArrays.toc!(t,"ConstantFESpaces")
   end
+  
+  if prod(parts) == 4
+    TestApp.VisualizationTests.main(distribute,parts)
+    PArrays.toc!(t,"Visualization")
+  end
 
   display(t)
 end
