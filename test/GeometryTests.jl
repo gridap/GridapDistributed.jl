@@ -59,9 +59,11 @@ function main(distribute,parts)
 
   Ω = Triangulation(with_ghost,model)
   writevtk(Ω,joinpath(output,"Ω"))
+  @test num_cells(Ω) == num_cells(model)
 
   Ω = Triangulation(no_ghost,model)
   writevtk(Ω,joinpath(output,"Ω"))
+  @test num_cells(Ω) == num_cells(model)
 
   Γ = Boundary(with_ghost,model,tags="boundary")
   writevtk(Γ,joinpath(output,"Γ"))
