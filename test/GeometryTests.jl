@@ -59,15 +59,19 @@ function main(distribute,parts)
 
   Ω = Triangulation(with_ghost,model)
   writevtk(Ω,joinpath(output,"Ω"))
+  @test num_cells(Ω) == num_cells(model)
 
   Ω = Triangulation(no_ghost,model)
   writevtk(Ω,joinpath(output,"Ω"))
+  @test num_cells(Ω) == num_cells(model)
 
   Γ = Boundary(with_ghost,model,tags="boundary")
   writevtk(Γ,joinpath(output,"Γ"))
+  nbfacets = num_cells(Γ)
 
   Γ = Boundary(no_ghost,model,tags="boundary")
   writevtk(Γ,joinpath(output,"Γ"))
+  @test num_cells(Γ) == nbfacets
 
   function is_in(coords)
     R = 1.6
