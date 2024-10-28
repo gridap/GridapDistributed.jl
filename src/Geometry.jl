@@ -474,8 +474,21 @@ function Geometry.get_background_model(a::DistributedTriangulation)
   a.model
 end
 
-function Geometry.num_cells(a::DistributedTriangulation)
-  sum(map(trian->num_cells(trian),local_views(a)))
+function Geometry.num_cells(a::DistributedTriangulation{Df}) where Df
+  gids = get_face_gids(a.model,Df)
+  n_loc_ocells = map(local_views(a),partition(gids)) do a, gids
+    glue = get_glue(a,Val(Df))
+    @assert isa(glue,FaceToFaceGlue)
+    tcell_to_mcell = glue.tface_to_mface
+    if isa(tcell_to_mcell,IdentityVector)
+      own_length(gids)
+    else
+      mcell_to_owned = local_to_own(gids)
+      is_owned(mcell) = !iszero(mcell_to_owned[mcell])
+      sum(is_owned,tcell_to_mcell)
+    end
+  end
+  return sum(n_loc_ocells)
 end
 
 # Triangulation constructors
@@ -670,9 +683,11 @@ function add_ghost_cells(dtrian::DistributedTriangulation)
   add_ghost_cells(dmodel,dtrian)
 end
 
-function _covers_all_faces(dmodel::DistributedDiscreteModel{Dm},
-                           dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
-  covers_all_faces=map(local_views(dmodel),local_views(dtrian)) do model, trian
+function _covers_all_faces(
+  dmodel::DistributedDiscreteModel{Dm},
+  dtrian::DistributedTriangulation{Dt}
+) where {Dm,Dt}
+  covers_all_faces = map(local_views(dmodel),local_views(dtrian)) do model, trian
     glue = get_glue(trian,Val(Dt))
     @assert isa(glue,FaceToFaceGlue)
     isa(glue.tface_to_mface,IdentityVector)
@@ -680,9 +695,11 @@ function _covers_all_faces(dmodel::DistributedDiscreteModel{Dm},
   reduce(&,covers_all_faces,init=true)
 end
 
-function add_ghost_cells(dmodel::DistributedDiscreteModel{Dm},
-                         dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
-  covers_all_faces=_covers_all_faces(dmodel,dtrian)
+function add_ghost_cells(
+  dmodel::DistributedDiscreteModel{Dm},
+  dtrian::DistributedTriangulation{Dt}
+) where {Dm,Dt}
+  covers_all_faces = _covers_all_faces(dmodel,dtrian)
   if (covers_all_faces)
     trians = map(local_views(dmodel)) do model
       Triangulation(ReferenceFE{Dt},model)
@@ -703,7 +720,7 @@ function add_ghost_cells(dmodel::DistributedDiscreteModel{Dm},
     cache=fetch_vector_ghost_values_cache(mcell_intrian,partition(gids))
     fetch_vector_ghost_values!(mcell_intrian,cache) |> wait
 
-    dreffes=map(local_views(dmodel)) do model
+    dreffes = map(local_views(dmodel)) do model
       ReferenceFE{Dt}
     end
     trians = map(Triangulation,dreffes,local_views(dmodel),mcell_intrian)
