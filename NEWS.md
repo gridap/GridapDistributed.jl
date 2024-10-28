@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed bug in `num_cells` in the case where a `DistributedTriangulation` contained ghost cells. Since PR[#160](https://github.com/gridap/GridapDistributed.jl/pull/160).
+
 ## [0.4.4] 2024-08-14
 
 ### Added
