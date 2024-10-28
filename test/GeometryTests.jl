@@ -67,9 +67,11 @@ function main(distribute,parts)
 
   Γ = Boundary(with_ghost,model,tags="boundary")
   writevtk(Γ,joinpath(output,"Γ"))
+  nbfacets = num_cells(Γ)
 
   Γ = Boundary(no_ghost,model,tags="boundary")
   writevtk(Γ,joinpath(output,"Γ"))
+  @test num_cells(Γ) == nbfacets
 
   function is_in(coords)
     R = 1.6
