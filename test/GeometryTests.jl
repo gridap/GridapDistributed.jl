@@ -92,13 +92,20 @@ function main(distribute,parts)
     add_tag!(labels,"fluid",[fluid])
     cell_to_entity
   end
-  cell_gids=get_cell_gids(model)
-  vcache=PartitionedArrays.p_vector_cache(cell_to_entity,partition(cell_gids))
-  assemble!((a,b)->b, cell_to_entity, map(reverse,vcache) ) |> wait # Make tags consistent
+  cell_gids = get_cell_gids(model)
+  consistent!(PVector(cell_to_entity,partition(cell_gids))) |> wait # Make tags consistent
+  #vcache = PartitionedArrays.p_vector_cache(cell_to_entity,partition(cell_gids))
+  #assemble!((a,b)->b, cell_to_entity, map(reverse,vcache) ) |> wait # Make tags consistent
 
   Ωs = Interior(model,tags="solid")
   Ωf = Interior(model,tags="fluid")
   Γfs = Interface(Ωf,Ωs)
+
+  # CompositeTriangulations
+  Γf = Boundary(Ωf)
+  Λf = Skeleton(Ωf)
+  Λs = Skeleton(Ωs)
+  Γs = Boundary(Ωs)
 
 end
 

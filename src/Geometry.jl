@@ -491,9 +491,19 @@ function Geometry.BoundaryTriangulation(
   BoundaryTriangulation(no_ghost,model;kwargs...)
 end
 
+function Geometry.BoundaryTriangulation(
+  trian::DistributedTriangulation;kwargs...)
+  BoundaryTriangulation(no_ghost,trian;kwargs...)
+end
+
 function Geometry.SkeletonTriangulation(
   model::DistributedDiscreteModel;kwargs...)
   SkeletonTriangulation(no_ghost,model;kwargs...)
+end
+
+function Geometry.SkeletonTriangulation(
+  trian::DistributedTriangulation;kwargs...)
+  SkeletonTriangulation(no_ghost,trian;kwargs...)
 end
 
 function Geometry.Triangulation(
@@ -515,11 +525,33 @@ function Geometry.BoundaryTriangulation(
   DistributedTriangulation(trians,model)
 end
 
+function Geometry.BoundaryTriangulation(
+  portion,trian::DistributedTriangulation;kwargs...
+)
+  model  = get_background_model(trian)
+  gids   = get_cell_gids(model)
+  trians = map(local_views(trian),partition(gids)) do trian, gids
+    BoundaryTriangulation(portion,gids,trian;kwargs...)
+  end
+  DistributedTriangulation(trians,model)
+end
+
 function Geometry.SkeletonTriangulation(
   portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
   gids   = get_face_gids(model,Dc)
   trians = map(local_views(model),partition(gids)) do model, gids
     SkeletonTriangulation(portion,gids,model;kwargs...)
+  end
+  DistributedTriangulation(trians,model)
+end
+
+function Geometry.SkeletonTriangulation(
+  portion,trian::DistributedTriangulation;kwargs...
+)
+  model  = get_background_model(trian)
+  gids   = get_cell_gids(model)
+  trians = map(local_views(trian),partition(gids)) do trian, gids
+    SkeletonTriangulation(portion,gids,trian;kwargs...)
   end
   DistributedTriangulation(trians,model)
 end
