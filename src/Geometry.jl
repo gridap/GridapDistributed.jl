@@ -581,8 +581,8 @@ function Geometry.InterfaceTriangulation(
 end
 
 function Geometry.InterfaceTriangulation(a::DistributedTriangulation,b::DistributedTriangulation)
-  trians = map(InterfaceTriangulation,a.trians,b.trians)
   @assert a.model === b.model
+  trians = map(InterfaceTriangulation,a.trians,b.trians)
   DistributedTriangulation(trians,a.model)
 end
 
@@ -642,7 +642,10 @@ function remove_ghost_cells(trian::Triangulation,gids)
   remove_ghost_cells(glue,trian,gids)
 end
 
-function remove_ghost_cells(trian::Union{SkeletonTriangulation,BoundaryTriangulation},gids)
+function remove_ghost_cells(
+  trian::Union{SkeletonTriangulation,BoundaryTriangulation,Geometry.CompositeTriangulation},
+  gids
+)
   model = get_background_model(trian)
   Dm    = num_cell_dims(model)
   glue  = get_glue(trian,Val(Dm))
@@ -650,7 +653,8 @@ function remove_ghost_cells(trian::Union{SkeletonTriangulation,BoundaryTriangula
 end
 
 function remove_ghost_cells(
-  trian::AdaptedTriangulation{Dc,Dp,<:Union{SkeletonTriangulation,BoundaryTriangulation}},gids) where {Dc,Dp}
+  trian::AdaptedTriangulation{Dc,Dp,<:Union{SkeletonTriangulation,BoundaryTriangulation}},gids
+) where {Dc,Dp}
   remove_ghost_cells(trian.trian,gids)
 end
 

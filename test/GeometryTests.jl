@@ -94,8 +94,6 @@ function main(distribute,parts)
   end
   cell_gids = get_cell_gids(model)
   consistent!(PVector(cell_to_entity,partition(cell_gids))) |> wait # Make tags consistent
-  #vcache = PartitionedArrays.p_vector_cache(cell_to_entity,partition(cell_gids))
-  #assemble!((a,b)->b, cell_to_entity, map(reverse,vcache) ) |> wait # Make tags consistent
 
   Ωs = Interior(model,tags="solid")
   Ωf = Interior(model,tags="fluid")
