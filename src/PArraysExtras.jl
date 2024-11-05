@@ -98,6 +98,19 @@ function locally_repartition!(w::PVector,v::PVector)
   return w
 end
 
+# SubSparseMatrix extensions
+
+function SparseArrays.findnz(A::PartitionedArrays.SubSparseMatrix)
+  I,J,V = findnz(A.parent)
+  rowmap, colmap = A.inv_indices
+  for k in eachindex(I)
+    I[k] = rowmap[I[k]]
+    J[k] = colmap[J[k]]
+  end
+  mask = map((i,j) -> (i > 0 && j > 0), I, J)
+  return I[mask], J[mask], V[mask]
+end
+
 # Linear algebra
 
 function LinearAlgebra.axpy!(α,x::PVector,y::PVector)

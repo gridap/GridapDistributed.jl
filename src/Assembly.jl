@@ -50,6 +50,7 @@ struct DistributedCounter{S,T,N,A,B} <: GridapType
 end
 
 Base.axes(a::DistributedCounter) = a.axes
+Base.axes(a::DistributedCounter,d::Integer) = a.axes[d]
 local_views(a::DistributedCounter) = a.counters
 
 const PVectorCounter{S,T,A,B} = DistributedCounter{S,T,1,A,B}
@@ -79,7 +80,17 @@ struct DistributedAllocation{S,T,N,A,B} <: GridapType
 end
 
 Base.axes(a::DistributedAllocation) = a.axes
+Base.axes(a::DistributedAllocation,d::Integer) = a.axes[d]
 local_views(a::DistributedAllocation) = a.allocs
+
+function change_axes(a::DistributedAllocation{S,T,N},axes::NTuple{N,<:PRange}) where {S,T,N}
+  indices = map(partition,axes)
+  local_axes = map(indices...) do indices...
+    map(ids -> Base.OneTo(local_length(ids)), indices)
+  end
+  allocs = map(change_axes,a.allocs,local_axes)
+  DistributedAllocation(allocs,axes,a.strategy)
+end
 
 const PVectorAllocation{S,T} = DistributedAllocation{S,T,1}
 const PSparseMatrixAllocation{S,T} = DistributedAllocation{S,T,2}
@@ -97,9 +108,9 @@ function collect_touched_ids(a::PVectorAllocation{<:TrackedArrayAllocation})
 
     ghost_lids = ghost_to_local(ids)
     ghost_owners = ghost_to_owner(ids)
-    touched_ghost_lids = filter(lid -> a.touched[lid],ghost_lids)
+    touched_ghost_lids = filter(lid -> a.touched[lid], ghost_lids)
     touched_ghost_owners = collect(ghost_owners[touched_ghost_lids])
-    touched_ghost_gids = to_global!(touched_ghost_lids,ids)
+    touched_ghost_gids = to_global!(touched_ghost_lids, ids)
     ghost = GhostIndices(n_global,touched_ghost_gids,touched_ghost_owners)
     return replace_ghost(rows,ghost)
   end
@@ -280,43 +291,38 @@ function create_from_nz_assembled(
 )
   # Recover some data
   I,J,V = get_allocations(a)
-  test_gids, trial_gids = axes(a)
+  test_ids = partition(axes(a,1))
+  trial_ids = partition(axes(a,2))
 
   # convert I and J to global dof ids
-  to_global_indices!(I,test_gids;ax=:rows)
-  to_global_indices!(J,trial_gids;ax=:cols)
-
-  # Create the Prange for the rows
-  rows = unpermute(test_gids)
-  # rows = replace_ghost(unpermute(test_gids),I,find_owner(test_gids,I))
+  map(map_local_to_global!,I,test_ids)
+  map(map_local_to_global!,J,trial_ids)
 
   # Move (I,J,V) triplets to the owner process of each row I.
-  J_owners = find_owner(trial_gids,J)
-  cols = union_ghost(unpermute(trial_gids),J,J_owners)
-  t  = _assemble_coo!(I,J,V,rows;owners=Jo)
+  rows = map(unpermute,test_ids)
+  # rows = replace_ghost(unpermute(test_gids),I,find_owner(test_gids,I))
+  t = PartitionedArrays.assemble_coo!(I,J,V,rows)
 
-  # Here we can overlap computations
-  # This is a good place to overlap since
-  # sending the matrix rows is a lot of data
-  if !isa(b,Nothing)
-    bprange=_setup_prange_from_pvector_allocation(b)
-    b = callback(bprange)
-  end
+  # Overlap CSC communication with rhs assembly
+  b = callback(rows)
 
   # Wait the transfer to finish
   wait(t)
 
   # Create the Prange for the cols
-  cols = _setup_prange(trial_gids,J;ax=:cols,owners=Jo)
+  J_owners = find_owner(trial_ids,J)
+  cols = map(union_ghost,map(unpermute,trial_ids),J,J_owners)
 
   # Overlap rhs communications with CSC compression
   t2 = async_callback(b)
 
   # Convert again I,J to local numeration
-  to_local_indices!(I,rows;ax=:rows)
-  to_local_indices!(J,cols;ax=:cols)
+  map(map_global_to_local!,I,rows)
+  map(map_global_to_local!,J,cols)
 
-  A = _setup_matrix(a,I,J,V,rows,cols)
+  a_sys = change_axes(a,(PRange(rows),PRange(cols)))
+  values = map(create_from_nz,local_views(a_sys))
+  A = PSparseMatrix(values,rows,cols,true)
 
   # Wait the transfer to finish
   if !isa(t2,Nothing)

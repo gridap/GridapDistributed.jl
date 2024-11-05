@@ -53,3 +53,16 @@ end
   end
   nothing
 end
+
+# change_axes
+
+function change_axes(a::Algebra.CounterCOO{T,A}, axes::A) where {T,A}
+  b = Algebra.CounterCOO{T}(axes)
+  b.nnz = a.nnz
+  b
+end
+
+function change_axes(a::Algebra.AllocationCOO{T,A}, axes::A) where {T,A}
+  counter = change_axes(a.counter,axes)
+  Algebra.AllocationCOO(counter,a.I,a.J,a.V)
+end
