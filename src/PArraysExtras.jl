@@ -102,6 +102,10 @@ end
     filter_and_replace_ghost(indices,gids)
 
 Replace ghost ids in `indices` with the ghost ids within `gids`.
+
+NOTE: The issue is that `replace_ghost` does not check if all gids are ghosts or whether 
+they are repeated. It also shifts ownership of the ghosts. Its all quite messy and not what we 
+would need. TODO: Make me better. 
 """
 function filter_and_replace_ghost(indices,gids)
   owners = find_owner(indices,gids)
@@ -113,7 +117,7 @@ function filter_and_replace_ghost(indices,gids)
 end
 
 # Same as PartitionedArrays.filter_ghost, but we do not exclude ghost indices that 
-# belong to `indices`.
+# belong to `indices`. This could eventually be a flag in the original function.
 function _filter_ghost(indices,gids,owners)
   ghosts = Set{Int}()
   part_owner = part_id(indices)

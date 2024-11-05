@@ -270,10 +270,7 @@ function create_from_nz_locally_assembled(
   map(map_local_to_global!,I,test_ids)
   map(map_local_to_global!,J,trial_ids)
 
-  # TODO: replace_ghost or union_ghost?
-  # Actually, do we want to change the ghosts at all? We could return the unpermuted trial_ids
-  J_owners = find_owner(trial_ids,J)
-  cols = map(replace_ghost,map(unpermute,trial_ids),J,J_owners)
+  cols = filter_and_replace_ghost(map(unpermute,trial_ids),J)
 
   map(map_global_to_local!,I,rows)
   map(map_global_to_local!,J,cols)
