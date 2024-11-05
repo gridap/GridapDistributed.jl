@@ -111,6 +111,10 @@ function SparseArrays.findnz(A::PartitionedArrays.SubSparseMatrix)
   return I[mask], J[mask], V[mask]
 end
 
+# Async tasks
+
+const empty_async_task = PartitionedArrays.FakeTask(x -> nothing)
+
 # Linear algebra
 
 function LinearAlgebra.axpy!(α,x::PVector,y::PVector)
