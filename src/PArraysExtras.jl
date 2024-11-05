@@ -98,6 +98,57 @@ function locally_repartition!(w::PVector,v::PVector)
   return w
 end
 
+"""
+    filter_and_replace_ghost(indices,gids)
+
+Replace ghost ids in `indices` with the ghost ids within `gids`.
+"""
+function filter_and_replace_ghost(indices,gids)
+  owners = find_owner(indices,gids)
+  new_indices = map(indices,gids,owners) do indices, gids, owners
+    ghost_gids, ghost_owners = _filter_ghost(indices,gids,owners)
+    replace_ghost(indices, ghost_gids, ghost_owners)
+  end
+  return new_indices
+end
+
+# Same as PartitionedArrays.filter_ghost, but we do not exclude ghost indices that 
+# belong to `indices`.
+function _filter_ghost(indices,gids,owners)
+  ghosts = Set{Int}()
+  part_owner = part_id(indices)
+
+  n_ghost = 0
+  for (gid,owner) in zip(gids,owners)
+    if gid < 1
+      continue
+    end
+    if (owner != part_owner) && !(gid in ghosts)
+      n_ghost += 1
+      push!(ghosts,gid)
+    end
+  end
+
+  new_ghost_to_global = zeros(Int,n_ghost)
+  new_ghost_to_owner = zeros(Int32,n_ghost)
+
+  empty!(ghosts)
+  n_ghost = 0
+  for (gid,owner) in zip(gids,owners)
+    if gid < 1
+      continue
+    end
+    if (owner != part_owner) && !(gid in ghosts)
+      n_ghost += 1
+      new_ghost_to_global[n_ghost] = gid
+      new_ghost_to_owner[n_ghost] = owner
+      push!(ghosts,gid)
+    end
+  end
+
+  return new_ghost_to_global, new_ghost_to_owner
+end
+
 # SubSparseMatrix extensions
 
 function SparseArrays.findnz(A::PartitionedArrays.SubSparseMatrix)
@@ -113,7 +164,7 @@ end
 
 # Async tasks
 
-const empty_async_task = PartitionedArrays.FakeTask(x -> nothing)
+const empty_async_task = PartitionedArrays.FakeTask(() -> nothing)
 
 # Linear algebra
 

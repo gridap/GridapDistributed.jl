@@ -147,9 +147,7 @@ function Algebra.create_from_nz(a::PSparseMatrixAllocation{<:LocallyAssembled})
 end
 
 function Algebra.create_from_nz(a::PSparseMatrixAllocation{<:Assembled})
-  callback(rows) = nothing
-  async_callback(b) = nothing
-  A, = create_from_nz_assembled(a,callback,async_callback)
+  A, = create_from_nz_assembled(a)
   return A
 end
 
@@ -302,15 +300,14 @@ function create_from_nz_assembled(
   map(map_local_to_global!,J,trial_ids)
 
   # Overlapped COO communication and vector assembly
-  rows = map(unpermute,test_ids)
+  rows = filter_and_replace_ghost(map(unpermute,test_ids),I)
   t = PartitionedArrays.assemble_coo!(I,J,V,rows)
   b = callback(rows)
   wait(t)
 
   # Overlap rhs communications with CSC compression
   t2 = async_callback(b)
-  J_owners = find_owner(trial_ids,J)
-  cols = map(replace_ghost,map(unpermute,trial_ids),J,J_owners) # TODO: replace_ghost or union_ghost?
+  cols = filter_and_replace_ghost(map(unpermute,trial_ids),J)
 
   map(map_global_to_local!,I,rows)
   map(map_global_to_local!,J,cols)

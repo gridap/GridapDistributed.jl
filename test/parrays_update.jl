@@ -37,7 +37,8 @@ assem = SparseMatrixAssembler(dist_V,dist_V)
 dist_A1 = assemble_matrix(dist_a1,dist_V,dist_V)
 all(centralize(dist_A1) - serial_A1 .< 1e-10)
 
-centralize(dist_A1)
+
+############################################################################################
 
 function PartitionedArrays.precompute_nzindex(A,I,J;skip=false)
   K = zeros(Int32,length(I))
@@ -48,20 +49,6 @@ function PartitionedArrays.precompute_nzindex(A,I,J;skip=false)
       K[p] = nzindex(A,i,j)
   end
   K
-end
-
-Aoo = own_own_values(dist_A1).items[1]
-
-using SparseArrays
-function SparseArrays.findnz(A::PartitionedArrays.SubSparseMatrix)
-  I,J,V = findnz(A.parent)
-  rowmap, colmap = A.inv_indices
-  for k in eachindex(I)
-    I[k] = rowmap[I[k]]
-    J[k] = colmap[J[k]]
-  end
-  mask = map((i,j) -> (i > 0 && j > 0), I, J)
-  return I[mask], J[mask], V[mask]
 end
 
 ############################################################################################
