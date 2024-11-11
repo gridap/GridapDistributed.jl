@@ -271,8 +271,8 @@ function PartitionedArrays.partition(a::BlockPArray)
   return map(mortar,vals)
 end
 
-function PartitionedArrays.to_trivial_partition(a::BlockPArray)
-  vals = map(PartitionedArrays.to_trivial_partition,blocks(a))
+function PartitionedArrays.centralize(a::BlockPArray)
+  vals = map(PartitionedArrays.centralize,blocks(a))
   return mortar(vals)
 end
 

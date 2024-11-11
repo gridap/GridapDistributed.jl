@@ -595,7 +595,7 @@ function filter_cells_when_needed(
 end
 
 function filter_cells_when_needed(
-  portion::FullyAssembledRows,
+  portion::LocallyAssembled,
   cell_gids::AbstractLocalIndices,
   trian::Triangulation)
 
@@ -603,7 +603,7 @@ function filter_cells_when_needed(
 end
 
 function filter_cells_when_needed(
-  portion::SubAssembledRows,
+  portion::Assembled,
   cell_gids::AbstractLocalIndices,
   trian::Triangulation)
 
