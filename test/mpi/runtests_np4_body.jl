@@ -59,5 +59,8 @@ function all_tests(distribute,parts)
     PArrays.toc!(t,"Visualization")
   end
 
+  TestApp.AutodiffTests.main(distribute,parts)
+  PArrays.toc!(t,"Autodiff")
+
   display(t)
 end
