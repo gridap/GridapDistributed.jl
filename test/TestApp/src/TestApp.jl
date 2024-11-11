@@ -18,4 +18,5 @@ module TestApp
   include("../../AdaptivityMultiFieldTests.jl")
   include("../../BlockSparseMatrixAssemblersTests.jl")
   include("../../VisualizationTests.jl")
+  include("../../AutodiffTests.jl")
 end

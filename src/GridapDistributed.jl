@@ -24,6 +24,7 @@ using WriteVTK
 using FillArrays
 using BlockArrays
 using LinearAlgebra
+using ForwardDiff
 
 import Gridap.TensorValues: inner, outer, double_contraction, symmetric_part
 import LinearAlgebra: det, tr, cross, dot, ⋅, diag
@@ -61,5 +62,7 @@ include("MultiField.jl")
 include("ODEs.jl")
 
 include("Adaptivity.jl")
+
+include("Autodiff.jl")
 
 end # module
