@@ -1,4 +1,4 @@
-module AtodiffTests
+module AutodiffTests
 
 using Test
 using Gridap, Gridap.Algebra
