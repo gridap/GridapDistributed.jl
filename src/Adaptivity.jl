@@ -145,11 +145,7 @@ end
 function redistribute(model::DistributedAdaptedDiscreteModel,args...;kwargs...)
   # Local cmodels are AdaptedDiscreteModels. To correctly dispatch, we need to
   # extract the underlying models, then redistribute.
-  _model = GenericDistributedDiscreteModel(
-    map(get_model,local_views(model)),
-    get_cell_gids(model);
-    metadata=model.metadata
-  )
+  _model = get_model(model)
   return redistribute(_model,args...;kwargs...)
 end
 
