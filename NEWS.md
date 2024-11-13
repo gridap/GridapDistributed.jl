@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added support for automatic differentiation with ForwardDiff. Since PR[#167](https://github.com/gridap/GridapDistributed.jl/pull/167).
+- Added ConstantFESpaces. Since PR[#166](https://github.com/gridap/GridapDistributed.jl/pull/166).
 
 ## [0.4.5] 2024-10-08
 
