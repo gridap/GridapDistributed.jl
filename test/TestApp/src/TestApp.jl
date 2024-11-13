@@ -19,4 +19,5 @@ module TestApp
   include("../../BlockSparseMatrixAssemblersTests.jl")
   include("../../VisualizationTests.jl")
   include("../../AutodiffTests.jl")
+  include("../../ConstantFESpacesTests.jl")
 end

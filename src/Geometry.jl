@@ -475,7 +475,8 @@ function Geometry.get_background_model(a::DistributedTriangulation)
 end
 
 function Geometry.num_cells(a::DistributedTriangulation{Df}) where Df
-  gids = get_face_gids(a.model,Df)
+  model = get_background_model(a)
+  gids = get_face_gids(model,Df)
   n_loc_ocells = map(local_views(a),partition(gids)) do a, gids
     glue = get_glue(a,Val(Df))
     @assert isa(glue,FaceToFaceGlue)
@@ -538,17 +539,6 @@ function Geometry.BoundaryTriangulation(
   DistributedTriangulation(trians,model)
 end
 
-function Geometry.BoundaryTriangulation(
-  portion,trian::DistributedTriangulation;kwargs...
-)
-  model  = get_background_model(trian)
-  gids   = get_cell_gids(model)
-  trians = map(local_views(trian),partition(gids)) do trian, gids
-    BoundaryTriangulation(portion,gids,trian;kwargs...)
-  end
-  DistributedTriangulation(trians,model)
-end
-
 function Geometry.SkeletonTriangulation(
   portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
   gids   = get_face_gids(model,Dc)
@@ -558,12 +548,28 @@ function Geometry.SkeletonTriangulation(
   DistributedTriangulation(trians,model)
 end
 
+# NOTE: The following constructors require adding back the ghost cells: 
+# Potentially, the input `trian` has had some/all of its ghost cells removed. If we do not
+# add them back, some skeleton facets might look like boundary facets to the local constructors...
+function Geometry.BoundaryTriangulation(
+  portion,trian::DistributedTriangulation;kwargs...
+)
+  model = get_background_model(trian)
+  gids = get_cell_gids(model)
+  ghosted_trian = add_ghost_cells(trian)
+  trians = map(local_views(ghosted_trian),partition(gids)) do trian, gids
+    BoundaryTriangulation(portion,gids,trian;kwargs...)
+  end
+  DistributedTriangulation(trians,model)
+end
+
 function Geometry.SkeletonTriangulation(
   portion,trian::DistributedTriangulation;kwargs...
 )
-  model  = get_background_model(trian)
-  gids   = get_cell_gids(model)
-  trians = map(local_views(trian),partition(gids)) do trian, gids
+  model = get_background_model(trian)
+  gids = get_cell_gids(model)
+  ghosted_trian = add_ghost_cells(trian)
+  trians = map(local_views(ghosted_trian),partition(gids)) do trian, gids
     SkeletonTriangulation(portion,gids,trian;kwargs...)
   end
   DistributedTriangulation(trians,model)
@@ -715,7 +721,7 @@ function _find_owned_skeleton_facets(glue,gids)
 end
 
 function add_ghost_cells(dtrian::DistributedTriangulation)
-  dmodel = dtrian.model
+  dmodel = get_background_model(dtrian)
   add_ghost_cells(dmodel,dtrian)
 end
 
@@ -765,7 +771,7 @@ function add_ghost_cells(
 end
 
 function generate_cell_gids(dtrian::DistributedTriangulation)
-  dmodel = dtrian.model
+  dmodel = get_background_model(dtrian)
   generate_cell_gids(dmodel,dtrian)
 end
 
