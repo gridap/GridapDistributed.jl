@@ -55,6 +55,11 @@ function all_tests(distribute,parts)
   PArrays.toc!(t,"BlockSparseMatrixAssemblers")
 
   if prod(parts) == 4
+    TestApp.ConstantFESpacesTests.main(distribute,parts)
+    PArrays.toc!(t,"ConstantFESpaces")
+  end
+  
+  if prod(parts) == 4
     TestApp.VisualizationTests.main(distribute,parts)
     PArrays.toc!(t,"Visualization")
   end

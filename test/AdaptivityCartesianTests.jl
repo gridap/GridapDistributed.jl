@@ -152,7 +152,7 @@ function main(distribute,ncells,isperiodic)
   fine_adaptivity_glue = get_adaptivity_glue(redist_child_1)
 
   # Redistribute by dispatching on the DistributedCartesianDescriptor
-  pdesc = redist_child_1.metadata
+  pdesc = redist_child_1.metadata.model_metadata
   redist_child_2, redist_glue_child = redistribute(child,pdesc)
 
   # Tests

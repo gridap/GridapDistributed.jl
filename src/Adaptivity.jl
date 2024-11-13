@@ -3,6 +3,12 @@
 
 const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:AdaptedDiscreteModel{Dc,Dp}}}
 
+struct DistributedAdaptedDiscreteModelCache{A,B,C}
+  model_metadata::A
+  parent_metadata::B
+  parent_gids::C
+end
+
 function DistributedAdaptedDiscreteModel(
   model  :: DistributedDiscreteModel,
   parent :: DistributedDiscreteModel,
@@ -12,7 +18,9 @@ function DistributedAdaptedDiscreteModel(
     AdaptedDiscreteModel(model,parent,glue)
   end
   gids = get_cell_gids(model)
-  metadata = hasproperty(model,:metadata) ? model.metadata : nothing
+  metadata = DistributedAdaptedDiscreteModelCache(
+    model.metadata,parent.metadata,get_cell_gids(parent)
+  )
   return GenericDistributedDiscreteModel(models,gids;metadata)
 end
 
@@ -20,19 +28,24 @@ function Adaptivity.get_model(model::DistributedAdaptedDiscreteModel)
   GenericDistributedDiscreteModel(
     map(get_model,local_views(model)),
     get_cell_gids(model);
-    metadata = hasproperty(model,:metadata) ? model.metadata : nothing
+    metadata = model.metadata.model_metadata
   )
 end
 
 function Adaptivity.get_parent(model::DistributedAdaptedDiscreteModel)
-  msg = " Error: Cannot get global parent model. \n 
-          We do not keep the global ids of the parent model within the children.\n
-          You can extract the local parents with map(get_parent,local_views(model))"
-  @notimplemented msg
+  GenericDistributedDiscreteModel(
+    map(get_parent,local_views(model)),
+    model.metadata.parent_gids;
+    metadata = model.metadata.parent_metadata
+  )
 end
 
 function Adaptivity.get_adaptivity_glue(model::DistributedAdaptedDiscreteModel)
   return map(Adaptivity.get_adaptivity_glue,local_views(model))
+end
+
+function Adaptivity.is_child(m1::DistributedDiscreteModel,m2::DistributedDiscreteModel)
+  reduce(&,map(Adaptivity.is_child,local_views(m1),local_views(m2)))
 end
 
 function Adaptivity.refine(
@@ -48,7 +61,7 @@ function Adaptivity.refine(
   fmodel = GenericDistributedDiscreteModel(
     map(get_model,local_views(_fmodel)),
     get_cell_gids(_fmodel);
-    metadata=_fmodel.metadata
+    metadata=_fmodel.metadata.model_metadata
   )
   glues = get_adaptivity_glue(_fmodel)
   return DistributedAdaptedDiscreteModel(fmodel,cmodel,glues)
@@ -132,11 +145,7 @@ end
 function redistribute(model::DistributedAdaptedDiscreteModel,args...;kwargs...)
   # Local cmodels are AdaptedDiscreteModels. To correctly dispatch, we need to
   # extract the underlying models, then redistribute.
-  _model = GenericDistributedDiscreteModel(
-    map(get_model,local_views(model)),
-    get_cell_gids(model);
-    metadata=model.metadata
-  )
+  _model = get_model(model)
   return redistribute(_model,args...;kwargs...)
 end
 
@@ -507,7 +516,7 @@ end
 # Cartesian Model uniform refinement
 
 function Adaptivity.refine(
-  cmodel::DistributedDiscreteModel{Dc},
+  cmodel::DistributedCartesianDiscreteModel{Dc},
   refs::Integer = 2
 ) where Dc
   Adaptivity.refine(cmodel,Tuple(fill(refs,Dc)))
@@ -592,7 +601,9 @@ function Adaptivity.refine(
   end
 
   fgids = get_cell_gids(fmodel)
-  metadata = fmodel.metadata
+  metadata = DistributedAdaptedDiscreteModelCache(
+    fmodel.metadata,cmodel.metadata,get_cell_gids(cmodel)
+  )
   return GenericDistributedDiscreteModel(fmodels,fgids;metadata)
 end
 
@@ -909,7 +920,10 @@ function Adaptivity.refine(
 ) where Dc
   fmodels, f_own_to_local = refine_local_models(cmodel,args...;kwargs...)
   fgids = refine_cell_gids(cmodel,fmodels,f_own_to_local)
-  return GenericDistributedDiscreteModel(fmodels,fgids)
+  metadata = DistributedAdaptedDiscreteModelCache(
+    nothing,cmodel.metadata,get_cell_gids(cmodel)
+  )
+  return GenericDistributedDiscreteModel(fmodels,fgids;metadata)
 end
 
 """
@@ -978,7 +992,9 @@ function refine_local_models(
 
   # Filter out local models
   filtered_fmodels = map(fmodels,f_own_or_ghost_ids) do fmodel,f_own_or_ghost_ids
-    model = DiscreteModelPortion(get_model(fmodel),f_own_or_ghost_ids).model
+    model = UnstructuredDiscreteModel( # Necessary to keep the same type
+      DiscreteModelPortion(get_model(fmodel),f_own_or_ghost_ids)
+    )
     parent = get_parent(fmodel)
 
     _glue = get_adaptivity_glue(fmodel)

@@ -869,3 +869,51 @@ function _compute_new_distributed_fixedval(
   c = reduce(+,c_i,init=zero(eltype(c_i)))
   return c
 end
+
+"""
+    ConstantFESpace(
+      model::DistributedDiscreteModel; 
+      constraint_type=:global, 
+      kwargs...
+    )
+
+Distributed equivalent to `ConstantFESpace(model;kwargs...)`.
+
+With `constraint_type=:global`, a single dof is shared by all processors.
+This creates a global constraint, which is NOT scalable in parallel. Use at your own peril. 
+
+With `constraint_type=:local`, a single dof is owned by each processor and shared with no one else.
+This space is locally-constant in each processor, and therefore scalable (but not equivalent
+to its serial counterpart). 
+"""
+function FESpaces.ConstantFESpace(
+  model::DistributedDiscreteModel;
+  constraint_type=:global,kwargs...
+)
+  @assert constraint_type ∈ [:global,:local]
+  if constraint_type == :global
+    msg = "ConstantFESpace is NOT scalable in parallel. For testing purposes only."
+    @warn msg
+  end
+
+  spaces = map(local_views(model)) do model
+    ConstantFESpace(model;kwargs...)
+  end
+
+  # Single dof, owned by processor 1 (ghost for all other processors)
+  nranks = length(spaces)
+  cell_gids = get_cell_gids(model)
+  indices = map(partition(cell_gids)) do cell_indices
+    me = part_id(cell_indices)
+    if constraint_type == :global
+      LocalIndices(1,me,Int[1],Int32[1])
+    else
+      LocalIndices(nranks,me,Int[me],Int32[me])
+    end
+  end
+  gids = PRange(indices)
+
+  trian = DistributedTriangulation(map(get_triangulation,spaces),model)
+  vector_type = _find_vector_type(spaces,gids)
+  return DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
+end
