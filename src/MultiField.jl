@@ -33,6 +33,7 @@ MultiField.num_fields(m::DistributedMultiFieldCellField) = length(m.field_fe_fun
 Base.iterate(m::DistributedMultiFieldCellField) = iterate(m.field_fe_fun)
 Base.iterate(m::DistributedMultiFieldCellField,state) = iterate(m.field_fe_fun,state)
 Base.getindex(m::DistributedMultiFieldCellField,field_id::Integer) = m.field_fe_fun[field_id]
+Base.length(m::DistributedMultiFieldCellField) = num_fields(m)
 
 function LinearAlgebra.dot(a::DistributedMultiFieldCellField,b::DistributedMultiFieldCellField)
   @check num_fields(a) == num_fields(b)
