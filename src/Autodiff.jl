@@ -223,7 +223,7 @@ end
 function distributed_autodiff_array_jacobian(a, i_to_x, j_to_i::AbstractArray{<:SkeletonPair})
   dummy_tag = ()->()
   i_to_cfg = map(i_to_x) do i_to_x
-    lazy_map(ConfigMap(ForwardDiff.gradient,dummy_tag),i_to_x)
+    lazy_map(ConfigMap(ForwardDiff.jacobian,dummy_tag),i_to_x)
   end
   i_to_xdual = map(i_to_cfg,i_to_x) do i_to_cfg, i_to_x
     lazy_map(DualizeMap(),i_to_cfg,i_to_x)

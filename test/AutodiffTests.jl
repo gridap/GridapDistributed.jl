@@ -4,6 +4,8 @@ using Test
 using Gridap, Gridap.Algebra
 using GridapDistributed
 using PartitionedArrays
+using SparseArrays
+using ForwardDiff
 
 function main_sf(distribute,parts)
   ranks = distribute(LinearIndices((prod(parts),)))
@@ -40,6 +42,16 @@ function main_sf(distribute,parts)
   b = assemble_vector(dg,U)
   b_AD = assemble_vector(gradient(g,uh),U)
   @test b ≈ b_AD
+
+  # Skeleton AD
+  # I would like to compare the results, but we cannot be using FD in parallel... 
+  Λ = SkeletonTriangulation(model)
+  dΛ = Measure(Λ,2*k)
+  g_Λ(v) = ∫(mean(v))*dΛ
+  r_Λ(u,v) = ∫(mean(u)*mean(v))*dΛ
+
+  b_Λ_AD = assemble_vector(gradient(g_Λ,uh),U)
+  A_Λ_AD = jacobian(FEOperator(r_Λ,U,V),uh)
 end
 
 function main_mf(distribute,parts)
