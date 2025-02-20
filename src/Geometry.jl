@@ -486,7 +486,7 @@ function Geometry.num_cells(a::DistributedTriangulation{Df}) where Df
     else
       mcell_to_owned = local_to_own(gids)
       is_owned(mcell) = !iszero(mcell_to_owned[mcell])
-      sum(is_owned,tcell_to_mcell)
+      sum(is_owned,tcell_to_mcell;init=0)
     end
   end
   return sum(n_loc_ocells)
