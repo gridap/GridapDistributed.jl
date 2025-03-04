@@ -57,10 +57,6 @@ function FESpaces._hessian(f,uh,fuh::DistributedDomainContribution)
   DistributedDomainContribution(local_terms)
 end
 
-# There are 4 = 2x2 combinations, coming from:
-#   - Creation of the serial CellFields are different for Triangulation and SkeletonTriangulation
-#   - Creation of the distributed CellFields are different for DistributedCellField and DistributedMultiFieldCellField
-# The internal functions take care of all 4 combinations
 function FESpaces._change_argument(op,f,local_trians,uh::DistributedADTypes)
   function dist_cf(uh::DistributedCellField,cfs)
     DistributedCellField(cfs,get_triangulation(uh))
