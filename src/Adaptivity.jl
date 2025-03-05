@@ -1155,7 +1155,7 @@ function refine_cell_gids(
   cmodel::DistributedDiscreteModel{Dc},
   fmodels::AbstractArray{<:DiscreteModel{Dc}}
 ) where Dc
-  cgids = get_cell_gids(cmodel)
+  cgids = partition(get_cell_gids(cmodel))
   f_own_to_local = map(cgids,fmodels) do cgids,fmodel
     glue = get_adaptivity_glue(fmodel)
     f2c_map = glue.n2o_faces_map[Dc+1]
