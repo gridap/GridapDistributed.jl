@@ -8,13 +8,12 @@ using Test
 using SparseArrays
 
 function main(distribute,parts)
-  main(distribute,parts,LocallyAssembled(),SparseMatrixCSR{0,Float64,Int})
-  main(distribute,parts,Assembled(),SparseMatrixCSC{Float64,Int})
+  main(distribute,parts,LocallyAssembled(),SparseMatrixCSR{0,Float64,Int},false)
+  main(distribute,parts,Assembled(),SparseMatrixCSC{Float64,Int},true)
 end
 
-function main(distribute,parts,strategy,local_matrix_type)
+function main(distribute,parts,strategy,local_matrix_type,autodiff)
   ranks  = distribute(LinearIndices((prod(parts),)))
-  output = mkpath(joinpath(@__DIR__,"output"))
 
   domain = (0,4,0,4)
   cells = (4,4)
@@ -22,7 +21,7 @@ function main(distribute,parts,strategy,local_matrix_type)
 
   k = 1
   u((x,y)) = (x+y)^k
-  σ(∇u) =(1.0+∇u⋅∇u)*∇u
+  σ(∇u) = (1.0+∇u⋅∇u)*∇u
   dσ(∇du,∇u) = (2*∇u⋅∇du)*∇u + (1.0+∇u⋅∇u)*∇du
   f(x) = -divergence(y->σ(∇(u,y)),x)
 
@@ -35,8 +34,12 @@ function main(distribute,parts,strategy,local_matrix_type)
   V = TestFESpace(model,reffe,dirichlet_tags="boundary")
   U = TrialFESpace(u,V)
 
-  assem=SparseMatrixAssembler(local_matrix_type,Vector{Float64},U,V,strategy)
-  op = FEOperator(r,j,U,V,assem)
+  assem = SparseMatrixAssembler(local_matrix_type,Vector{Float64},U,V,strategy)
+  if !autodiff
+    op = FEOperator(r,j,U,V,assem)
+  else
+    op = FEOperator(r,U,V,assem)
+  end
 
   uh = zero(U)
   b,A = residual_and_jacobian(op,uh)
@@ -59,7 +62,6 @@ function main(distribute,parts,strategy,local_matrix_type)
   dΩo = Measure(Ωo,2*k)
   eh = u - uh
   @test sqrt(sum(∫( abs2(eh) )dΩo)) < 1.0e-9
-
 end
 
 end # module

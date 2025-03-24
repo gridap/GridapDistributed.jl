@@ -73,9 +73,11 @@ The domain is discretized using the parallel Cartesian-like mesh generator built
 
 ## Using parallel solvers
 
-`GridapDistributed.jl` is _not_ a library of parallel linear solvers. The linear solver kernel within `GridapDistributed.jl`, defined with the backslash operator `\`, is just a sparse LU solver applied to the global system gathered on a master task (not scalable, but very useful for testing and debug purposes). 
+`GridapDistributed.jl` is _not_ a library of parallel linear solvers. The linear solver kernel within `GridapDistributed.jl`, defined with the backslash operator `\`, is just a sparse LU solver applied to the global system gathered on a master task (not scalable, but very useful for testing and debug purposes).
 
-We provide the full set of scalable linear and nonlinear solvers in the [PETSc](https://petsc.org/release/) library in [`GridapPETSc.jl`](https://github.com/gridap/GridapPETSc.jl). For an example which combines `GridapDistributed` with `GridapPETSc.jl`, we refer to the following [tutorial](https://gridap.github.io/Tutorials/dev/pages/t016_poisson_distributed/). Additional examples can be found in the `test/` folder of `GridapPETSc`. Other linear solver libraries on top of `GridapDistributed` can be developed in the future. 
+We provide the full set of scalable linear and nonlinear solvers in the [PETSc](https://petsc.org/release/) library in [`GridapPETSc.jl`](https://github.com/gridap/GridapPETSc.jl). For an example which combines `GridapDistributed` with `GridapPETSc.jl`, we refer to the following [tutorial](https://gridap.github.io/Tutorials/dev/pages/t016_poisson_distributed/). Additional examples can be found in the `test/` folder of `GridapPETSc`.
+
+We also provide native Julia parallel solvers and preconditioners in [`GridapSolvers.jl`](https://github.com/gridap/GridapSolvers.jl).
 
 ## Partitioned meshes
 

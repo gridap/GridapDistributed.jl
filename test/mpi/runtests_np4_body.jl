@@ -54,5 +54,18 @@ function all_tests(distribute,parts)
   TestApp.BlockSparseMatrixAssemblersTests.main(distribute,parts)
   PArrays.toc!(t,"BlockSparseMatrixAssemblers")
 
+  if prod(parts) == 4
+    TestApp.ConstantFESpacesTests.main(distribute,parts)
+    PArrays.toc!(t,"ConstantFESpaces")
+  end
+  
+  if prod(parts) == 4
+    TestApp.VisualizationTests.main(distribute,parts)
+    PArrays.toc!(t,"Visualization")
+  end
+
+  TestApp.AutodiffTests.main(distribute,parts)
+  PArrays.toc!(t,"Autodiff")
+
   display(t)
 end
