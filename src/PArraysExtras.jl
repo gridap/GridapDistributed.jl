@@ -153,6 +153,25 @@ function _filter_ghost(indices,gids,owners)
   return new_ghost_to_global, new_ghost_to_owner
 end
 
+# This function computes a mapping among the local identifiers of a and b
+# for which the corresponding global identifiers are both in a and b. 
+# Note that the haskey check is necessary because in the general case 
+# there might be gids in b which are not present in a
+function local_to_local_map(a::AbstractLocalIndices,b::AbstractLocalIndices)
+  a_lid_to_b_lid = fill(zero(Int32),local_length(a))
+
+  b_local_to_global  = local_to_global(b)
+  a_global_to_local  = global_to_local(a)
+  for b_lid in 1:local_length(b)
+    gid = b_local_to_global[b_lid]
+    a_lid = a_global_to_local[gid]
+    if !iszero(a_lid)
+      a_lid_to_b_lid[a_lid] = b_lid
+    end  
+  end
+  a_lid_to_b_lid
+end
+
 # SubSparseMatrix extensions
 
 function SparseArrays.findnz(A::PartitionedArrays.SubSparseMatrix)
@@ -362,4 +381,3 @@ end
 function generate_subparts(parts::DebugArray,new_comm_size)
   DebugArray(LinearIndices((new_comm_size,)))
 end
-

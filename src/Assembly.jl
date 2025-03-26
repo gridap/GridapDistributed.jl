@@ -5,21 +5,34 @@ struct Assembled <: FESpaces.AssemblyStrategy end
 struct SubAssembled <: FESpaces.AssemblyStrategy end
 struct LocallyAssembled <: FESpaces.AssemblyStrategy end
 
+function local_assembly_strategy(::Union{Assembled,SubAssembled},rows,cols)
+  DefaultAssemblyStrategy()
+end
+
+# When LocallyAssembling, make sure that you also loop over ghost cells.
+function local_assembly_strategy(::LocallyAssembled,rows,cols)
+  rows_local_to_ghost = local_to_ghost(rows)
+  GenericAssemblyStrategy(
+    identity,
+    identity,
+    row->iszero(rows_local_to_ghost[row]),
+    col->true
+  )
+end
+
 # PSparseMatrix and PVector builders
 
-struct PSparseMatrixBuilder{T,B}
-  local_matrix_type::Type{T}
+struct DistributedArrayBuilder{T,B}
+  local_array_type::Type{T}
   strategy::B
 end
+
+const PSparseMatrixBuilder{T,B} = DistributedArrayBuilder{T<:AbstractMatrix,B}
+const PVectorBuilder{T,B} = DistributedArrayBuilder{T<:AbstractVector,B}
 
 function Algebra.get_array_type(::PSparseMatrixBuilder{Tv}) where Tv
   T = eltype(Tv)
   return PSparseMatrix{T}
-end
-
-struct PVectorBuilder{T,B}
-  local_vector_type::Type{T}
-  strategy::B
 end
 
 function Algebra.get_array_type(::PVectorBuilder{Tv}) where Tv
@@ -53,6 +66,11 @@ Base.axes(a::DistributedCounter) = a.axes
 Base.axes(a::DistributedCounter,d::Integer) = a.axes[d]
 local_views(a::DistributedCounter) = a.counters
 
+function local_views(a::DistributedCounter,axes::PRange...)
+  @check all(map(PArrays.matching_local_indices,axes,a.axes))
+  return a.counters
+end
+
 const PVectorCounter{S,T,A,B} = DistributedCounter{S,T,1,A,B}
 Algebra.LoopStyle(::Type{<:PVectorCounter}) = DoNotLoop()
 
@@ -82,6 +100,11 @@ end
 Base.axes(a::DistributedAllocation) = a.axes
 Base.axes(a::DistributedAllocation,d::Integer) = a.axes[d]
 local_views(a::DistributedAllocation) = a.allocs
+
+function local_views(a::DistributedAllocation,axes::PRange...)
+  @check all(map(PArrays.matching_local_indices,axes,a.axes))
+  return a.allocs
+end
 
 function change_axes(a::DistributedAllocation{S,T,N},axes::NTuple{N,<:PRange}) where {S,T,N}
   indices = map(partition,axes)
@@ -151,6 +174,11 @@ function Algebra.create_from_nz(a::PSparseMatrixAllocation{<:Assembled})
   return A
 end
 
+function Algebra.create_from_nz(a::PSparseMatrixAllocation{<:SubAssembled})
+  A, = create_from_nz_subassembled(a)
+  return A
+end
+
 # PVector assembly chain:
 #
 #   1 - nz_counter(PVectorBuilder) -> PVectorCounter
@@ -166,7 +194,7 @@ function Algebra.nz_counter(builder::PVectorBuilder{VT},axs::Tuple{<:PRange}) wh
   DistributedCounter(counters,axs,builder.strategy)
 end
 
-function Arrays.nz_allocation(a::PVectorCounter{<:LocallyAssembled})
+function Arrays.nz_allocation(a::PVectorCounter{<:Union{LocallyAssembled,SubAssembled}})
   allocs = map(nz_allocation,local_views(a))
   DistributedAllocation(allocs,a.axes,a.strategy)
 end
@@ -188,14 +216,14 @@ function Algebra.create_from_nz(a::PVectorAllocation{<:Assembled,<:AbstractVecto
   @assert false
 end
 
-function Algebra.create_from_nz(a::PVectorAllocation{<:LocallyAssembled,<:AbstractVector})
+function Algebra.create_from_nz(a::PVectorAllocation{<:Union{LocallyAssembled,SubAssembled}})
   rows = remove_ghost(unpermute(axes(a,1)))
   values = local_views(a)
   b = rhs_callback(values,rows)
   return b
 end
 
-function Algebra.create_from_nz(a::PVectorAllocation{S,<:TrackedArrayAllocation}) where S
+function Algebra.create_from_nz(a::PVectorAllocation{<:Assembled})
   rows = collect_touched_ids(a)
   values = map(ai -> ai.values, local_views(a))
   b  = rhs_callback(values,rows)
@@ -215,23 +243,19 @@ end
 # This is done by using the following specializations:
 
 function Arrays.nz_allocation(
-  a::PSparseMatrixCounter{<:Assembled},
-  b::PVectorCounter{<:Assembled}
+  a::PSparseMatrixCounter, b::PVectorCounter
 )
-  A = nz_allocation(a) # PSparseMatrixAllocation
-  B = nz_allocation(b) # PVectorAllocation{<:Assembled,<:TrackedArrayAllocation}
-  return A, B
+  return nz_allocation(a), nz_allocation(b)
 end
 
 function Algebra.create_from_nz(
   a::PSparseMatrixAllocation{<:LocallyAssembled},
-  b::PVectorAllocation{<:LocallyAssembled,<:AbstractVector}
+  b::PVectorAllocation{<:LocallyAssembled}
 )
   function callback(rows)
-    new_indices = partition(rows)
     values = local_views(b)
     b_fespace = PVector(values,partition(axes(b,1)))
-    locally_repartition(b_fespace,new_indices)
+    locally_repartition(b_fespace,rows)
   end
   A, B = create_from_nz_locally_assembled(a,callback)
   return A, B
@@ -239,7 +263,7 @@ end
 
 function Algebra.create_from_nz(
   a::PSparseMatrixAllocation{<:Assembled},
-  b::PVectorAllocation{<:Assembled,<:TrackedArrayAllocation}
+  b::PVectorAllocation{<:Assembled}
 )
   function callback(rows)
     new_indices = collect_touched_ids(b)
@@ -251,6 +275,19 @@ function Algebra.create_from_nz(
     assemble!(b)
   end
   A, B = create_from_nz_assembled(a,callback,async_callback)
+  return A, B
+end
+
+function Algebra.create_from_nz(
+  a::PSparseMatrixAllocation{<:SubAssembled},
+  b::PVectorAllocation{<:SubAssembled}
+)
+  function callback(rows)
+    @check matching_local_indices(rows,axes(b,1))
+    values = local_views(b)
+    PVector(values,partition(axes(b,1)))
+  end
+  A, B = create_from_nz_subassembled(a,callback)
   return A, B
 end
 
@@ -321,18 +358,111 @@ end
 function create_from_nz_subassembled(
   a,
   callback::Function = rows -> nothing,
-  async_callback::Function = b -> empty_async_task
 )
   rows = partition(axes(a,1))
   cols = partition(axes(a,2))
 
   b = callback(rows)
-  t2 = async_callback(b)
 
   assembled = false
   values = map(create_from_nz,local_views(a))
   A = PSparseMatrix(values,rows,cols,assembled)
 
-  wait(t2)
   return A, b
+end
+
+# DistributedSparseMatrixAssemblers
+
+"""
+"""
+struct DistributedSparseMatrixAssembler{A,B,C,D,E,F} <: SparseMatrixAssembler
+  strategy::A
+  assems::B
+  matrix_builder::C
+  vector_builder::D
+  test_gids::E
+  trial_gids::F
+end
+
+local_views(a::DistributedSparseMatrixAssembler) = a.assems
+
+FESpaces.get_rows(a::DistributedSparseMatrixAssembler) = a.test_gids
+FESpaces.get_cols(a::DistributedSparseMatrixAssembler) = a.trial_gids
+FESpaces.get_matrix_builder(a::DistributedSparseMatrixAssembler) = a.matrix_builder
+FESpaces.get_vector_builder(a::DistributedSparseMatrixAssembler) = a.vector_builder
+FESpaces.get_assembly_strategy(a::DistributedSparseMatrixAssembler) = a.strategy
+
+function FESpaces.SparseMatrixAssembler(
+  local_mat_type,
+  local_vec_type,
+  rows::PRange,
+  cols::PRange,
+  par_strategy=Assembled()
+)
+  assems = map(partition(rows),partition(cols)) do rows,cols
+    FESpaces.GenericSparseMatrixAssembler(
+      SparseMatrixBuilder(local_mat_type), 
+      ArrayBuilder(local_vec_type),
+      Base.OneTo(length(rows)),
+      Base.OneTo(length(cols)),
+      local_assembly_strategy(par_strategy,rows,cols)
+    )
+  end
+  mat_builder = DistributedArrayBuilder(local_mat_type,par_strategy)
+  vec_builder = DistributedArrayBuilder(local_vec_type,par_strategy)
+  return DistributedSparseMatrixAssembler(par_strategy,assems,mat_builder,vec_builder,rows,cols)
+end
+
+function FESpaces.SparseMatrixAssembler(
+  local_mat_type,
+  local_vec_type,
+  trial::DistributedFESpace,
+  test::DistributedFESpace,
+  par_strategy::FESpaces.AssemblyStrategy=Assembled();
+  kwargs...
+)
+  rows = get_free_dof_ids(test)
+  cols = get_free_dof_ids(trial)
+  SparseMatrixAssembler(local_mat_type,local_vec_type,rows,cols,par_strategy;kwargs...)
+end
+
+function FESpaces.SparseMatrixAssembler(
+  trial::DistributedFESpace,
+  test::DistributedFESpace,
+  par_strategy::FESpaces.AssemblyStrategy=Assembled();
+  kwargs...
+)
+  Tv = getany(map(get_vector_type,local_views(trial)))
+  Tm = SparseMatrixCSC{eltype(Tv),Int}
+  SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy;kwargs...)
+end
+
+function FESpaces.symbolic_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
+  rows, cols = get_rows(a), get_cols(a)
+  map(symbolic_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
+end
+
+function FESpaces.numeric_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
+  rows, cols = get_rows(a), get_cols(a)
+  map(numeric_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
+end
+
+function FESpaces.symbolic_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
+  rows = get_rows(a)
+  map(symbolic_loop_vector!,local_views(b,rows),local_views(a),vecdata)
+end
+
+function FESpaces.numeric_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
+  rows = get_rows(a)
+  map(numeric_loop_vector!,local_views(b,rows),local_views(a),vecdata)
+end
+
+function FESpaces.symbolic_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
+  rows, cols = get_rows(a), get_cols(a)
+  map(symbolic_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)  
+end
+
+function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
+  rows, cols = get_rows(a), get_cols(a)
+  map(numeric_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
 end
