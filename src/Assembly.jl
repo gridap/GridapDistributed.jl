@@ -22,16 +22,24 @@ end
 
 # PSparseMatrix and PVector builders
 
-struct DistributedArrayBuilder{T,B}
+struct DistributedArrayBuilder{T,N,B}
   local_array_type::Type{T}
   strategy::B
+  function DistributedArrayBuilder(
+    local_array_type::Type{T},
+    strategy::AssemblyStrategy
+  ) where T
+    N = ndims(T)
+    B = typeof(strategy)
+    new{T,N,B}(local_array_type,strategy)
+  end
 end
 
-const PSparseMatrixBuilder{T,B} = DistributedArrayBuilder{T<:AbstractMatrix,B}
-const PVectorBuilder{T,B} = DistributedArrayBuilder{T<:AbstractVector,B}
+const PVectorBuilder{T,B} = DistributedArrayBuilder{T,1,B}
+const PSparseMatrixBuilder{T,B} = DistributedArrayBuilder{T,2,B}
 
-function Algebra.get_array_type(::PSparseMatrixBuilder{Tv}) where Tv
-  T = eltype(Tv)
+function Algebra.get_array_type(::PSparseMatrixBuilder{Tm}) where Tm
+  T = eltype(Tm)
   return PSparseMatrix{T}
 end
 
@@ -369,100 +377,4 @@ function create_from_nz_subassembled(
   A = PSparseMatrix(values,rows,cols,assembled)
 
   return A, b
-end
-
-# DistributedSparseMatrixAssemblers
-
-"""
-"""
-struct DistributedSparseMatrixAssembler{A,B,C,D,E,F} <: SparseMatrixAssembler
-  strategy::A
-  assems::B
-  matrix_builder::C
-  vector_builder::D
-  test_gids::E
-  trial_gids::F
-end
-
-local_views(a::DistributedSparseMatrixAssembler) = a.assems
-
-FESpaces.get_rows(a::DistributedSparseMatrixAssembler) = a.test_gids
-FESpaces.get_cols(a::DistributedSparseMatrixAssembler) = a.trial_gids
-FESpaces.get_matrix_builder(a::DistributedSparseMatrixAssembler) = a.matrix_builder
-FESpaces.get_vector_builder(a::DistributedSparseMatrixAssembler) = a.vector_builder
-FESpaces.get_assembly_strategy(a::DistributedSparseMatrixAssembler) = a.strategy
-
-function FESpaces.SparseMatrixAssembler(
-  local_mat_type,
-  local_vec_type,
-  rows::PRange,
-  cols::PRange,
-  par_strategy=Assembled()
-)
-  assems = map(partition(rows),partition(cols)) do rows,cols
-    FESpaces.GenericSparseMatrixAssembler(
-      SparseMatrixBuilder(local_mat_type), 
-      ArrayBuilder(local_vec_type),
-      Base.OneTo(length(rows)),
-      Base.OneTo(length(cols)),
-      local_assembly_strategy(par_strategy,rows,cols)
-    )
-  end
-  mat_builder = DistributedArrayBuilder(local_mat_type,par_strategy)
-  vec_builder = DistributedArrayBuilder(local_vec_type,par_strategy)
-  return DistributedSparseMatrixAssembler(par_strategy,assems,mat_builder,vec_builder,rows,cols)
-end
-
-function FESpaces.SparseMatrixAssembler(
-  local_mat_type,
-  local_vec_type,
-  trial::DistributedFESpace,
-  test::DistributedFESpace,
-  par_strategy::FESpaces.AssemblyStrategy=Assembled();
-  kwargs...
-)
-  rows = get_free_dof_ids(test)
-  cols = get_free_dof_ids(trial)
-  SparseMatrixAssembler(local_mat_type,local_vec_type,rows,cols,par_strategy;kwargs...)
-end
-
-function FESpaces.SparseMatrixAssembler(
-  trial::DistributedFESpace,
-  test::DistributedFESpace,
-  par_strategy::FESpaces.AssemblyStrategy=Assembled();
-  kwargs...
-)
-  Tv = getany(map(get_vector_type,local_views(trial)))
-  Tm = SparseMatrixCSC{eltype(Tv),Int}
-  SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy;kwargs...)
-end
-
-function FESpaces.symbolic_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
-  rows, cols = get_rows(a), get_cols(a)
-  map(symbolic_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
-end
-
-function FESpaces.numeric_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
-  rows, cols = get_rows(a), get_cols(a)
-  map(numeric_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
-end
-
-function FESpaces.symbolic_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
-  rows = get_rows(a)
-  map(symbolic_loop_vector!,local_views(b,rows),local_views(a),vecdata)
-end
-
-function FESpaces.numeric_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
-  rows = get_rows(a)
-  map(numeric_loop_vector!,local_views(b,rows),local_views(a),vecdata)
-end
-
-function FESpaces.symbolic_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
-  rows, cols = get_rows(a), get_cols(a)
-  map(symbolic_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)  
-end
-
-function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
-  rows, cols = get_rows(a), get_cols(a)
-  map(numeric_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
 end

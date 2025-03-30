@@ -505,83 +505,6 @@ function _add_distributed_constraint(F::DistributedFESpace,order::Integer,constr
   V
 end
 
-# Assembly
-
-function FESpaces.collect_cell_matrix(
-  trial::DistributedFESpace,
-  test::DistributedFESpace,
-  a::DistributedDomainContribution
-)
-  map(collect_cell_matrix,local_views(trial),local_views(test),local_views(a))
-end
-
-function FESpaces.collect_cell_vector(
-  test::DistributedFESpace, a::DistributedDomainContribution
-)
-  map(collect_cell_vector,local_views(test),local_views(a))
-end
-
-function FESpaces.collect_cell_matrix_and_vector(
-  trial::DistributedFESpace,
-  test::DistributedFESpace,
-  biform::DistributedDomainContribution,
-  liform::DistributedDomainContribution
-)
-  map(collect_cell_matrix_and_vector,
-    local_views(trial),
-    local_views(test),
-    local_views(biform),
-    local_views(liform)
-  )
-end
-
-function FESpaces.collect_cell_matrix_and_vector(
-  trial::DistributedFESpace,
-  test::DistributedFESpace,
-  biform::DistributedDomainContribution,
-  liform::DistributedDomainContribution,
-  uhd
-)
-  map(collect_cell_matrix_and_vector,
-    local_views(trial),
-    local_views(test),
-    local_views(biform),
-    local_views(liform),
-    local_views(uhd)
-  )
-end
-
-function FESpaces.collect_cell_vector(
-  test::DistributedFESpace,l::Number
-)
-  map(local_views(test)) do s
-    collect_cell_vector(s,l)
-  end
-end
-
-function FESpaces.collect_cell_matrix_and_vector(
-  trial::DistributedFESpace,
-  test::DistributedFESpace,
-  mat::DistributedDomainContribution,
-  l::Number
-)
-  map(local_views(trial),local_views(test),local_views(mat)) do u,v,m
-    collect_cell_matrix_and_vector(u,v,m,l)
-  end
-end
-
-function FESpaces.collect_cell_matrix_and_vector(
-  trial::DistributedFESpace,
-  test::DistributedFESpace,
-  mat::DistributedDomainContribution,
-  l::Number,
-  uhd
-)
-  map(local_views(trial),local_views(test),local_views(mat),local_views(uhd)) do u,v,m,f
-    collect_cell_matrix_and_vector(u,v,m,l,f)
-  end
-end
-
 # ZeroMean FESpace
 struct DistributedZeroMeanCache{A,B}
   dvol::A
@@ -740,4 +663,175 @@ function FESpaces.ConstantFESpace(
   trian = DistributedTriangulation(map(get_triangulation,spaces),model)
   vector_type = _find_vector_type(spaces,gids)
   return DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
+end
+
+# Assembly
+
+"""
+"""
+struct DistributedSparseMatrixAssembler{A,B,C,D,E,F} <: SparseMatrixAssembler
+  strategy::A
+  assems::B
+  matrix_builder::C
+  vector_builder::D
+  test_gids::E
+  trial_gids::F
+end
+
+local_views(a::DistributedSparseMatrixAssembler) = a.assems
+
+FESpaces.get_rows(a::DistributedSparseMatrixAssembler) = a.test_gids
+FESpaces.get_cols(a::DistributedSparseMatrixAssembler) = a.trial_gids
+FESpaces.get_matrix_builder(a::DistributedSparseMatrixAssembler) = a.matrix_builder
+FESpaces.get_vector_builder(a::DistributedSparseMatrixAssembler) = a.vector_builder
+FESpaces.get_assembly_strategy(a::DistributedSparseMatrixAssembler) = a.strategy
+
+function FESpaces.SparseMatrixAssembler(
+  local_mat_type,
+  local_vec_type,
+  rows::PRange,
+  cols::PRange,
+  par_strategy=Assembled()
+)
+  assems = map(partition(rows),partition(cols)) do rows,cols
+    FESpaces.GenericSparseMatrixAssembler(
+      SparseMatrixBuilder(local_mat_type), 
+      ArrayBuilder(local_vec_type),
+      Base.OneTo(length(rows)),
+      Base.OneTo(length(cols)),
+      local_assembly_strategy(par_strategy,rows,cols)
+    )
+  end
+  mat_builder = DistributedArrayBuilder(local_mat_type,par_strategy)
+  vec_builder = DistributedArrayBuilder(local_vec_type,par_strategy)
+  return DistributedSparseMatrixAssembler(par_strategy,assems,mat_builder,vec_builder,rows,cols)
+end
+
+function FESpaces.SparseMatrixAssembler(
+  local_mat_type,
+  local_vec_type,
+  trial::DistributedFESpace,
+  test::DistributedFESpace,
+  par_strategy::FESpaces.AssemblyStrategy=Assembled();
+  kwargs...
+)
+  rows = get_free_dof_ids(test)
+  cols = get_free_dof_ids(trial)
+  SparseMatrixAssembler(local_mat_type,local_vec_type,rows,cols,par_strategy;kwargs...)
+end
+
+function FESpaces.SparseMatrixAssembler(
+  trial::DistributedFESpace,
+  test::DistributedFESpace,
+  par_strategy::FESpaces.AssemblyStrategy=Assembled();
+  kwargs...
+)
+  Tv = getany(map(get_vector_type,local_views(trial)))
+  Tm = SparseMatrixCSC{eltype(Tv),Int}
+  SparseMatrixAssembler(Tm,Tv,trial,test,par_strategy;kwargs...)
+end
+
+function FESpaces.symbolic_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
+  rows, cols = get_rows(a), get_cols(a)
+  map(symbolic_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
+end
+
+function FESpaces.numeric_loop_matrix!(A,a::DistributedSparseMatrixAssembler,matdata)
+  rows, cols = get_rows(a), get_cols(a)
+  map(numeric_loop_matrix!,local_views(A,rows,cols),local_views(a),matdata)
+end
+
+function FESpaces.symbolic_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
+  rows = get_rows(a)
+  map(symbolic_loop_vector!,local_views(b,rows),local_views(a),vecdata)
+end
+
+function FESpaces.numeric_loop_vector!(b,a::DistributedSparseMatrixAssembler,vecdata)
+  rows = get_rows(a)
+  map(numeric_loop_vector!,local_views(b,rows),local_views(a),vecdata)
+end
+
+function FESpaces.symbolic_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
+  rows, cols = get_rows(a), get_cols(a)
+  map(symbolic_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)  
+end
+
+function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
+  rows, cols = get_rows(a), get_cols(a)
+  map(numeric_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
+end
+
+function FESpaces.collect_cell_matrix(
+  trial::DistributedFESpace,
+  test::DistributedFESpace,
+  a::DistributedDomainContribution
+)
+  map(collect_cell_matrix,local_views(trial),local_views(test),local_views(a))
+end
+
+function FESpaces.collect_cell_vector(
+  test::DistributedFESpace, a::DistributedDomainContribution
+)
+  map(collect_cell_vector,local_views(test),local_views(a))
+end
+
+function FESpaces.collect_cell_matrix_and_vector(
+  trial::DistributedFESpace,
+  test::DistributedFESpace,
+  biform::DistributedDomainContribution,
+  liform::DistributedDomainContribution
+)
+  map(collect_cell_matrix_and_vector,
+    local_views(trial),
+    local_views(test),
+    local_views(biform),
+    local_views(liform)
+  )
+end
+
+function FESpaces.collect_cell_matrix_and_vector(
+  trial::DistributedFESpace,
+  test::DistributedFESpace,
+  biform::DistributedDomainContribution,
+  liform::DistributedDomainContribution,
+  uhd
+)
+  map(collect_cell_matrix_and_vector,
+    local_views(trial),
+    local_views(test),
+    local_views(biform),
+    local_views(liform),
+    local_views(uhd)
+  )
+end
+
+function FESpaces.collect_cell_vector(
+  test::DistributedFESpace,l::Number
+)
+  map(local_views(test)) do s
+    collect_cell_vector(s,l)
+  end
+end
+
+function FESpaces.collect_cell_matrix_and_vector(
+  trial::DistributedFESpace,
+  test::DistributedFESpace,
+  mat::DistributedDomainContribution,
+  l::Number
+)
+  map(local_views(trial),local_views(test),local_views(mat)) do u,v,m
+    collect_cell_matrix_and_vector(u,v,m,l)
+  end
+end
+
+function FESpaces.collect_cell_matrix_and_vector(
+  trial::DistributedFESpace,
+  test::DistributedFESpace,
+  mat::DistributedDomainContribution,
+  l::Number,
+  uhd
+)
+  map(local_views(trial),local_views(test),local_views(mat),local_views(uhd)) do u,v,m,f
+    collect_cell_matrix_and_vector(u,v,m,l,f)
+  end
 end
