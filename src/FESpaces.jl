@@ -168,8 +168,7 @@ function generate_gids(
       cell_owner = cell_local_to_owner[cell]
       p = cell_to_gdofs.ptrs[cell]-1
       for (i,ldof) in enumerate(ldofs)
-        dof_owner = ldof_to_owner[ldof]
-        if ldof > 0 && (dof_owner == cell_owner)
+        if ldof > 0 && isequal(ldof_to_owner[ldof],cell_owner)
           ldof_to_gdof[ldof] = cell_to_gdofs.data[i+p]
         end
       end

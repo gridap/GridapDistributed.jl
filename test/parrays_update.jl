@@ -62,4 +62,3 @@ assemble_matrix!(dist_a,dist_A_AS,assem,dist_V,dist_V)
 norm(dist_A_AS*x_AS - dist_A_SA*x_SA)
 
 ############################################################################################
-

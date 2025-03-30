@@ -133,18 +133,19 @@ function get_allocations(a::PSparseMatrixAllocation{S,<:Algebra.AllocationCOO}) 
   return I,J,V
 end
 
-function collect_touched_ids(a::PVectorAllocation{<:TrackedArrayAllocation})
-  map(local_views(a),partition(axes(a,1))) do a, ids
+function collect_touched_ids(a::PVectorAllocation{S,<:TrackedArrayAllocation}) where S
+  touched_ids = map(local_views(a),partition(axes(a,1))) do a, ids
+    n_global = global_length(ids)
     rows = remove_ghost(unpermute(ids))
 
     ghost_lids = ghost_to_local(ids)
-    ghost_owners = ghost_to_owner(ids)
-    touched_ghost_lids = filter(lid -> a.touched[lid], ghost_lids)
-    touched_ghost_owners = collect(ghost_owners[touched_ghost_lids])
+    touched_ghost_lids = collect(Int,filter(lid -> a.touched[lid], ghost_lids))
+    touched_ghost_owners = local_to_owner(ids)[touched_ghost_lids]
     touched_ghost_gids = to_global!(touched_ghost_lids, ids)
     ghost = GhostIndices(n_global,touched_ghost_gids,touched_ghost_owners)
-    return replace_ghost(rows,ghost)
+    replace_ghost(rows,ghost)
   end
+  return touched_ids
 end
 
 # PSparseMatrix assembly chain
@@ -193,13 +194,13 @@ end
 #   2 - nz_allocation(PVectorCounter) -> PVectorAllocation
 #   3 - create_from_nz(PVectorAllocation) -> PVector
 
-function Algebra.nz_counter(builder::PVectorBuilder{VT},axs::Tuple{<:PRange}) where VT
+function Algebra.nz_counter(builder::PVectorBuilder{VT},axs::NTuple{1,<:PRange}) where VT
   rows, = axs
   counters = map(partition(rows)) do rows
     axs = (Base.OneTo(local_length(rows)),)
     nz_counter(ArrayBuilder(VT),axs)
   end
-  DistributedCounter(counters,axs,builder.strategy)
+  DistributedCounter(counters,(rows,),builder.strategy)
 end
 
 function Arrays.nz_allocation(a::PVectorCounter{<:Union{LocallyAssembled,SubAssembled}})
@@ -291,7 +292,7 @@ function Algebra.create_from_nz(
   b::PVectorAllocation{<:SubAssembled}
 )
   function callback(rows)
-    @check matching_local_indices(rows,axes(b,1))
+    @check PArrays.matching_local_indices(PRange(rows),axes(b,1))
     values = local_views(b)
     PVector(values,partition(axes(b,1)))
   end
