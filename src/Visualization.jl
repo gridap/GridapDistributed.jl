@@ -222,13 +222,35 @@ end
 
 struct DistributedPvd{T<:AbstractArray}
   pvds::T
+  parts::AbstractArray
+end
+
+function Visualization.createpvd(trian::DistributedTriangulation,parts::AbstractArray,args...;kwargs...)
+  nparts, new_parts = filter_empty_parts(parts,local_views(trian))
+  pvds = map(new_parts) do part
+    if part == 1
+      paraview_collection(args...;kwargs...)
+    end
+  end
+  DistributedPvd(pvds,new_parts)
+end
+
+function Visualization.createpvd(f,trian::DistributedTriangulation,parts::AbstractArray,args...;kwargs...)
+  pvd = createpvd(trian,parts,args...;kwargs...)
+  try
+    f(pvd)
+  finally
+    savepvd(pvd)
+  end
 end
 
 function Visualization.createpvd(parts::AbstractArray,args...;kwargs...)
-  pvds = map_main(parts) do part
-    paraview_collection(args...;kwargs...)
+  pvds = map(parts) do part
+    if part == 1
+      paraview_collection(args...;kwargs...)
+    end
   end
-  DistributedPvd(pvds)
+  DistributedPvd(pvds,parts)
 end
 
 function Visualization.createpvd(f,parts::AbstractArray,args...;kwargs...)
@@ -241,14 +263,22 @@ function Visualization.createpvd(f,parts::AbstractArray,args...;kwargs...)
 end
 
 function Visualization.savepvd(pvd::DistributedPvd)
-  map_main(pvd.pvds) do pvd
-    vtk_save(pvd)
+  map(pvd.pvds, pvd.parts) do pvd, part
+    if part == 1 
+      vtk_save(pvd)
+    end
   end
 end
 
 function Base.setindex!(pvd::DistributedPvd,pvtk::AbstractArray,time::Real)
-  map(vtk_save,pvtk)
-  map_main(pvtk,pvd.pvds) do pvtk,pvd
-    pvd[time] = pvtk
+  map(pvtk) do pvtk
+    if !isnothing(pvtk)
+      vtk_save(pvtk)
+    end  
+  end
+  map(pvtk,pvd.pvds,pvd.parts) do pvtk,pvd,part
+    if part == 1
+      pvd[time] = pvtk
+    end
   end
 end
