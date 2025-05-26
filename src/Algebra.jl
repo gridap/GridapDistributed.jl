@@ -117,6 +117,15 @@ function to_parray_of_arrays(a::AbstractArray{<:DebugArray})
   end
 end
 
+function to_parray_of_arrays(a::AbstractArray{<:Vector})
+  indices = linear_indices(first(a))
+  map(indices) do i
+    map(a) do aj
+      aj[i]
+    end
+  end
+end
+
 # This type is required because MPIArray from PArrays 
 # cannot be instantiated with a NULL communicator
 struct MPIVoidVector{T} <: AbstractVector{T}

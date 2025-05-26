@@ -20,4 +20,5 @@ module TestApp
   include("../../VisualizationTests.jl")
   include("../../AutodiffTests.jl")
   include("../../ConstantFESpacesTests.jl")
+  include("../../MacroDiscreteModelsTests.jl")
 end

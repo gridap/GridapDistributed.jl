@@ -65,4 +65,6 @@ include("Adaptivity.jl")
 
 include("Autodiff.jl")
 
+include("MacroDiscreteModels.jl")
+
 end # module
