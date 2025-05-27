@@ -158,10 +158,20 @@ function FESpaces.assemble_vector(f::Function,a::DistributedPatchAssembler,V::Di
   FESpaces.assemble_vector(a,FESpaces.collect_patch_cell_vector(a,V,f(v)))
 end
 
-function FESpaces.assemble_matrix_and_vector(f::Function,b::Function,a::DistributedPatchAssembler,U::DistributedFESpace,V::DistributedFESpace)
+function FESpaces.assemble_matrix_and_vector(
+  f::Function,b::Function,a::DistributedPatchAssembler,U::DistributedFESpace,V::DistributedFESpace
+)
   v = get_fe_basis(V)
   u = get_trial_fe_basis(U)
   FESpaces.assemble_matrix_and_vector(a,FESpaces.collect_patch_cell_matrix_and_vector(a,U,V,f(u,v),b(v)))
+end
+
+function FESpaces.assemble_matrix_and_vector(
+  f::Function,b::Function,a::DistributedPatchAssembler,U::DistributedFESpace,V::DistributedFESpace,uhd
+)
+  v = get_fe_basis(V)
+  u = get_trial_fe_basis(U)
+  FESpaces.assemble_matrix_and_vector(a,FESpaces.collect_patch_cell_matrix_and_vector(a,U,V,f(u,v),b(v),uhd))
 end
 
 # StaticCondensationOperator
