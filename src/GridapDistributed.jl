@@ -67,4 +67,6 @@ include("Autodiff.jl")
 
 include("MacroDiscreteModels.jl")
 
+include("PatchAssemblers.jl")
+
 end # module
