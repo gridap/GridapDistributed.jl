@@ -82,7 +82,7 @@ end
 # LocalOperators
 
 struct DistributedLocalOperator
-  ops :: AbstractArray{<:FESpaces.LocalOperator}
+  ops :: AbstractArray{<:LocalOperator}
   model :: DistributedDiscreteModel
 end
 
