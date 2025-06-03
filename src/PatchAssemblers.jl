@@ -188,8 +188,8 @@ function MultiField.statically_condensed_assembly(
   FESpaces.assemble_matrix_and_vector(retained_assem,data)
 end
 
-function MultiField.backward_static_condensation(
-  eliminated_assem::DistributedSparseMatrixAssembler,patch_assem,full_matvecs,x_retained
+function MultiField.backward_static_condensation!(
+  x_eliminated,eliminated_assem::DistributedSparseMatrixAssembler,patch_assem,full_matvecs,x_retained
 )
   vecdata = map(local_views(patch_assem),full_matvecs,partition(x_retained)) do patch_assem, full_matvecs, x_retained
     rows_elim = patch_assem.strategy.array.array[1,1].patch_rows
@@ -200,7 +200,7 @@ function MultiField.backward_static_condensation(
 
     return ([patch_x_elim,],[rows_elim,])
   end
-  FESpaces.assemble_vector(eliminated_assem,vecdata)
+  FESpaces.assemble_vector!(x_eliminated,eliminated_assem,vecdata)
 end
 
 # merge_assembly_data
