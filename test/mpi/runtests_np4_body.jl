@@ -68,7 +68,7 @@ function all_tests(distribute,parts)
   PArrays.toc!(t,"Autodiff")
 
   if prod(parts) == 4
-    TestApp.MacroDiscreteModelTests.main(distribute,parts)
+    TestApp.MacroDiscreteModelsTests.main(distribute,parts)
     PArrays.toc!(t,"MacroDiscreteModels")
   end
 
