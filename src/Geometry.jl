@@ -419,7 +419,7 @@ function Geometry.DiscreteModel(
   gids = PRange(partition)
 
   models = map(lcell_to_cell) do lcell_to_cell
-    DiscreteModelPortion(model,lcell_to_cell)
+    Geometry.restrict(model,lcell_to_cell)
   end
 
   GenericDistributedDiscreteModel(models,gids)

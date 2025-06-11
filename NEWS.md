@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.8] 2025-06-11
+
+### Added
+
+- Added support for Gridap v0.19, with distributed counterparts for the new feaures introduced. This includes support for polytopal meshes, polytopal methods and patch assembly. Since PR[#175](https://github.com/gridap/GridapDistributed.jl/pull/175).
+- Added `MacroDiscreteModel`, which gives a global numbering and classification of the interfaces between processors. Since PR[#175](https://github.com/gridap/GridapDistributed.jl/pull/175).
+
 ## [0.4.7] 2025-03-04
 
 ### Added

@@ -446,32 +446,37 @@ end
 
 # BlockSparseMatrixAssemblers
 
-const DistributedBlockSparseMatrixAssembler{NB,NV,SB,P} = 
-  MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P,<:DistributedSparseMatrixAssembler}
+const DistributedBlockSparseMatrixAssembler{R,C} = 
+  MultiField.BlockSparseMatrixAssembler{R,C,<:AbstractMatrix{<:DistributedSparseMatrixAssembler}}
 
 function FESpaces.SparseMatrixAssembler(
   local_mat_type,
   local_vec_type,
-  trial::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}},
-  test::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle{NB,SB,P}},
-  par_strategy=SubAssembledRows()) where {NB,SB,P}
+  trial::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
+  test::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
+  par_strategy=SubAssembledRows()
+)
+  NBr, SBr, Pr = MultiField.get_block_parameters(MultiFieldStyle(test))
+  NBc, SBc, Pc = MultiField.get_block_parameters(MultiFieldStyle(trial))
 
-  block_idx  = CartesianIndices((NB,NB))
   block_rows = blocks(test.gids)
   block_cols = blocks(trial.gids)
-  block_assemblers = map(block_idx) do idx
-    rows = block_rows[idx[1]]; cols = block_cols[idx[2]]
-    return SparseMatrixAssembler(local_mat_type,local_vec_type,rows,cols,par_strategy)
+  block_assemblers = map(CartesianIndices((NBr,NBc))) do idx
+    rows = block_rows[idx[1]]
+    cols = block_cols[idx[2]]
+    SparseMatrixAssembler(
+      local_mat_type,local_vec_type,rows,cols,par_strategy
+    )
   end
 
-  NV = length(P)
-  return MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P}(block_assemblers)
+  R, C = (NBr,SBr,Pr), (NBc,SBc,Pc)
+  return MultiField.BlockSparseMatrixAssembler{R,C}(block_assemblers)
 end
 
-function local_views(a::MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P}) where {NB,NV,SB,P}
+function local_views(a::MultiField.BlockSparseMatrixAssembler{R,C}) where {R,C}
   assems = a.block_assemblers
   array = to_parray_of_arrays(map(local_views,assems))
-  return map(MultiField.BlockSparseMatrixAssembler{NB,NV,SB,P},array)
+  return map(MultiField.BlockSparseMatrixAssembler{R,C},array)
 end
 
 function local_views(a::MatrixBlock,rows,cols)
