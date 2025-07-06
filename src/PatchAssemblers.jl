@@ -122,10 +122,10 @@ end
 local_views(assem::DistributedPatchAssembler) = assem.assems
 
 function FESpaces.PatchAssembler(
-  ptopo::DistributedPatchTopology,trial::DistributedFESpace,test::DistributedFESpace
+  ptopo::DistributedPatchTopology,trial::DistributedFESpace,test::DistributedFESpace;kwargs...
 )
   assems = map(local_views(ptopo),local_views(trial),local_views(test)) do ptopo,trial,test
-    FESpaces.PatchAssembler(ptopo,trial,test)
+    FESpaces.PatchAssembler(ptopo,trial,test;kwargs...)
   end
   DistributedPatchAssembler(assems)
 end
