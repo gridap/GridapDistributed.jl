@@ -243,7 +243,11 @@ const DistributedCartesianDiscreteModel{Dc,Dp,A,B,C} =
 function Geometry.CartesianDiscreteModel(
   ranks::AbstractArray{<:Integer}, # Distributed array with the rank IDs
   parts::NTuple{N,<:Integer},      # Number of ranks (parts) in each direction
-  args...;isperiodic=map(i->false,parts),kwargs...) where N
+  args...;
+  ghost = map(i->true,parts),
+  isperiodic = map(i->false,parts),
+  kwargs...
+) where N
 
   desc = CartesianDescriptor(args...;isperiodic=isperiodic,kwargs...)
   nc = desc.partition
@@ -254,10 +258,10 @@ function Geometry.CartesianDiscreteModel(
   @assert N == length(nc) msg
 
   if any(isperiodic)
+    @notimplementedif ghost != map(i->true,parts) 
     _cartesian_model_with_periodic_bcs(ranks,parts,desc)
   else
-    ghost = map(i->true,parts)
-    upartition = uniform_partition(ranks,parts,nc,ghost,isperiodic)
+    upartition = _uniform_partition(ranks,parts,nc,ghost,isperiodic)
     gcids  = CartesianIndices(nc)
     models = map(ranks,upartition) do rank, upartition
       cmin = gcids[first(upartition)]
