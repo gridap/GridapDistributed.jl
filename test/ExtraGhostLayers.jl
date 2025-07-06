@@ -32,5 +32,7 @@ f = 1.0
 a(u,v) = ∫(∇(u)⋅∇(v))dΩ
 l(v) = ∫(f⋅v)dΩ
 
+op = AffineFEOperator(a,l,V,V)
+
 
 
