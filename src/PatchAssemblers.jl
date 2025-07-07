@@ -19,7 +19,7 @@ function Geometry.PatchTopology(topo::DistributedGridTopology,patch_cells::Abstr
 end
 
 function Geometry.PatchTopology(
-  ::Type{ReferenceFE{Df}},model::DistributedDiscreteModel{Dc};
+  ::Type{ReferenceFE{Df}},model::DistributedDiscreteModel;
   labels = get_face_labeling(model), tags = nothing
 ) where Df
   Dc = num_cell_dims(model)
