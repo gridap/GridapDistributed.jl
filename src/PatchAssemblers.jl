@@ -18,13 +18,21 @@ function Geometry.PatchTopology(topo::DistributedGridTopology,patch_cells::Abstr
   DistributedPatchTopology(topos)
 end
 
-function Geometry.PatchTopology(model::DistributedDiscreteModel{Dc},Df=Dc) where Dc
+function Geometry.PatchTopology(
+  ::Type{ReferenceFE{Df}},model::DistributedDiscreteModel{Dc};
+  labels = get_face_labeling(model), tags = nothing
+) where Df
+  Dc = num_cell_dims(model)
   topo = get_grid_topology(model)
   face_gids = get_face_gids(model,Df)
-  patch_cells = map(local_views(topo),partition(face_gids)) do topo, indices
+  patch_cells = map(local_views(topo),local_views(labels),partition(face_gids)) do topo, labels, indices
     patch_cells = get_faces(topo,Df,Dc)
-    owned_patches = own_to_local(indices)
-    return patch_cells[owned_patches]
+    patches = own_to_local(indices)
+    if !isnothing(tags)
+      mask = Geometry.get_face_mask(labels,tags,Df)
+      patches = filter(p -> mask[p], patches)
+    end
+    return patch_cells[patches]
   end
   Geometry.PatchTopology(topo,patch_cells)
 end
