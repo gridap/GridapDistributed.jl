@@ -13,8 +13,10 @@ end
 
 local_views(ptopo::DistributedPatchTopology) = ptopo.topos
 
-function Geometry.PatchTopology(topo::DistributedGridTopology,patch_cells::AbstractArray{<:Table})
-  topos = map(Geometry.PatchTopology,local_views(topo),patch_cells)
+function Geometry.PatchTopology(
+  topo::DistributedGridTopology,patch_cells::AbstractArray{<:Table},metadata=map(x -> nothing, patch_cells)
+)
+  topos = map(Geometry.PatchTopology,local_views(topo),patch_cells,metadata)
   DistributedPatchTopology(topos)
 end
 
@@ -25,16 +27,17 @@ function Geometry.PatchTopology(
   Dc = num_cell_dims(model)
   topo = get_grid_topology(model)
   face_gids = get_face_gids(model,Df)
-  patch_cells = map(local_views(topo),local_views(labels),partition(face_gids)) do topo, labels, indices
+  patch_cells, metadata = map(local_views(topo),local_views(labels),partition(face_gids)) do topo, labels, indices
     patch_cells = get_faces(topo,Df,Dc)
-    patches = own_to_local(indices)
+    patch_roots = own_to_local(indices)
     if !isnothing(tags)
       mask = Geometry.get_face_mask(labels,tags,Df)
-      patches = filter(p -> mask[p], patches)
+      patch_roots = filter(p -> mask[p], patch_roots)
     end
-    return patch_cells[patches]
-  end
-  Geometry.PatchTopology(topo,patch_cells)
+    metadata = Geometry.StarPatchMetadata(Int8(Df),patch_roots)
+    return patch_cells[patch_roots], metadata
+  end |> tuple_of_arrays
+  return Geometry.PatchTopology(topo,patch_cells,metadata)
 end
 
 # PatchTriangulation
