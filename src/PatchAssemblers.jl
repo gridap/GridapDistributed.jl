@@ -56,6 +56,13 @@ function Geometry.PatchBoundaryTriangulation(model::DistributedDiscreteModel,pto
   DistributedTriangulation(trians,model)
 end
 
+function Geometry.PatchSkeletonTriangulation(model::DistributedDiscreteModel,ptopo::DistributedPatchTopology;kwargs...)
+  trians = map(local_views(model),local_views(ptopo)) do model, ptopo
+    Geometry.PatchSkeletonTriangulation(model,ptopo;kwargs...)
+  end
+  DistributedTriangulation(trians,model)
+end
+
 # PatchFESpace
 
 function FESpaces.PatchFESpace(
