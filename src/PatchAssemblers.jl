@@ -42,9 +42,9 @@ end
 
 # PatchTriangulation
 
-function Geometry.PatchTriangulation(model::DistributedDiscreteModel,ptopo::DistributedPatchTopology)
+function Geometry.PatchTriangulation(model::DistributedDiscreteModel,ptopo::DistributedPatchTopology;kwargs...)
   trians = map(local_views(model),local_views(ptopo)) do model, ptopo
-    Geometry.PatchTriangulation(model,ptopo)
+    Geometry.PatchTriangulation(model,ptopo;kwargs...)
   end
   DistributedTriangulation(trians,model)
 end
