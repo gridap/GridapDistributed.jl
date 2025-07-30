@@ -88,7 +88,7 @@ Algebra.LoopStyle(::Type{<:PSparseMatrixCounter}) = Loop()
 """
     DistributedAllocation{S,T,N} <: GridapType
 
-Distributed N-dimensional allocator, with local allocators of type T. 
+Distributed N-dimensional allocator, with local allocators of type T.
 Follows assembly strategy S.
 """
 struct DistributedAllocation{S,T,N,A,B} <: GridapType
@@ -225,17 +225,42 @@ function Algebra.create_from_nz(a::PVectorAllocation{<:Assembled,<:AbstractVecto
   @assert false
 end
 
+function rhs_callback(values,rows)
+  # Based on the old _rhs_callback pattern:
+  # The issue is that values come from the FE space structure but need to be
+  # organized according to the assembly matrix row structure.
+  # We need to create the vector with proper index alignment.
+
+  if isa(rows, PRange)
+    assembly_indices = partition(rows)
+  else
+    assembly_indices = rows
+  end
+
+  # Create the vector using the assembly indices structure
+  # This ensures proper alignment with matrix rows
+  return PVector(values, assembly_indices)
+end
+
 function Algebra.create_from_nz(a::PVectorAllocation{<:Union{LocallyAssembled,SubAssembled}})
-  rows = remove_ghost(unpermute(axes(a,1)))
+  test_ids = partition(axes(a,1))
+  rows = map(remove_ghost,map(unpermute,test_ids))
   values = local_views(a)
-  b = rhs_callback(values,rows)
+
+  # Use the same pattern as joint assembly: create FE space vector then repartition
+  b_fespace = PVector(values, test_ids)
+  b = locally_repartition(b_fespace, rows)
   return b
 end
 
 function Algebra.create_from_nz(a::PVectorAllocation{<:Assembled})
-  rows = collect_touched_ids(a)
+  new_indices = collect_touched_ids(a)
   values = map(ai -> ai.values, local_views(a))
-  b  = rhs_callback(values,rows)
+
+  # Use the same pattern as joint assembly: create FE space vector then repartition
+  b_fespace = PVector(values, partition(axes(a,1)))
+  b = locally_repartition(b_fespace, new_indices)
+
   t2 = assemble!(b)
   if t2 !== nothing
     wait(t2)
@@ -245,9 +270,9 @@ end
 
 # PSystem assembly chain:
 #
-# When assembling a full system (matrix + vector), it is more efficient to 
+# When assembling a full system (matrix + vector), it is more efficient to
 # overlap communications the assembly of the matrix and the vector.
-# Not only it is faster, but also necessary to ensure identical ghost indices 
+# Not only it is faster, but also necessary to ensure identical ghost indices
 # in both the matrix and vector rows.
 # This is done by using the following specializations:
 
