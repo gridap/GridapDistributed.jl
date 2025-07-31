@@ -102,7 +102,7 @@ function fetch_vector_ghost_values_cache(vector_partition,partition)
 end
 
 function fetch_vector_ghost_values!(vector_partition,cache)
-  assemble!((a,b)->b, vector_partition, cache)
+  assemble!((a,b)->b, vector_partition, cache) 
 end
 
 function generate_gids(
@@ -128,7 +128,7 @@ function generate_gids(
         end
       end
     end
-    me = part_id(indices)
+    me = part_id(indices) 
     nodofs = count(p->p==me,ldof_to_owner)
     ldof_to_owner, nodofs
   end |> tuple_of_arrays
@@ -140,7 +140,7 @@ function generate_gids(
   cell_ldofs_to_owner = dof_wise_to_cell_wise(ldof_to_owner,cell_to_ldofs,own_to_local(cell_range))
   consistent!(PVector(cell_ldofs_to_owner,partition(cell_range))) |> wait
   cell_wise_to_dof_wise!(ldof_to_owner,cell_ldofs_to_owner,cell_to_ldofs,ghost_to_local(cell_range))
-
+  
   # Fill owned gids
   ldof_to_gdof = map(ranks,first_gdof,ldof_to_owner) do rank,first_gdof,ldof_to_owner
     ldof_to_gdof = fill(0,length(ldof_to_owner))
@@ -538,7 +538,7 @@ function _find_vector_type(spaces,gids;split_own_and_ghost=false)
   return vector_type
 end
 
-# TODO: We would like to avoid this, but I cannot extract the maximal order
+# TODO: We would like to avoid this, but I cannot extract the maximal order 
 #       from the space itself...
 function _add_distributed_constraint(
   F::DistributedFESpace,reffe::ReferenceFE,constraint
@@ -582,7 +582,7 @@ end
 const DistributedZeroMeanFESpace{A,B,C,D,E,F} = DistributedSingleFieldFESpace{A,B,C,D,DistributedZeroMeanCache{E,F}}
 
 function FESpaces.FESpaceWithConstantFixed(
-  space::DistributedSingleFieldFESpace,
+  space::DistributedSingleFieldFESpace, 
   gid_to_fix::Int = num_free_dofs(space)
 )
   # Find the gid within the processors
@@ -638,23 +638,23 @@ function FESpaces.FEFunction(
   isconsistent=false
 )
   free_values = change_ghost(free_values,f.gids,is_consistent=isconsistent,make_consistent=true)
-
+  
   c = _compute_new_distributed_fixedval(
     f,free_values,dirichlet_values
   )
-  fv = free_values .+ c # TODO: Do we need to copy, or can we just modify?
+  fv = free_values .+ c # TODO: Do we need to copy, or can we just modify? 
   dv = map(dirichlet_values) do dv
     dv .+ c
   end
-
+  
   fields = map(FEFunction,f.spaces,partition(fv),dv)
   trian = get_triangulation(f)
   metadata = DistributedFEFunctionData(fv)
   DistributedCellField(fields,trian,metadata)
 end
 
-# This is required, otherwise we end up calling `FEFunction` with a fixed value of zero,
-# which does not properly interpolate the function provided.
+# This is required, otherwise we end up calling `FEFunction` with a fixed value of zero, 
+# which does not properly interpolate the function provided. 
 # With this change, we are interpolating in the unconstrained space and then
 # substracting the mean.
 function FESpaces.interpolate!(u,free_values::AbstractVector,f::DistributedZeroMeanFESpace)
@@ -671,7 +671,7 @@ function _compute_new_distributed_fixedval(
 )
   dvol = f.metadata.dvol
   vol  = f.metadata.vol
-
+  
   c_i = map(local_views(f),partition(fv),dv,dvol) do space,fv,dv,dvol
     if isa(FESpaces.ConstantApproach(space),FESpaces.FixConstant)
       lid_to_fix = space.dof_to_fix
@@ -687,19 +687,19 @@ end
 
 """
     ConstantFESpace(
-      model::DistributedDiscreteModel;
-      constraint_type=:global,
+      model::DistributedDiscreteModel; 
+      constraint_type=:global, 
       kwargs...
     )
 
 Distributed equivalent to `ConstantFESpace(model;kwargs...)`.
 
 With `constraint_type=:global`, a single dof is shared by all processors.
-This creates a global constraint, which is NOT scalable in parallel. Use at your own peril.
+This creates a global constraint, which is NOT scalable in parallel. Use at your own peril. 
 
 With `constraint_type=:local`, a single dof is owned by each processor and shared with no one else.
 This space is locally-constant in each processor, and therefore scalable (but not equivalent
-to its serial counterpart).
+to its serial counterpart). 
 """
 function FESpaces.ConstantFESpace(
   model::DistributedDiscreteModel;
@@ -763,7 +763,7 @@ function FESpaces.SparseMatrixAssembler(
 )
   assems = map(partition(rows),partition(cols)) do rows,cols
     FESpaces.GenericSparseMatrixAssembler(
-      SparseMatrixBuilder(local_mat_type),
+      SparseMatrixBuilder(local_mat_type), 
       ArrayBuilder(local_vec_type),
       Base.OneTo(length(rows)),
       Base.OneTo(length(cols)),
@@ -821,7 +821,7 @@ end
 
 function FESpaces.symbolic_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
   rows, cols = get_rows(a), get_cols(a)
-  map(symbolic_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)
+  map(symbolic_loop_matrix_and_vector!,local_views(A,rows,cols),local_views(b,rows),local_views(a),data)  
 end
 
 function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)

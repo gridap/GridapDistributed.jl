@@ -88,7 +88,7 @@ Algebra.LoopStyle(::Type{<:PSparseMatrixCounter}) = Loop()
 """
     DistributedAllocation{S,T,N} <: GridapType
 
-Distributed N-dimensional allocator, with local allocators of type T.
+Distributed N-dimensional allocator, with local allocators of type T. 
 Follows assembly strategy S.
 """
 struct DistributedAllocation{S,T,N,A,B} <: GridapType
@@ -270,9 +270,9 @@ end
 
 # PSystem assembly chain:
 #
-# When assembling a full system (matrix + vector), it is more efficient to
+# When assembling a full system (matrix + vector), it is more efficient to 
 # overlap communications the assembly of the matrix and the vector.
-# Not only it is faster, but also necessary to ensure identical ghost indices
+# Not only it is faster, but also necessary to ensure identical ghost indices 
 # in both the matrix and vector rows.
 # This is done by using the following specializations:
 

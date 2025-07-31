@@ -3,7 +3,7 @@
     permuted_variable_partition(n_own,gids,owners; n_global, start)
 
 Create indices which are a permuted version of a variable_partition.
-The advantage of this w.r.t. the `LocalIndices` type, is that we can compute
+The advantage of this w.r.t. the `LocalIndices` type, is that we can compute 
 dof owners with minimal communications, since we only need the size of the blocks.
 
 NOTE: This is the type for our FESpace dof_ids.
@@ -48,10 +48,10 @@ end
 """
     unpermute(indices::AbstractLocalIndices)
 
-Given local indices, reorders them to (locally) have own indices first,
+Given local indices, reorders them to (locally) have own indices first, 
 followed by ghost indices.
 """
-function unpermute(indices::AbstractLocalIndices)
+function unpermute(indices::AbstractLocalIndices) 
   @notimplemented
 end
 
@@ -78,7 +78,7 @@ end
 
 Map the values of a PVector to a new partitioning of the indices.
 
-Similar to `PartitionedArrays.repartition`, but without any communications. Instead,
+Similar to `PartitionedArrays.repartition`, but without any communications. Instead, 
 it is assumed that the local-to-local mapping can be done locally.
 """
 function locally_repartition(v::PVector,new_indices)
@@ -109,9 +109,9 @@ end
 
 Replace ghost ids in `indices` with the ghost ids within `gids`.
 
-NOTE: The issue is that `replace_ghost` does not check if all gids are ghosts or whether
-they are repeated. It also shifts ownership of the ghosts. Its all quite messy and not what we
-would need. TODO: Make me better.
+NOTE: The issue is that `replace_ghost` does not check if all gids are ghosts or whether 
+they are repeated. It also shifts ownership of the ghosts. Its all quite messy and not what we 
+would need. TODO: Make me better. 
 """
 function filter_and_replace_ghost(indices,gids)
   owners = find_owner(indices,gids)
@@ -122,7 +122,7 @@ function filter_and_replace_ghost(indices,gids)
   return new_indices
 end
 
-# Same as PartitionedArrays.filter_ghost, but we do not exclude ghost indices that
+# Same as PartitionedArrays.filter_ghost, but we do not exclude ghost indices that 
 # belong to `indices`. This could eventually be a flag in the original function.
 function _filter_ghost(indices,gids,owners)
   ghosts = Set{Int}()
@@ -160,7 +160,7 @@ function _filter_ghost(indices,gids,owners)
 end
 
 # function PArrays.remove_ghost(indices::PermutedLocalIndices)
-#   n_global = global_length(indices)
+#   n_global = global_length(indices) 
 #   own = OwnIndices(n_global,part_id(indices),own_to_global(indices))
 #   ghost = GhostIndices(n_global,Int[],Int32[])
 #   OwnAndGhostIndices(own,ghost)
@@ -171,8 +171,8 @@ function PArrays.remove_ghost(indices::PermutedLocalIndices)
 end
 
 # This function computes a mapping among the local identifiers of a and b
-# for which the corresponding global identifiers are both in a and b.
-# Note that the haskey check is necessary because in the general case
+# for which the corresponding global identifiers are both in a and b. 
+# Note that the haskey check is necessary because in the general case 
 # there might be gids in b which are not present in a
 function local_to_local_map(a::AbstractLocalIndices,b::AbstractLocalIndices)
   a_lid_to_b_lid = fill(zero(Int32),local_length(a))
@@ -184,7 +184,7 @@ function local_to_local_map(a::AbstractLocalIndices,b::AbstractLocalIndices)
     a_lid = a_global_to_local[gid]
     if !iszero(a_lid)
       a_lid_to_b_lid[a_lid] = b_lid
-    end
+    end  
   end
   a_lid_to_b_lid
 end
@@ -228,8 +228,8 @@ function Algebra.axpy_entries!(
   α::Number, A::PSparseMatrix, B::PSparseMatrix;
   check::Bool=true
 )
-# We should definitely check here that the index partitions are the same.
-# However: Because the different matrices are assembled separately, the objects are not the
+# We should definitely check here that the index partitions are the same. 
+# However: Because the different matrices are assembled separately, the objects are not the 
 # same (i.e can't use ===). Checking the index partitions would then be costly...
   @assert reduce(&,map(PArrays.matching_local_indices,partition(axes(A,1)),partition(axes(B,1))))
   @assert reduce(&,map(PArrays.matching_local_indices,partition(axes(A,2)),partition(axes(B,2))))
@@ -249,7 +249,7 @@ function Algebra.axpy_entries!(
   return B
 end
 
-# Array of PArrays -> PArray of Arrays
+# Array of PArrays -> PArray of Arrays 
 # TODO: I think this is now implemented in PartitionedArrays.jl (check)
 function to_parray_of_arrays(a::AbstractArray{<:MPIArray})
   indices = linear_indices(first(a))
@@ -269,7 +269,7 @@ function to_parray_of_arrays(a::AbstractArray{<:DebugArray})
   end
 end
 
-# To local/to global for blocks
+# To local/to global for blocks 
 
 function to_local_indices!(I,ids::PRange;kwargs...)
   map(to_local!,I,partition(ids))
@@ -299,7 +299,7 @@ for f in [:to_local_indices!, :to_global_indices!, :get_gid_owners]
   end
 end
 
-# This type is required because MPIArray from PArrays
+# This type is required because MPIArray from PArrays 
 # cannot be instantiated with a NULL communicator
 struct MPIVoidVector{T} <: AbstractVector{T}
   comm::MPI.Comm
@@ -348,7 +348,7 @@ end
 """
     i_am_in(comm::MPIArray)
     i_am_in(comm::DebugArray)
-
+  
   Returns `true` if the processor is part of the subcommunicator `comm`.
 """
 function i_am_in(comm::MPI.Comm)
@@ -381,7 +381,7 @@ function generate_subparts(parts::MPIArray,new_comm_size)
   else
     mpi_undefined = MPI.API.MPI_UNDEFINED[]
   end
-
+  
   if root_size == new_comm_size
     return parts
   else
