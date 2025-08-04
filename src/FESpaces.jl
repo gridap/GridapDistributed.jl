@@ -194,7 +194,76 @@ end
 const DistributedSingleFieldFEFunction{A,B,T} = DistributedCellField{A,B,DistributedFEFunctionData{T}}
 
 function FESpaces.get_free_dof_values(uh::DistributedSingleFieldFEFunction)
-  uh.metadata.free_values
+  free_values = uh.metadata.free_values
+  
+  # Check if we have periodic boundary conditions that require index structure conversion
+  # This is needed when the FE space uses PermutedLocalIndices but the linear system
+  # requires LocalIndicesWithVariableBlockSize for compatibility
+  if _needs_periodic_bc_fix(free_values)
+    return _convert_to_compatible_index_structure(free_values)
+  end
+  
+  return free_values
+end
+
+"""
+Check if the vector needs periodic BC index structure conversion
+"""
+function _needs_periodic_bc_fix(v::PVector)
+  # Check if any partition uses PermutedLocalIndices which typically indicates periodic BCs
+  indices = partition(axes(v, 1))
+  checks = map(indices) do idx
+    isa(idx, PartitionedArrays.PermutedLocalIndices)
+  end
+  # Use reduction to avoid scalar indexing on DebugArray
+  return reduce(|, checks, init=false)
+end
+
+"""
+Convert a vector with PermutedLocalIndices to one with LocalIndicesWithVariableBlockSize
+This is needed for periodic BC compatibility with linear system operators
+"""
+function _convert_to_compatible_index_structure(v::PVector)
+  # Get the current index partition
+  old_indices = partition(axes(v, 1))
+  
+  # Create new indices using LocalIndicesWithVariableBlockSize
+  new_indices = map(old_indices) do idx
+    if isa(idx, PartitionedArrays.PermutedLocalIndices)
+      # Extract the underlying LocalIndicesWithVariableBlockSize
+      return idx.indices
+    else 
+      return idx
+    end
+  end
+  
+  # Create a new PRange with the unpermuted indices
+  new_prange = PRange(new_indices)
+  
+  # Create a new vector with the compatible index structure
+  new_vector = similar(v, new_prange)
+  
+  # Copy values handling the index mapping
+  map(partition(new_vector), partition(v), new_indices, old_indices) do new_part, old_part, new_idx, old_idx
+    if isa(old_idx, PartitionedArrays.PermutedLocalIndices)
+      # Handle permuted indices by mapping through global indices
+      old_loc_to_glo = local_to_global(old_idx)
+      new_glo_to_loc = global_to_local(new_idx)
+      
+      for old_lid in 1:local_length(old_idx)
+        gid = old_loc_to_glo[old_lid]
+        new_lid = new_glo_to_loc[gid]
+        if new_lid > 0
+          new_part[new_lid] = old_part[old_lid]
+        end
+      end
+    else
+      # Direct copy if no permutation
+      copy!(new_part, old_part)
+    end
+  end
+  
+  return new_vector
 end
 
 # Single field related
@@ -834,3 +903,5 @@ function FESpaces.collect_cell_matrix_and_vector(
     collect_cell_matrix_and_vector(u,v,m,l,f)
   end
 end
+
+

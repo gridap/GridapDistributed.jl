@@ -55,6 +55,8 @@ function unpermute(indices::AbstractLocalIndices)
   @notimplemented
 end
 
+unpermute(prange::PRange) = PRange(map(unpermute, partition(prange)))
+PArrays.remove_ghost(prange::PRange) = PRange(map(PArrays.remove_ghost, partition(prange)))
 unpermute(indices::PermutedLocalIndices) = unpermute(indices.indices)
 unpermute(indices::PartitionedArrays.LocalIndicesInBlockPartition) = indices
 unpermute(indices::OwnAndGhostIndices) = indices
@@ -64,6 +66,10 @@ function unpermute(indices::LocalIndices)
   rank = part_id(indices)
   own = OwnIndices(nglobal,rank,own_to_global(indices))
   ghost = GhostIndices(nglobal,ghost_to_global(indices),ghost_to_owner(indices))
+  
+  # For LocalIndices, we can use the original global_to_owner mapping directly
+  # This should work properly with PartitionedArrays since LocalIndices
+  # has a complete global_to_owner mapping
   OwnAndGhostIndices(own,ghost,global_to_owner(indices))
 end
 
@@ -161,12 +167,6 @@ end
 # end
 
 function PArrays.remove_ghost(indices::PermutedLocalIndices)
-  perm = indices.perm
-  own_to_local = indices.own_to_local
-  display(own_to_local)
-  println(issorted(own_to_local))
-  display(perm)
-  println("-------------------------------")
   remove_ghost(indices.indices)
 end
 
