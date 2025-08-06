@@ -146,8 +146,8 @@ function FESpaces.PatchAssembler(
   assems = map(local_views(ptopo),local_views(trial),local_views(test)) do ptopo,trial,test
     FESpaces.PatchAssembler(ptopo,trial,test;kwargs...)
   end
-  rows = get_free_dof_ids(trial)
-  cols = get_free_dof_ids(test)
+  rows = get_free_dof_ids(test)
+  cols = get_free_dof_ids(trial)
   return DistributedPatchAssembler(assems,(rows,cols))
 end
 
