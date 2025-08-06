@@ -648,6 +648,8 @@ function filter_cells_when_needed(
   remove_ghost_cells(trian,cell_gids)
 end
 
+# Removing ghost cells
+
 function remove_ghost_cells(trian::DistributedTriangulation,gids)
   trians = map(remove_ghost_cells,local_views(trian),partition(gids))
   model  = get_background_model(trian)
@@ -671,10 +673,8 @@ function remove_ghost_cells(
   remove_ghost_cells(glue,trian,gids)
 end
 
-function remove_ghost_cells(
-  trian::AdaptedTriangulation{Dc,Dp,<:Union{SkeletonTriangulation,BoundaryTriangulation}},gids
-) where {Dc,Dp}
-  remove_ghost_cells(trian.trian,gids)
+function remove_ghost_cells(trian::AdaptedTriangulation,gids)
+  AdaptedTriangulation(remove_ghost_cells(trian.trian,gids),trian.adapted_model)
 end
 
 function remove_ghost_cells(glue::FaceToFaceGlue,trian,gids)
@@ -720,24 +720,20 @@ function _find_owned_skeleton_facets(glue,gids)
   findall(part->part==part_id(gids),tface_to_part)
 end
 
+# Adding ghost cells
+
 function add_ghost_cells(dtrian::DistributedTriangulation)
   dmodel = get_background_model(dtrian)
   add_ghost_cells(dmodel,dtrian)
 end
 
-function _covers_all_faces(
-  dmodel::DistributedDiscreteModel{Dm},
-  dtrian::DistributedTriangulation{Dt}
-) where {Dm,Dt}
-  covers_all_faces = map(local_views(dmodel),local_views(dtrian)) do model, trian
-    glue = get_glue(trian,Val(Dt))
-    @assert isa(glue,FaceToFaceGlue)
-    isa(glue.tface_to_mface,IdentityVector)
-  end
-  reduce(&,covers_all_faces,init=true)
+function add_ghost_cells(dmodel::DistributedDiscreteModel,dtrian::DistributedTriangulation)
+  T = eltype(local_views(dtrian))
+  add_ghost_cells(T,dmodel,dtrian)
 end
 
 function add_ghost_cells(
+  ::Type{<:Triangulation},
   dmodel::DistributedDiscreteModel{Dm},
   dtrian::DistributedTriangulation{Dt}
 ) where {Dm,Dt}
@@ -775,6 +771,100 @@ function add_ghost_cells(
   end
   return DistributedTriangulation(trians,dmodel)
 end
+
+function add_ghost_cells(
+  ::Type{<:BoundaryTriangulation},
+  dmodel::DistributedDiscreteModel,
+  dtrian::DistributedTriangulation{Dt}
+) where Dt
+  println("Flag 0")
+  bf_dtrian = add_ghost_cells(Triangulation, dmodel, dtrian)
+  (bf_trian === dtrian) && return dtrian # Case 1 above
+
+  # Otherwise, we have created the underlying BodyFittedTriangulation but still have to 
+  # create the expanded FaceToCellGlue...
+
+  face_gids = get_face_gids(dmodel, Dt)
+  bgface_to_lcell = map(local_views(dtrian), partition(face_gids)) do trian, face_gids
+    glue = trian.glue
+    bgface_to_lcell = fill(Int8(1), length(face_gids))
+    bgface_to_lcell[glue.face_to_bgface] .= glue.face_to_lcell
+  end
+  consistent!(PVector(bgface_to_lcell, partition(face_gids))) |> wait
+
+  trians = map(local_views(bf_dtrian), local_views(dmodel), bgface_to_lcell) do bf_trian, model, bgface_to_lcell
+    topo = get_grid_topology(model)
+    face_grid = get_grid(bf_trian)
+    cell_grid = get_grid(model)
+    face_to_bgface = bf_trian.tface_to_mface
+    glue = FaceToCellGlue(topo,cell_grid,face_grid,face_to_bgface,bgface_to_lcell)
+    BoundaryTriangulation(bf_trian,glue)
+  end
+
+  return DistributedTriangulation(trians,dmodel)
+end
+
+function add_ghost_cells(
+  ::Type{<:SkeletonTriangulation},
+  dmodel::DistributedDiscreteModel,
+  dtrian::DistributedTriangulation{Dt}
+) where Dt
+  bf_dtrian = add_ghost_cells(Triangulation, dmodel, dtrian)
+  (bf_trian === dtrian) && return dtrian # Case 1 above
+
+  # Otherwise, we have created the underlying BodyFittedTriangulation but still have to 
+  # create the expanded FaceToCellGlue...
+
+  face_gids = get_face_gids(dmodel, Dt)
+  bgface_to_lcell_plus = map(local_views(dtrian), partition(face_gids)) do trian, face_gids
+    glue = trian.plus.glue
+    bgface_to_lcell = fill(Int8(1), length(face_gids))
+    bgface_to_lcell[glue.face_to_bgface] .= glue.face_to_lcell
+  end
+  t_plus = consistent!(PVector(bgface_to_lcell, partition(face_gids)))
+  bgface_to_lcell_minus = map(local_views(dtrian), partition(face_gids)) do trian, face_gids
+    glue = trian.minus.glue
+    bgface_to_lcell = fill(Int8(1), length(face_gids))
+    bgface_to_lcell[glue.face_to_bgface] .= glue.face_to_lcell
+  end
+  t_minus = consistent!(PVector(bgface_to_lcell, partition(face_gids)))
+
+  wait(t_plus)
+  wait(t_minus)
+
+  trians = map(
+    local_views(bf_dtrian), local_views(dmodel), bgface_to_lcell_plus, bgface_to_lcell_minus
+  ) do bf_trian, model, bgface_to_lcell_plus, bgface_to_lcell_minus
+    topo = get_grid_topology(model)
+    face_grid = get_grid(bf_trian)
+    cell_grid = get_grid(model)
+    face_to_bgface = bf_trian.tface_to_mface
+
+    glue_plus = FaceToCellGlue(topo,cell_grid,face_grid,face_to_bgface,bgface_to_lcell_plus)
+    plus = BoundaryTriangulation(bf_trian,glue_plus)
+
+    glue_minus = FaceToCellGlue(topo,cell_grid,face_grid,face_to_bgface,bgface_to_lcell_minus)
+    minus = BoundaryTriangulation(bf_trian,glue_minus)
+
+    SkeletonTriangulation(plus,minus)
+  end
+
+  return DistributedTriangulation(trians,dmodel)
+end
+
+function _covers_all_faces(
+  dmodel::DistributedDiscreteModel{Dm},
+  dtrian::DistributedTriangulation{Dt}
+) where {Dm,Dt}
+  covers_all_faces = map(local_views(dmodel),local_views(dtrian)) do model, trian
+    glue = get_glue(trian,Val(Dt))
+    @assert isa(glue,FaceToFaceGlue)
+    isa(glue.tface_to_mface,IdentityVector)
+  end
+  reduce(&,covers_all_faces,init=true)
+end
+
+# Triangulation gids
 
 function generate_cell_gids(dtrian::DistributedTriangulation)
   dmodel = get_background_model(dtrian)
