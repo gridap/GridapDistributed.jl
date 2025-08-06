@@ -133,8 +133,9 @@ end
 
 # Patch assembly 
 
-struct DistributedPatchAssembler <: Assembler
-  assems :: AbstractArray{<:FESpaces.PatchAssembler}
+struct DistributedPatchAssembler{A,B} <: Assembler
+  assems :: A
+  axes :: NTuple{2,PRange{B}}
 end
 
 local_views(assem::DistributedPatchAssembler) = assem.assems
@@ -145,7 +146,9 @@ function FESpaces.PatchAssembler(
   assems = map(local_views(ptopo),local_views(trial),local_views(test)) do ptopo,trial,test
     FESpaces.PatchAssembler(ptopo,trial,test;kwargs...)
   end
-  DistributedPatchAssembler(assems)
+  rows = get_free_dof_ids(trial)
+  cols = get_free_dof_ids(test)
+  return DistributedPatchAssembler(assems,(rows,cols))
 end
 
 for func in (:assemble_matrix,:assemble_vector,:assemble_matrix_and_vector)
