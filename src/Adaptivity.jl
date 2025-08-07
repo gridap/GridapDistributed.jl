@@ -185,7 +185,7 @@ function _update_cell_dof_values_with_local_info!(cell_dof_values_new,
    end
 end
 
-function _allocate_comm_data(num_dofs_x_cell,lids)
+function _allocate_comm_data(T,num_dofs_x_cell,lids)
   map(num_dofs_x_cell,lids) do num_dofs_x_cell,lids
     n = length(lids)
     ptrs = Vector{Int32}(undef,n+1)
@@ -197,7 +197,7 @@ function _allocate_comm_data(num_dofs_x_cell,lids)
     end
     PartitionedArrays.length_to_ptrs!(ptrs)
     ndata = ptrs[end]-1
-    data  = Vector{Float64}(undef,ndata)
+    data  = Vector{T}(undef,ndata)
     PartitionedArrays.JaggedArray(data,ptrs)
   end
 end
@@ -256,10 +256,11 @@ function get_redistribute_cell_dofs_cache(
   cell_dof_values_old = change_parts(cell_dof_values_old,get_parts(glue);default=[])
   cell_dof_ids_new    = change_parts(cell_dof_ids_new,get_parts(glue);default=[[]])
 
+  T = eltype(eltype(cell_dof_values_old))
   num_dofs_x_cell_snd = _num_dofs_x_cell(cell_dof_values_old, lids_snd)
   num_dofs_x_cell_rcv = _num_dofs_x_cell(cell_dof_ids_new, lids_rcv)
-  snd_data = _allocate_comm_data(num_dofs_x_cell_snd, lids_snd)
-  rcv_data = _allocate_comm_data(num_dofs_x_cell_rcv, lids_rcv)
+  snd_data = _allocate_comm_data(T,num_dofs_x_cell_snd, lids_snd)
+  rcv_data = _allocate_comm_data(T,num_dofs_x_cell_rcv, lids_rcv)
 
   cell_dof_values_new = _allocate_cell_wise_dofs(cell_dof_ids_new)
 
