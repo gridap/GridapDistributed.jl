@@ -151,7 +151,7 @@ end
 
 # Redistribution of cell-wise dofs, free values and FEFunctions
 
-function _allocate_cell_wise_dofs(cell_to_ldofs)
+function _allocate_cell_wise_dofs(T,cell_to_ldofs)
   map(cell_to_ldofs) do cell_to_ldofs
     cache  = array_cache(cell_to_ldofs)
     ncells = length(cell_to_ldofs)
@@ -162,7 +162,7 @@ function _allocate_cell_wise_dofs(cell_to_ldofs)
     end
     PartitionedArrays.length_to_ptrs!(ptrs)
     ndata = ptrs[end]-1
-    data  = Vector{Float64}(undef,ndata)
+    data  = Vector{T}(undef,ndata)
     PartitionedArrays.JaggedArray(data,ptrs)
   end
 end
@@ -262,7 +262,7 @@ function get_redistribute_cell_dofs_cache(
   snd_data = _allocate_comm_data(T,num_dofs_x_cell_snd, lids_snd)
   rcv_data = _allocate_comm_data(T,num_dofs_x_cell_rcv, lids_rcv)
 
-  cell_dof_values_new = _allocate_cell_wise_dofs(cell_dof_ids_new)
+  cell_dof_values_new = _allocate_cell_wise_dofs(T,cell_dof_ids_new)
 
   caches = snd_data, rcv_data, cell_dof_values_new
   return caches
