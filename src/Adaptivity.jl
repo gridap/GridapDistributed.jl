@@ -249,14 +249,14 @@ function get_redistribute_cell_dofs_cache(
   cell_dof_ids_new,
   model_new,
   glue::RedistributeGlue;
-  reverse=false
+  reverse=false,
+  T = Float64
 )
   lids_rcv, lids_snd, parts_rcv, parts_snd, new2old = get_glue_components(glue,Val(reverse))
 
   cell_dof_values_old = change_parts(cell_dof_values_old,get_parts(glue);default=[])
   cell_dof_ids_new    = change_parts(cell_dof_ids_new,get_parts(glue);default=[[]])
 
-  T = eltype(eltype(cell_dof_values_old))
   num_dofs_x_cell_snd = _num_dofs_x_cell(cell_dof_values_old, lids_snd)
   num_dofs_x_cell_rcv = _num_dofs_x_cell(cell_dof_ids_new, lids_rcv)
   snd_data = _allocate_comm_data(T,num_dofs_x_cell_snd, lids_snd)
@@ -273,9 +273,10 @@ function redistribute_cell_dofs(
   cell_dof_ids_new,
   model_new,
   glue::RedistributeGlue;
-  reverse=false
+  reverse=false,
+  T = Float64
 )
-  caches = get_redistribute_cell_dofs_cache(cell_dof_values_old,cell_dof_ids_new,model_new,glue;reverse=reverse)
+  caches = get_redistribute_cell_dofs_cache(cell_dof_values_old,cell_dof_ids_new,model_new,glue;reverse=reverse,T=T)
   return redistribute_cell_dofs!(caches,cell_dof_values_old,cell_dof_ids_new,model_new,glue;reverse=reverse)
 end
 
