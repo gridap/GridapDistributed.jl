@@ -240,37 +240,37 @@ end
 const DistributedCartesianDiscreteModel{Dc,Dp,A,B,C} =
   GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:CartesianDiscreteModel},B,<:DistributedCartesianDescriptor}
 
-function Geometry.CartesianDiscreteModel(
-  ranks::AbstractArray{<:Integer}, # Distributed array with the rank IDs
-  parts::NTuple{N,<:Integer},      # Number of ranks (parts) in each direction
-  args...;isperiodic=map(i->false,parts),kwargs...) where N
-
-  desc = CartesianDescriptor(args...;isperiodic=isperiodic,kwargs...)
-  nc = desc.partition
-  msg = """
-    A CartesianDiscreteModel needs a Cartesian subdomain partition
-    of the right dimensions.
-  """
-  @assert N == length(nc) msg
-
-  if any(isperiodic)
-    _cartesian_model_with_periodic_bcs(ranks,parts,desc)
-  else
-    ghost = map(i->true,parts)
-    upartition = uniform_partition(ranks,parts,nc,ghost,isperiodic)
-    gcids  = CartesianIndices(nc)
-    models = map(ranks,upartition) do rank, upartition
-      cmin = gcids[first(upartition)]
-      cmax = gcids[last(upartition)]
-      CartesianDiscreteModel(desc,cmin,cmax)
-    end
-    gids = PRange(upartition)
-    metadata = DistributedCartesianDescriptor(ranks,parts,desc)
-    return GenericDistributedDiscreteModel(models,gids;metadata)
-  end
+function Geometry.CartesianDiscreteModel(ranks,parts,args...;kwargs...)
+  desc = CartesianDescriptor(args...;kwargs...)
+  pdesc = DistributedCartesianDescriptor(ranks,parts,desc)
+  return CartesianDiscreteModel(pdesc)
 end
 
-function _cartesian_model_with_periodic_bcs(ranks,parts,desc)
+function Geometry.CartesianDiscreteModel(pdesc::DistributedCartesianDescriptor)
+  desc = pdesc.descriptor
+  isperiodic = desc.isperiodic
+  if any(isperiodic)
+    models, cell_indices = _cartesian_model_with_periodic_bcs(pdesc)
+  else
+    nc = desc.partition
+    ranks = pdesc.ranks
+    parts = pdesc.mesh_partition
+    ghost = map(i->true,parts)
+    cell_indices = uniform_partition(ranks,parts,nc,ghost,isperiodic)
+    gcids  = CartesianIndices(nc)
+    models = map(cell_indices) do cell_indices
+      cmin = gcids[first(cell_indices)]
+      cmax = gcids[last(cell_indices)]
+      CartesianDiscreteModel(desc,cmin,cmax)
+    end
+  end
+  gids = PRange(cell_indices)
+  return GenericDistributedDiscreteModel(models,gids;metadata=pdesc)
+end
+
+function _cartesian_model_with_periodic_bcs(pdesc::DistributedCartesianDescriptor)
+  ranks, parts, desc = pdesc.ranks, pdesc.mesh_partition, pdesc.descriptor
+
   # We create and extended CartesianDescriptor for the local models:
   # If a direction is periodic and partitioned:
   #   - we add a ghost cell at either side, which will be made periodic by the index partition.
@@ -312,9 +312,8 @@ function _cartesian_model_with_periodic_bcs(ranks,parts,desc)
     remove_boundary = map((p,n)->((p && (n!=1)) ? true : false),desc.isperiodic,parts)
     CartesianDiscreteModel(_desc,cmin,cmax,remove_boundary)
   end
-  gids = PRange(global_partition)
-  metadata = DistributedCartesianDescriptor(ranks,parts,desc)
-  return GenericDistributedDiscreteModel(models,gids;metadata)
+  
+  return models, global_partition
 end
 
 ## Helpers to partition a serial model
