@@ -558,7 +558,11 @@ function redistribution_local_indices(indices, indices_red)
 end
 
 function redistribution_local_indices(indices, indices_red, nbors_snd, nbors_rcv)
-
+  # - Each processors knows the local indices that it needs to receive from each neighbor, 
+  #   which are the ones he does not own in the redistributed index partition.
+  # - We will communicate their global IDs, so that the neighbors can send the correct data.
+  # - The main difference with `assembly_local_indices` is that the gids_snd to lids_snd conversion
+  #   has to be done with the original `indices`, not the redistributed ones.
   lids_rcv, gids_rcv = map(indices_red, nbors_rcv) do indices_red, nbors_rcv
     rank = part_id(indices_red)
     
@@ -622,7 +626,7 @@ Redistributes a PVector `v` to a new partition defined by `new_indices`.
 function redistribute(v::PVector,new_indices)
   indices = partition(axes(v,1))
   cache = p_vector_redistribution_cache(partition(v), indices, new_indices)
-  w = pzeros(new_indices)
+  w = pzeros(eltype(v),new_indices)
   return redistribute!(w, v, cache)
 end
 

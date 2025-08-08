@@ -41,6 +41,17 @@ function Base.zero(f::DistributedFESpace)
   FEFunction(f,free_values,isconsistent)
 end
 
+function FESpaces.get_cell_dof_ids(f::DistributedFESpace)
+  map(get_cell_dof_ids,local_views(f))
+end
+
+function get_cell_dof_global_ids(f::DistributedFESpace)
+  gids = get_free_dof_ids(f)
+  map(local_views(f),partition(gids)) do f, gids
+    lazy_map(Broadcasting(Reindex(local_to_global(gids))), get_cell_dof_ids(f))
+  end
+end
+
 function FESpaces.gather_free_values!(free_values,f::DistributedFESpace,cell_vals)
   map(gather_free_values!, local_views(free_values), local_views(f), local_views(cell_vals))
 end
@@ -98,22 +109,22 @@ function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,c
 end
 
 function dof_wise_to_cell_wise(dof_wise_vector,cell_to_ldofs,cell_prange)
-    cwv=map(cell_to_ldofs) do cell_to_ldofs
-      cache = array_cache(cell_to_ldofs)
-      ncells = length(cell_to_ldofs)
-      ptrs = Vector{Int32}(undef,ncells+1)
-      for cell in 1:ncells
-        ldofs = getindex!(cache,cell_to_ldofs,cell)
-        ptrs[cell+1] = length(ldofs)
-      end
-      PArrays.length_to_ptrs!(ptrs)
-      ndata = ptrs[end]-1
-      data = Vector{Int}(undef,ndata)
-      data .= -1
-      JaggedArray(data,ptrs)
+  cwv = map(cell_to_ldofs) do cell_to_ldofs
+    cache = array_cache(cell_to_ldofs)
+    ncells = length(cell_to_ldofs)
+    ptrs = Vector{Int32}(undef,ncells+1)
+    for cell in 1:ncells
+      ldofs = getindex!(cache,cell_to_ldofs,cell)
+      ptrs[cell+1] = length(ldofs)
     end
-    dof_wise_to_cell_wise!(cwv,dof_wise_vector,cell_to_ldofs,cell_prange)
-    cwv
+    PArrays.length_to_ptrs!(ptrs)
+    ndata = ptrs[end]-1
+    data = Vector{Int}(undef,ndata)
+    data .= -1
+    JaggedArray(data,ptrs)
+  end
+  dof_wise_to_cell_wise!(cwv,dof_wise_vector,cell_to_ldofs,cell_prange)
+  cwv
 end
 
 function fetch_vector_ghost_values_cache(vector_partition,partition)

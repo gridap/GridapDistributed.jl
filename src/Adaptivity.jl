@@ -212,11 +212,8 @@ function redistribute_cartesian(
 ) where Dc
   new_ranks = pdesc.ranks
   new_parts = pdesc.mesh_partition
-
   desc = pdesc.descriptor
-  ncells = desc.partition
-  domain = Adaptivity._get_cartesian_domain(desc)
-  _new_model = CartesianDiscreteModel(new_ranks,new_parts,domain,ncells)
+  _new_model = CartesianDiscreteModel(pdesc)
 
   map_main(new_ranks) do r
     @debug "Redistributing DistributedCartesianModel:
@@ -224,7 +221,7 @@ function redistribute_cartesian(
       > New: $(repr("text/plain",_new_model.metadata))
     "
     msg1 = "Both models should have the same number of cells for redistribution!"
-    @check old_model.metadata.descriptor.partition == ncells msg1
+    @check old_model.metadata.descriptor.partition == desc.partition msg1
     msg2 = "Only redistribution to a higher number of processors is supported!"
     @check prod(old_model.metadata.mesh_partition) <= prod(new_parts) msg2
   end
