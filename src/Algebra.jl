@@ -183,17 +183,19 @@ end
 @inline i_am_in(comm::MPIVoidVector) = i_am_in(comm.comm)
 @inline i_am_in(comm::DebugArray) = true
 
-function change_parts(x::Union{MPIArray,DebugArray,Nothing,MPIVoidVector}, new_parts; default=nothing)
-  x_new = map(new_parts) do p
-    if isa(x,MPIArray)
-      PartitionedArrays.getany(x)
-    elseif isa(x,DebugArray) && (p <= length(x.items))
-      x.items[p]
-    else
-      default
-    end
-  end
+change_parts(x, new_parts; default=nothing) = change_parts(x, new_parts, map(_ -> default, new_parts))
+
+function change_parts(x::MPIArray, new_parts, defaults)
+  x_new = map((p,d) -> x.item, new_parts, defaults)
   return x_new
+end
+change_parts(x::DebugArray, new_parts, args...) = change_parts(x.items, new_parts, args...)
+function change_parts(x::AbstractArray, new_parts, defaults)
+  x_new = map((p,d) -> (p <= length(x)) ? x[p] : d, new_parts, defaults)
+  return x_new
+end
+function change_parts(::Union{Nothing,MPIVoidVector}, new_parts, defaults)
+  return defaults
 end
 
 function generate_subparts(parts::MPIArray,new_comm_size)

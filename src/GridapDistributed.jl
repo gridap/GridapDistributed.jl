@@ -61,6 +61,8 @@ include("MultiField.jl")
 
 include("ODEs.jl")
 
+include("Redistribution.jl")
+
 include("Adaptivity.jl")
 
 include("Autodiff.jl")
