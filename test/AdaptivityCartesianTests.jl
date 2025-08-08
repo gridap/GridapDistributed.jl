@@ -201,8 +201,8 @@ function main(distribute,ncells,isperiodic)
   test_redistribution(coarse_ranks,fine_ranks,parent,redist_parent,redist_glue_parent)
   test_redistribution(coarse_ranks,fine_ranks,child,redist_child_2,redist_glue_child)
 
-  # test_adaptivity(coarse_ranks,parent,child,coarse_adaptivity_glue)
-  # test_adaptivity(fine_ranks,redist_parent,redist_child_1,fine_adaptivity_glue)
+  test_adaptivity(coarse_ranks,parent,child,coarse_adaptivity_glue)
+  test_adaptivity(fine_ranks,redist_parent,redist_child_1,fine_adaptivity_glue)
   return
 end
 
@@ -212,7 +212,5 @@ function main(distribute)
   main(distribute,(8,8),(false,true))
   main(distribute,(8,8),(true,true))
 end
-
-main(DebugArray)
 
 end # module AdaptivityTests
