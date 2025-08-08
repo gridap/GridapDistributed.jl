@@ -240,8 +240,12 @@ end
 const DistributedCartesianDiscreteModel{Dc,Dp,A,B,C} =
   GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:CartesianDiscreteModel},B,<:DistributedCartesianDescriptor}
 
-function Geometry.CartesianDiscreteModel(ranks,parts,args...;kwargs...)
+function Geometry.CartesianDiscreteModel(
+  ranks::AbstractArray{<:Integer},parts::NTuple{N,<:Integer},args...;kwargs...
+) where N
   desc = CartesianDescriptor(args...;kwargs...)
+  @check N == length(desc.partition)
+  @check prod(parts) == length(ranks)
   pdesc = DistributedCartesianDescriptor(ranks,parts,desc)
   return CartesianDiscreteModel(pdesc)
 end
