@@ -631,6 +631,16 @@ function redistribute(v::PVector,new_indices)
 end
 
 function redistribute!(w::PVector,v::PVector,cache)
+  values, indices = partition(v), partition(axes(v,1))
+  values_red, indices_red = partition(w), partition(axes(w,1))
+  t = redistribute!(values_red, values, indices_red, indices, cache)
+  @async begin
+    wait(t)
+    return w
+  end
+end
+
+function redistribute!(values_red, values, indices_red, indices, cache)
   function setup_snd(values, cache)
     cache.buffer_snd.data .= view(values,cache.local_indices_snd.data)
     return cache.buffer_rcv, cache.buffer_snd, cache.neighbors_rcv, cache.neighbors_snd
@@ -651,8 +661,6 @@ function redistribute!(w::PVector,v::PVector,cache)
     view(values_red, cache.local_indices_rcv.data) .= cache.buffer_rcv.data
   end
 
-  values, indices = partition(v), partition(axes(v,1))
-  values_red, indices_red = partition(w), partition(axes(w,1))
   buffer_rcv, buffer_snd, nbors_rcv, nbors_snd = map(setup_snd, values, cache) |> tuple_of_arrays
   graph = ExchangeGraph(nbors_snd, nbors_rcv)
   t = PartitionedArrays.exchange!(buffer_rcv, buffer_snd, graph)
@@ -660,6 +668,6 @@ function redistribute!(w::PVector,v::PVector,cache)
     map(copy_owned, values_red, values, indices_red, indices)
     wait(t)
     map(copy_rcv, values_red, cache)
-    return w
+    return values_red
   end
 end
