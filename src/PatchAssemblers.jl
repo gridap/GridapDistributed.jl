@@ -40,6 +40,11 @@ function Geometry.PatchTopology(
   return Geometry.PatchTopology(topo,patch_cells,metadata)
 end
 
+function Geometry.PatchTopology(model::DistributedDiscreteModel;kwargs...)
+  D = num_cell_dims(model)
+  Geometry.PatchTopology(ReferenceFE{D},model;kwargs...)
+end
+
 # PatchTriangulation
 
 function Geometry.PatchTriangulation(model::DistributedDiscreteModel,ptopo::DistributedPatchTopology;kwargs...)
@@ -135,7 +140,7 @@ end
 
 struct DistributedPatchAssembler{A,B} <: Assembler
   assems :: A
-  axes :: NTuple{2,PRange{B}}
+  axes :: B
 end
 
 local_views(assem::DistributedPatchAssembler) = assem.assems

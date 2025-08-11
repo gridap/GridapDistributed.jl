@@ -539,6 +539,34 @@ function redistribute_indices(
   return old_ids_bis, red_old_ids
 end
 
+# Purpose of the following function:
+# If you have 
+#   - two partitions with the same local layout, but different global IDs (in this case indices and reindexed_indices), 
+#   - and two partitions with the same global IDs, but different local layouts (in this case indices and new_indices),
+# then this function returns the new partition with the same local layout as `new_indices`
+# and the same global IDs as `reindexed_indices`.
+# When is this useful? If we do not have a way of redistributing some partition through the mesh cells, 
+# for instance the matrix rows/columns, we can redistribute the dof ids and then reindex the partition
+# to have the matrix row/column layout. 
+# This allows us to redistribute algebraic arrays without the need to copy them in FE layout first.
+function reindex_partition(new_indices, indices, reindexed_indices)
+  l2g = PVector(map(collect∘local_to_global,reindexed_indices),indices)
+  new_l2g = pzeros(Int, new_indices)
+  t1 = consistent!(copy!(new_l2g, l2g))
+
+  l2o = PVector(map(collect∘local_to_owner,reindexed_indices),indices)
+  new_l2o = pzeros(Int32, new_indices)
+  t2 = consistent!(copy!(new_l2o, l2o))
+
+  wait(t1)
+  wait(t2)
+
+  reindexed_new_indices = map(reindexed_indices, partition(new_l2g), partition(new_l2o)) do reindexed_indices, new_l2g, new_l2o
+    LocalIndices(global_length(reindexed_indices), part_id(reindexed_indices), new_l2g, new_l2o)
+  end
+  return reindexed_new_indices
+end
+
 function redistribution_neighbors(indices, indices_red)
   nbors_rcv, nbors_snd = assembly_neighbors(indices_red)
   return nbors_snd, nbors_rcv
