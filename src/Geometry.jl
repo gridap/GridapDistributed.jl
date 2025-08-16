@@ -451,15 +451,19 @@ end
 # This object cannot implement the Triangulation interface in a strict sense
 """
 """
-struct DistributedTriangulation{Dc,Dp,A,B} <: GridapType
-  trians::A
-  model::B
+struct DistributedTriangulation{Dc,Dp,A,B,C} <: GridapType
+  trians  ::A
+  model   ::B
+  metadata::C
   function DistributedTriangulation(
     trians::AbstractArray{<:Triangulation{Dc,Dp}},
-    model::DistributedDiscreteModel) where {Dc,Dp}
+    model::DistributedDiscreteModel;
+    metadata = nothing  
+  ) where {Dc,Dp}
     A = typeof(trians)
     B = typeof(model)
-    new{Dc,Dp,A,B}(trians,model)
+    C = typeof(metadata)
+    new{Dc,Dp,A,B,C}(trians,model,metadata)
   end
 end
 
@@ -494,58 +498,65 @@ end
 
 # Triangulation constructors
 
-function Geometry.Triangulation(
-  model::DistributedDiscreteModel;kwargs...)
-  D=num_cell_dims(model)
+function Geometry.Triangulation(model::DistributedDiscreteModel;kwargs...)
+  D = num_cell_dims(model)
   Triangulation(no_ghost,ReferenceFE{D},model;kwargs...)
 end
 
-function Geometry.BoundaryTriangulation(
-  model::DistributedDiscreteModel;kwargs...)
+function Geometry.Triangulation(::Type{ReferenceFE{D}}, model::DistributedDiscreteModel;kwargs...) where D
+  Triangulation(no_ghost, ReferenceFE{D}, model; kwargs...)
+end
+
+function Geometry.BoundaryTriangulation(model::DistributedDiscreteModel;kwargs...)
   BoundaryTriangulation(no_ghost,model;kwargs...)
 end
 
-function Geometry.BoundaryTriangulation(
-  trian::DistributedTriangulation;kwargs...)
+function Geometry.BoundaryTriangulation(trian::DistributedTriangulation;kwargs...)
   BoundaryTriangulation(no_ghost,trian;kwargs...)
 end
 
-function Geometry.SkeletonTriangulation(
-  model::DistributedDiscreteModel;kwargs...)
+function Geometry.SkeletonTriangulation(model::DistributedDiscreteModel;kwargs...)
   SkeletonTriangulation(no_ghost,model;kwargs...)
 end
 
-function Geometry.SkeletonTriangulation(
-  trian::DistributedTriangulation;kwargs...)
+function Geometry.SkeletonTriangulation(trian::DistributedTriangulation;kwargs...)
   SkeletonTriangulation(no_ghost,trian;kwargs...)
+end
+
+function Geometry.Triangulation(portion, model::DistributedDiscreteModel;kwargs...)
+  D = num_cell_dims(model)
+  Triangulation(portion,ReferenceFE{D},model;kwargs...)
 end
 
 function Geometry.Triangulation(
   portion,::Type{ReferenceFE{Dt}},model::DistributedDiscreteModel{Dm};kwargs...) where {Dt,Dm}
   # Generate global ordering for the faces of dimension Dt (if needed)
   gids   = get_face_gids(model,Dt)
-  trians = map(local_views(model),partition(gids)) do model, gids
-    Triangulation(portion,gids,ReferenceFE{Dt},model;kwargs...)
+  trians = map(local_views(model)) do model
+    Triangulation(ReferenceFE{Dt},model;kwargs...)
   end
-  DistributedTriangulation(trians,model)
+  parent = DistributedTriangulation(trians,model)
+  return filter_cells_when_needed(portion,gids,parent)
 end
 
 function Geometry.BoundaryTriangulation(
   portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
   gids   = get_face_gids(model,Dc)
-  trians = map(local_views(model),partition(gids)) do model, gids
-    BoundaryTriangulation(portion,gids,model;kwargs...)
+  trians = map(local_views(model)) do model
+    BoundaryTriangulation(model;kwargs...)
   end
-  DistributedTriangulation(trians,model)
+  parent = DistributedTriangulation(trians,model)
+  return filter_cells_when_needed(portion,gids,parent)
 end
 
 function Geometry.SkeletonTriangulation(
   portion,model::DistributedDiscreteModel{Dc};kwargs...) where Dc
   gids   = get_face_gids(model,Dc)
-  trians = map(local_views(model),partition(gids)) do model, gids
-    SkeletonTriangulation(portion,gids,model;kwargs...)
+  trians = map(local_views(model)) do model
+    SkeletonTriangulation(model;kwargs...)
   end
-  DistributedTriangulation(trians,model)
+  parent = DistributedTriangulation(trians,model)
+  return filter_cells_when_needed(portion,gids,parent)
 end
 
 # NOTE: The following constructors require adding back the ghost cells: 
@@ -557,10 +568,11 @@ function Geometry.BoundaryTriangulation(
   model = get_background_model(trian)
   gids = get_cell_gids(model)
   ghosted_trian = add_ghost_cells(trian)
-  trians = map(local_views(ghosted_trian),partition(gids)) do trian, gids
-    BoundaryTriangulation(portion,gids,trian;kwargs...)
+  trians = map(local_views(ghosted_trian)) do trian
+    BoundaryTriangulation(trian;kwargs...)
   end
-  DistributedTriangulation(trians,model)
+  parent = DistributedTriangulation(trians,model)
+  return filter_cells_when_needed(portion,gids,parent)
 end
 
 function Geometry.SkeletonTriangulation(
@@ -569,32 +581,29 @@ function Geometry.SkeletonTriangulation(
   model = get_background_model(trian)
   gids = get_cell_gids(model)
   ghosted_trian = add_ghost_cells(trian)
-  trians = map(local_views(ghosted_trian),partition(gids)) do trian, gids
-    SkeletonTriangulation(portion,gids,trian;kwargs...)
+  trians = map(local_views(ghosted_trian)) do trian
+    SkeletonTriangulation(trian;kwargs...)
   end
-  DistributedTriangulation(trians,model)
+  parent = DistributedTriangulation(trians,model)
+  return filter_cells_when_needed(portion,gids,parent)
 end
 
-function Geometry.Triangulation(
-  portion,gids::AbstractLocalIndices, args...;kwargs...)
+function Geometry.Triangulation(portion,gids::AbstractLocalIndices, args...;kwargs...)
   trian = Triangulation(args...;kwargs...)
   filter_cells_when_needed(portion,gids,trian)
 end
 
-function Geometry.BoundaryTriangulation(
-  portion,gids::AbstractLocalIndices,args...;kwargs...)
+function Geometry.BoundaryTriangulation(portion,gids::AbstractLocalIndices,args...;kwargs...)
   trian = BoundaryTriangulation(args...;kwargs...)
   filter_cells_when_needed(portion,gids,trian)
 end
 
-function Geometry.SkeletonTriangulation(
-  portion,gids::AbstractLocalIndices,args...;kwargs...)
+function Geometry.SkeletonTriangulation(portion,gids::AbstractLocalIndices,args...;kwargs...)
   trian = SkeletonTriangulation(args...;kwargs...)
   filter_cells_when_needed(portion,gids,trian)
 end
 
-function Geometry.InterfaceTriangulation(
-  portion,gids::AbstractLocalIndices,args...;kwargs...)
+function Geometry.InterfaceTriangulation(portion,gids::AbstractLocalIndices,args...;kwargs...)
   trian = InterfaceTriangulation(args...;kwargs...)
   filter_cells_when_needed(portion,gids,trian)
 end
@@ -605,53 +614,29 @@ function Geometry.InterfaceTriangulation(a::DistributedTriangulation,b::Distribu
   DistributedTriangulation(trians,a.model)
 end
 
-function Geometry.Triangulation(
-  portion, model::DistributedDiscreteModel;kwargs...)
-  D = num_cell_dims(model)
-  Triangulation(portion,ReferenceFE{D},model;kwargs...)
+# Filtering cells dispatch
+
+@inline function filter_cells_when_needed(
+  portion::Union{WithGhost,FullyAssembledRows},cell_gids,trian)
+  return trian
 end
 
-function Geometry.Triangulation(
-  ::Type{ReferenceFE{D}}, model::DistributedDiscreteModel;kwargs...) where D
-  Triangulation(no_ghost, ReferenceFE{D}, model; kwargs...)
+@inline function filter_cells_when_needed(
+  portion::Union{NoGhost,SubAssembledRows},cell_gids,trian)
+  return remove_ghost_cells(trian,cell_gids)
 end
 
-function filter_cells_when_needed(
-  portion::WithGhost,
-  cell_gids::AbstractLocalIndices,
-  trian::Triangulation)
+# Removing ghost cells
 
-  trian
-end
-
-function filter_cells_when_needed(
-  portion::NoGhost,
-  cell_gids::AbstractLocalIndices,
-  trian::Triangulation)
-
-  remove_ghost_cells(trian,cell_gids)
-end
-
-function filter_cells_when_needed(
-  portion::FullyAssembledRows,
-  cell_gids::AbstractLocalIndices,
-  trian::Triangulation)
-
-  trian
-end
-
-function filter_cells_when_needed(
-  portion::SubAssembledRows,
-  cell_gids::AbstractLocalIndices,
-  trian::Triangulation)
-
-  remove_ghost_cells(trian,cell_gids)
+struct RemoveGhostsMetadata{A}
+  parents::A
 end
 
 function remove_ghost_cells(trian::DistributedTriangulation,gids)
   trians = map(remove_ghost_cells,local_views(trian),partition(gids))
   model  = get_background_model(trian)
-  return DistributedTriangulation(trians,model)
+  metadata = RemoveGhostsMetadata(local_views(trian))
+  return DistributedTriangulation(trians,model;metadata)
 end
 
 function remove_ghost_cells(trian::Triangulation,gids)
@@ -671,10 +656,8 @@ function remove_ghost_cells(
   remove_ghost_cells(glue,trian,gids)
 end
 
-function remove_ghost_cells(
-  trian::AdaptedTriangulation{Dc,Dp,<:Union{SkeletonTriangulation,BoundaryTriangulation}},gids
-) where {Dc,Dp}
-  remove_ghost_cells(trian.trian,gids)
+function remove_ghost_cells(trian::AdaptedTriangulation,gids)
+  AdaptedTriangulation(remove_ghost_cells(trian.trian,gids),trian.adapted_model)
 end
 
 function remove_ghost_cells(glue::FaceToFaceGlue,trian,gids)
@@ -717,29 +700,30 @@ function _find_owned_skeleton_facets(glue,gids)
     end
     tface_to_part[tface] = part
   end
-  findall(part->part==part_id(gids),tface_to_part)
+  return findall(isequal(part_id(gids)),tface_to_part)
 end
+
+# Adding ghost cells
 
 function add_ghost_cells(dtrian::DistributedTriangulation)
   dmodel = get_background_model(dtrian)
   add_ghost_cells(dmodel,dtrian)
 end
 
-function _covers_all_faces(
-  dmodel::DistributedDiscreteModel{Dm},
-  dtrian::DistributedTriangulation{Dt}
-) where {Dm,Dt}
-  covers_all_faces = map(local_views(dmodel),local_views(dtrian)) do model, trian
-    glue = get_glue(trian,Val(Dt))
-    @assert isa(glue,FaceToFaceGlue)
-    isa(glue.tface_to_mface,IdentityVector)
-  end
-  reduce(&,covers_all_faces,init=true)
+function add_ghost_cells(dmodel::DistributedDiscreteModel,dtrian::DistributedTriangulation)
+  add_ghost_cells(dtrian.metadata,dmodel,dtrian)
 end
 
+# We already have the parents saved up 
 function add_ghost_cells(
-  dmodel::DistributedDiscreteModel{Dm},
-  dtrian::DistributedTriangulation{Dt}
+  metadata::RemoveGhostsMetadata, dmodel::DistributedDiscreteModel{Dm}, dtrian::DistributedTriangulation{Dt}
+) where {Dm,Dt}
+  DistributedTriangulation(metadata.parents,dmodel)
+end
+
+# We have to reconstruct the ghosted triangulation
+function add_ghost_cells(
+  metadata, dmodel::DistributedDiscreteModel{Dm}, dtrian::DistributedTriangulation{Dt}
 ) where {Dm,Dt}
 
   tface_to_mface = map(local_views(dtrian)) do trian
@@ -775,6 +759,20 @@ function add_ghost_cells(
   end
   return DistributedTriangulation(trians,dmodel)
 end
+
+function _covers_all_faces(
+  dmodel::DistributedDiscreteModel{Dm},
+  dtrian::DistributedTriangulation{Dt}
+) where {Dm,Dt}
+  covers_all_faces = map(local_views(dmodel),local_views(dtrian)) do model, trian
+    glue = get_glue(trian,Val(Dt))
+    @assert isa(glue,FaceToFaceGlue)
+    isa(glue.tface_to_mface,IdentityVector)
+  end
+  reduce(&,covers_all_faces,init=true)
+end
+
+# Triangulation gids
 
 function generate_cell_gids(dtrian::DistributedTriangulation)
   dmodel = get_background_model(dtrian)
