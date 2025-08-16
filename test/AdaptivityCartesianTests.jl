@@ -35,6 +35,45 @@ function are_equal(a1::PVector,a2::PVector)
   are_equal(own_values(a1),own_values(a2))
 end
 
+function test_redistribution_new(redist_model, model, redist_space, space, glue)
+  
+  new_data_ids = partition(get_free_dof_ids(redist_space))
+  new_cell_to_new_lid = map(get_cell_dof_ids,local_views(redist_space))
+
+  if !isnothing(space)
+    old_data_ids = partition(get_free_dof_ids(space))
+    old_cell_to_old_lid = map(get_cell_dof_ids,local_views(space))
+  else
+    old_data_ids, old_cell_to_old_lid = nothing, nothing, nothing
+  end
+
+  old_ids, red_old_ids = GridapDistributed.redistribute_indices(
+    old_data_ids, old_cell_to_old_lid, new_cell_to_new_lid, redist_model, glue; reverse=false,
+  )
+
+  new_ids, red_new_ids = GridapDistributed.redistribute_indices(
+    new_data_ids, new_cell_to_new_lid, old_cell_to_old_lid, model, glue; reverse=true,
+  )
+
+  # Old -> New -> Old
+  x_old = consistent!(prandn(old_ids)) |> fetch
+  x_old_red = redistribute(x_old, red_old_ids) |> fetch
+
+  x_new = PVector(partition(x_old_red), new_ids)
+  x_new_red = redistribute(x_new, red_new_ids) |> fetch
+  @test are_equal(partition(x_old), partition(x_new_red))
+
+  # New -> Old -> New
+  x_new = consistent!(prandn(new_ids)) |> fetch
+  x_new_red = redistribute(x_new, red_new_ids) |> fetch
+
+  x_old = PVector(partition(x_new_red), old_ids)
+  x_old_red = redistribute(x_old, red_old_ids) |> fetch
+  @test are_equal(partition(x_new), partition(x_old_red))
+
+  return true
+end
+
 function test_redistribution(coarse_ranks, fine_ranks, model, redist_model, redist_glue)
   sol(x) = cos(2π*x[1]) + cos(2π*x[2]) # We need this for periodic tests to work
   reffe  = ReferenceFE(lagrangian,Float64,1)
@@ -76,6 +115,9 @@ function test_redistribution(coarse_ranks, fine_ranks, model, redist_model, redi
   if i_am_in(coarse_ranks)
     @test are_equal(free_values,tmp_free_values)
   end
+
+  # New machinery
+  test_redistribution_new(redist_model, model, redist_space, space, redist_glue)
 
   return true
 end

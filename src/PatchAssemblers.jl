@@ -13,27 +13,38 @@ end
 
 local_views(ptopo::DistributedPatchTopology) = ptopo.topos
 
-function Geometry.PatchTopology(topo::DistributedGridTopology,patch_cells::AbstractArray{<:Table})
-  topos = map(Geometry.PatchTopology,local_views(topo),patch_cells)
+function Geometry.PatchTopology(
+  topo::DistributedGridTopology,patch_cells::AbstractArray{<:Table},metadata=map(x -> nothing, patch_cells)
+)
+  topos = map(Geometry.PatchTopology,local_views(topo),patch_cells,metadata)
   DistributedPatchTopology(topos)
 end
 
-function Geometry.PatchTopology(model::DistributedDiscreteModel{Dc},Df=Dc) where Dc
+function Geometry.PatchTopology(
+  ::Type{ReferenceFE{Df}},model::DistributedDiscreteModel;
+  labels = get_face_labeling(model), tags = nothing
+) where Df
+  Dc = num_cell_dims(model)
   topo = get_grid_topology(model)
   face_gids = get_face_gids(model,Df)
-  patch_cells = map(local_views(topo),partition(face_gids)) do topo, indices
+  patch_cells, metadata = map(local_views(topo),local_views(labels),partition(face_gids)) do topo, labels, indices
     patch_cells = get_faces(topo,Df,Dc)
-    owned_patches = own_to_local(indices)
-    return patch_cells[owned_patches]
-  end
-  Geometry.PatchTopology(topo,patch_cells)
+    patch_roots = own_to_local(indices)
+    if !isnothing(tags)
+      mask = Geometry.get_face_mask(labels,tags,Df)
+      patch_roots = filter(p -> mask[p], patch_roots)
+    end
+    metadata = Geometry.StarPatchMetadata(Int8(Df),patch_roots)
+    return patch_cells[patch_roots], metadata
+  end |> tuple_of_arrays
+  return Geometry.PatchTopology(topo,patch_cells,metadata)
 end
 
 # PatchTriangulation
 
-function Geometry.PatchTriangulation(model::DistributedDiscreteModel,ptopo::DistributedPatchTopology)
+function Geometry.PatchTriangulation(model::DistributedDiscreteModel,ptopo::DistributedPatchTopology;kwargs...)
   trians = map(local_views(model),local_views(ptopo)) do model, ptopo
-    Geometry.PatchTriangulation(model,ptopo)
+    Geometry.PatchTriangulation(model,ptopo;kwargs...)
   end
   DistributedTriangulation(trians,model)
 end
@@ -41,6 +52,13 @@ end
 function Geometry.PatchBoundaryTriangulation(model::DistributedDiscreteModel,ptopo::DistributedPatchTopology;kwargs...)
   trians = map(local_views(model),local_views(ptopo)) do model, ptopo
     Geometry.PatchBoundaryTriangulation(model,ptopo;kwargs...)
+  end
+  DistributedTriangulation(trians,model)
+end
+
+function Geometry.PatchSkeletonTriangulation(model::DistributedDiscreteModel,ptopo::DistributedPatchTopology;kwargs...)
+  trians = map(local_views(model),local_views(ptopo)) do model, ptopo
+    Geometry.PatchSkeletonTriangulation(model,ptopo;kwargs...)
   end
   DistributedTriangulation(trians,model)
 end
@@ -115,19 +133,22 @@ end
 
 # Patch assembly 
 
-struct DistributedPatchAssembler <: Assembler
-  assems :: AbstractArray{<:FESpaces.PatchAssembler}
+struct DistributedPatchAssembler{A,B} <: Assembler
+  assems :: A
+  axes :: NTuple{2,PRange{B}}
 end
 
 local_views(assem::DistributedPatchAssembler) = assem.assems
 
 function FESpaces.PatchAssembler(
-  ptopo::DistributedPatchTopology,trial::DistributedFESpace,test::DistributedFESpace
+  ptopo::DistributedPatchTopology,trial::DistributedFESpace,test::DistributedFESpace;kwargs...
 )
   assems = map(local_views(ptopo),local_views(trial),local_views(test)) do ptopo,trial,test
-    FESpaces.PatchAssembler(ptopo,trial,test)
+    FESpaces.PatchAssembler(ptopo,trial,test;kwargs...)
   end
-  DistributedPatchAssembler(assems)
+  rows = get_free_dof_ids(test)
+  cols = get_free_dof_ids(trial)
+  return DistributedPatchAssembler(assems,(rows,cols))
 end
 
 for func in (:assemble_matrix,:assemble_vector,:assemble_matrix_and_vector)
