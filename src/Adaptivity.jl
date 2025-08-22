@@ -733,3 +733,200 @@ function refine_cell_gids(
   end
   return refine_cell_gids(cmodel,fmodels,f_own_to_local)
 end
+
+# Coarsening for polytopal meshes
+#
+# We assume some properties of the coarsening:
+#   - The patch topology must the a partition of the owned fine cells, i.e 
+#       + All patches are disjoint
+#       + All owned fine cells are part of a patch
+#   - All patches are fully owned by a single processor. I.e we do NOT allow 
+#     patches that are split between multiple processors.
+# The second property is slightly restrictive, but I think it is very reasonable... allowing 
+# for split patches would add an insane amount of complexity to the code. Basically, 
+# this property means that we can always coarsen the owned fine cells locally, then 
+# communicate to find out ghosts. 
+# If we ever need to have split patches, one should instead re-distribute the model accordingly
+# and then coarsen.
+#
+# The main idea of the algorithm is as follows:
+#   1. First, we coarsen the owned part of the models
+#   2. We then create a global numering of the coarse cells
+#   3. We can use the above to build the cell-to-node connectivity
+#   4. We also need a global numbering of the coarse nodes, which we need to 
+#      communicate the model coordinates
+#   5. We can then create our coarse model
+function Adaptivity.coarsen(fmodel::DistributedDiscreteModel, ptopo::DistributedPatchTopology; return_glue=false)
+
+  # First, some preliminary checks
+  fgids = partition(get_cell_gids(fmodel))
+  map(local_views(ptopo), fgids) do ptopo, fids
+    patch_cells = Geometry.get_patch_cells(ptopo)
+    lcell_to_ocell = local_to_own(fids)
+    ocell_to_lcell = own_to_local(fids)
+    @check allunique(patch_cells.data) "Patches must not overlap"
+    @check all(c -> !iszero(lcell_to_ocell[c]), patch_cells.data) "All local patches must be fully owned"
+    @check issubset(ocell_to_lcell, patch_cells.data) "All owned cells must be part of a patch"
+  end
+
+  # 1. Local coarsening on the owned part of the model
+  own_polys, own_connectivity = map(local_views(fmodel), local_views(ptopo)) do fmodel, ptopo
+    Adaptivity.generate_patch_polytopes(fmodel,ptopo)
+  end |> tuple_of_arrays
+
+  # 2. Coarse cell gids
+  #  - Each processor can easily create the global numbering of their owned coarse cells.
+  #  - Through the fine cell ghosts, we have to communicate the ghost coarse cell gids, and
+  #    from that get the local-to-global mapping.
+  Dc = num_cell_dims(fmodel)
+  fcell_gids = partition(get_face_gids(fmodel, Dc))
+  n_own_ccells = map(Geometry.num_patches, local_views(ptopo))
+  n_cgids = sum(n_own_ccells)
+  first_cgid = scan(+,n_own_ccells,type=:exclusive,init=1)
+  fcell_to_cgid = map(local_views(ptopo), fcell_gids, first_cgid) do ptopo, fcell_gids, first_cgid
+    patch_cells = Geometry.get_patch_cells(ptopo)
+    fcell_to_cgid = zeros(Int, local_length(fcell_gids))
+    Arrays.flatten_partition!(fcell_to_cgid,patch_cells)
+    fcell_to_cgid .+= first_cgid - 1
+    return fcell_to_cgid
+  end
+  consistent!(PVector(fcell_to_cgid, fcell_gids)) |> wait
+
+  ccell_gids, fcell_to_ccell = map(fcell_gids, fcell_to_cgid, first_cgid, n_own_ccells) do fids, fcell_to_cgid, first_cgid, n_own_ccells
+    owner = part_id(fids)
+    own_range = first_cgid:(first_cgid+n_own_ccells-1)
+    c_own_to_global = collect(Int, own_range)
+    c_own_to_flid  = collect(Int32, indexin(c_own_to_global, fcell_to_cgid))
+
+    is_ghost(gid) = !iszero(gid) && (gid ∉ own_range)
+    c_ghost_to_global = filter!(is_ghost, unique(fcell_to_cgid))
+    c_ghost_to_flid  = collect(Int32, indexin(c_ghost_to_global, fcell_to_cgid))
+    c_ghost_to_owner = local_to_owner(fids)[c_ghost_to_flid]
+
+    own_cgids = OwnIndices(n_cgids, owner, c_own_to_global)
+    ghost_cgids = GhostIndices(n_cgids, c_ghost_to_global, c_ghost_to_owner)
+    cgids = OwnAndGhostIndices(own_cgids, ghost_cgids)
+
+    cgid_to_clid = global_to_local(cgids)
+    fcell_to_ccell = zeros(Int32, local_length(fids))
+    for (flid, cgid) in enumerate(fcell_to_cgid)
+      fcell_to_ccell[flid] = cgid_to_clid[cgid]
+    end
+    return cgids, fcell_to_ccell
+  end |> tuple_of_arrays
+
+  # 3 & 4. Coarse node gids:
+  #  - Each coarse node corresponds to a fine node. However: not all local coarse nodes 
+  #    are also local fine nodes. Therefore we will have to work with the 
+  #    global fine node ids to have a unique numbering.
+  #  - We will communicate the coarse-cell-to-fine-node-gid connectivity, then 
+  #    build a coarse node numbering from that.
+
+  # First: We communicate the number of nodes per coarse cell
+  ccell_to_nnodes = map(ccell_gids, own_connectivity) do ccids, own_connectivity
+    nnodes = zeros(Int32, local_length(ccids))
+    nnodes[own_to_local(ccids)] .= map(length, own_connectivity)
+    return nnodes
+  end
+  consistent!(PVector(ccell_to_nnodes, ccell_gids)) |> wait
+
+  # We communicate the connectivity: 
+  # For each coarse cell, the fine node gids in that cell
+  fnode_gids = partition(get_face_gids(fmodel, 0))
+  connectivity = map(
+    own_connectivity, ccell_to_nnodes, ccell_gids, fnode_gids
+  ) do own_connectivity, ccell_to_nnodes, ccids, fnids
+    fnode_local_to_global = local_to_global(fnids)
+    ptrs = pushfirst!(ccell_to_nnodes, 0)
+    Arrays.length_to_ptrs!(ptrs)  
+    data = zeros(Int32, ptrs[end]-1)
+    for (oid, lid) in enumerate(own_to_local(ccids))
+      node_lids = view(own_connectivity, oid)
+      node_gids = view(fnode_local_to_global,node_lids)
+      data[ptrs[lid]:(ptrs[lid+1]-1)] .= node_gids
+    end
+    return JaggedArray(data, ptrs)
+  end
+  consistent!(PVector(connectivity, ccell_gids)) |> wait
+  connectivity = map(c -> Table(c.data, c.ptrs), connectivity)
+
+  # We create a local numbering of the coarse nodes and renumber the connectivity.
+  # For later, we also return the local-to-local mapping of the fine nodes to coarse nodes.
+  n_cnodes, fnode_to_cnode = map(fnode_gids, connectivity) do fnids, conn
+    n_lid = 0
+    fgid_to_clid = Dict{Int,Int32}()
+    for k in eachindex(conn.data)
+      fgid = conn.data[k]
+      clid = get!(fgid_to_clid, fgid, n_lid + 1)
+      n_lid += (clid == n_lid + 1) # Increment if it's new
+      conn.data[k] = clid # Renumber the connectivity
+    end
+    fnode_to_cnode = zeros(Int32, local_length(fnids))
+    for (flid, fgid) in enumerate(local_to_global(fnids))
+      fnode_to_cnode[flid] = get!(fgid_to_clid,fgid,0)
+    end
+    return n_lid, fnode_to_cnode
+  end |> tuple_of_arrays
+
+  # Finally, we use pre-existing routines to generate the coarse node gids
+  cnode_gids = generate_gids(PRange(ccell_gids), connectivity, n_cnodes) |> partition
+
+  # Coarse node coordinates:
+  cnode_coords = map(local_views(fmodel), cnode_gids, fnode_to_cnode) do fmodel, cngids, fnode_to_cnode
+    @check issubset(own_to_local(cngids), fnode_to_cnode)
+    fnode_coords = Geometry.get_vertex_coordinates(get_grid_topology(fmodel))
+    cnode_coords = Vector{eltype(fnode_coords)}(undef, local_length(cngids))
+    for (flid, clid) in enumerate(fnode_to_cnode)
+      if clid > 0
+        cnode_coords[clid] = fnode_coords[flid] # Fill owned info
+      end
+    end
+    return cnode_coords
+  end
+  consistent!(PVector(cnode_coords, cnode_gids)) |> wait # Communicate coarse coords
+
+  # Coarse polytopes: 
+  # - We already have the owned polytopes from the local coarsening
+  # - We create the ghost polytopes from the connectivity and the coarse node coordinates
+  # TODO: The creation of 3D polyhedra requires a bit more information! This is the only thing missing for 3D.
+  @notimplementedif Dc != 2 "Coarsening is only implemented for 2D polytopal meshes"
+  polys = map(ccell_gids, connectivity, own_polys, cnode_coords) do ccids, conn, own_polys, cnode_coords
+    polys = Vector{eltype(own_polys)}(undef, local_length(ccids))
+    for (lid, oid) in enumerate(local_to_own(ccids))
+      if oid > 0
+        polys[lid] = own_polys[oid] # Owned polytope
+      else
+        polys[lid] = Polygon(cnode_coords[view(conn, lid)]) # Ghost polytope
+      end
+    end
+    return polys
+  end
+
+  # 5. We can finally create our coarse model
+  face_gids = Vector{PRange}(undef, Dc+1)
+  face_gids[end] = PRange(ccell_gids)
+  face_gids[1] = PRange(cnode_gids)
+  ctopo = GridapDistributed.DistributedGridTopology(
+    map(Geometry.PolytopalGridTopology, cnode_coords, connectivity, polys), face_gids
+  )
+  labels = Geometry.FaceLabeling(ctopo)
+  cmodels = map(local_views(ctopo), local_views(labels)) do ctopo, labels
+    cgrid = Geometry.PolytopalGrid(ctopo)
+    Geometry.PolytopalDiscreteModel(cgrid, ctopo, labels)
+  end
+  cmodel = GridapDistributed.DistributedDiscreteModel(cmodels, face_gids)
+  (!return_glue) && (return cmodel)
+
+  # If required, create the adaptivity glues
+  ftopo = get_grid_topology(fmodel)
+  glues = map(
+    ccell_gids, cnode_gids, fcell_to_ccell, fnode_to_cnode, local_views(ftopo), local_views(ctopo)
+  ) do ccids, cnids, fcell_to_ccell, fnode_to_cnode, ftopo, ctopo
+    ccell_to_fcell = Arrays.inverse_table(fcell_to_ccell, local_length(ccids))
+    cnode_to_fnode = find_inverse_index_map(fnode_to_cnode, local_length(cnids))
+    Adaptivity.generate_patch_adaptivity_glue(
+      ftopo, ctopo, fcell_to_ccell, ccell_to_fcell, fnode_to_cnode, cnode_to_fnode,
+    )
+  end
+  return cmodel, glues
+end

@@ -38,12 +38,25 @@ Geometry.num_point_dims(::Type{<:DistributedGrid{Dc,Dp}}) where {Dc,Dp} = Dp
 # This object cannot implement the GridTopology interface in a strict sense
 """
 """
-struct DistributedGridTopology{Dc,Dp,A} <: GridapType
+struct DistributedGridTopology{Dc,Dp,A,B} <: GridapType
   topos::A
-  function DistributedGridTopology(topos::AbstractArray{<:GridTopology{Dc,Dp}}) where {Dc,Dp}
+  face_gids::B
+  function DistributedGridTopology(
+    topos::AbstractArray{<:GridTopology{Dc,Dp}},
+    face_gids::AbstractArray{<:PRange}
+  ) where {Dc,Dp}
     A = typeof(topos)
-    new{Dc,Dp,A}(topos)
+    B = typeof(face_gids)
+    new{Dc,Dp,A,B}(topos,face_gids)
   end
+end
+
+function DistributedGridTopology(
+  topos::AbstractArray{<:GridTopology{Dc,Dp}}, cell_gids::PRange
+) where {Dc,Dp}
+  face_gids = Vector{PRange}(undef,Dc+1)
+  face_gids[Dc+1] = cell_gids
+  return DistributedGridTopology(topos,face_gids)
 end
 
 local_views(a::DistributedGridTopology) = a.topos
@@ -63,6 +76,39 @@ Geometry.num_cell_dims(::Type{<:DistributedGridTopology{Dc,Dp}}) where {Dc,Dp} =
 Geometry.num_point_dims(::DistributedGridTopology{Dc,Dp}) where {Dc,Dp} = Dp
 Geometry.num_point_dims(::Type{<:DistributedGridTopology{Dc,Dp}}) where {Dc,Dp} = Dp
 
+function get_cell_gids(topo::DistributedGridTopology{Dc}) where Dc
+  topo.face_gids[Dc+1]
+end
+
+function get_face_gids(topo::DistributedGridTopology,dim::Integer)
+  _setup_face_gids!(topo,dim)
+  return topo.face_gids[dim+1]
+end
+
+function _setup_face_gids!(topo::DistributedGridTopology{Dc},dim) where {Dc}
+  Gridap.Helpers.@check 0 <= dim <= Dc
+  if !isassigned(topo.face_gids,dim+1)
+    cell_gids = topo.face_gids[Dc+1]
+    nlfaces = map(local_views(topo)) do topo
+      num_faces(topo,dim)
+    end
+    cell_lfaces = map(local_views(topo)) do topo
+      get_faces(topo, Dc, dim)
+    end
+    topo.face_gids[dim+1] = generate_gids(cell_gids,cell_lfaces,nlfaces)
+  end
+end
+
+function Geometry.get_isboundary_face(topo::DistributedGridTopology, d::Integer)
+  face_gids = get_face_gids(topo, d)
+  is_local_boundary = map(local_views(topo)) do topo
+    get_isboundary_face(topo,d)
+  end
+  t = assemble!(&,PVector(is_local_boundary, partition(face_gids))) |> fetch |> consistent!
+  is_global_boundary = partition(fetch(t))
+  return is_global_boundary
+end
+
 """
 """
 struct DistributedFaceLabeling{A<:AbstractArray{<:FaceLabeling}}
@@ -77,17 +123,35 @@ function Geometry.add_tag_from_tags!(labels::DistributedFaceLabeling, name, tags
   end
 end
 
-# Dsitributed Discrete models
+function Geometry.FaceLabeling(topo::DistributedGridTopology)
+  D = num_cell_dims(topo)
+  labels = map(local_views(topo)) do topo
+    d_to_ndfaces = [ num_faces(topo,d) for d in 0:D ]
+    labels = FaceLabeling(d_to_ndfaces)
+    for d in 0:D
+      get_face_entity(labels,d) .= 1 # Interior as default
+    end
+    add_tag!(labels,"interior",[1])
+    add_tag!(labels,"boundary",[2])
+    return labels
+  end
+  for d in 0:D-1
+    dface_to_is_boundary = get_isboundary_face(topo,d) # Global boundary
+    map(labels,dface_to_is_boundary) do labels, dface_to_is_boundary
+      dface_to_entity = get_face_entity(labels,d)
+      dface_to_entity .+= dface_to_is_boundary
+    end
+  end
+  return labels
+end
+
+# Distributed Discrete models
 # We do not inherit from DiscreteModel on purpose.
 # This object cannot implement the DiscreteModel interface in a strict sense
 
 """
 """
 abstract type DistributedDiscreteModel{Dc,Dp} <: GridapType end
-
-function generate_gids(::DistributedDiscreteModel)
-  @abstractmethod
-end
 
 function get_cell_gids(model::DistributedDiscreteModel{Dc}) where Dc
   @abstractmethod
@@ -131,7 +195,7 @@ function Geometry.get_grid(model::DistributedDiscreteModel)
 end
 
 function Geometry.get_grid_topology(model::DistributedDiscreteModel)
-  DistributedGridTopology(map(get_grid_topology,local_views(model)))
+  DistributedGridTopology(map(get_grid_topology,local_views(model)),model.face_gids)
 end
 
 function Geometry.get_face_labeling(model::DistributedDiscreteModel)
@@ -146,16 +210,22 @@ struct GenericDistributedDiscreteModel{Dc,Dp,A,B,C} <: DistributedDiscreteModel{
   metadata::C
   function GenericDistributedDiscreteModel(
     models::AbstractArray{<:DiscreteModel{Dc,Dp}},
-    gids::PRange;
+    face_gids::AbstractArray{<:PRange};
     metadata = nothing
   ) where {Dc,Dp}
-    face_gids=Vector{PRange}(undef,Dc+1)
-    face_gids[Dc+1] = gids
     A = typeof(models)
     B = typeof(face_gids)
     C = typeof(metadata)
     new{Dc,Dp,A,B,C}(models,face_gids,metadata)
   end
+end
+
+function GenericDistributedDiscreteModel(
+  models::AbstractArray{<:DiscreteModel{Dc,Dp}}, gids::PRange; metadata = nothing
+) where {Dc,Dp}
+  face_gids = Vector{PRange}(undef,Dc+1)
+  face_gids[Dc+1] = gids
+  GenericDistributedDiscreteModel(models,face_gids;metadata)
 end
 
 # This is to support old API
@@ -177,17 +247,16 @@ end
 function _setup_face_gids!(dmodel::GenericDistributedDiscreteModel{Dc},dim) where {Dc}
   Gridap.Helpers.@check 0 <= dim <= Dc
   if !isassigned(dmodel.face_gids,dim+1)
-    mgids   = dmodel.face_gids[Dc+1]
+    cell_gids = dmodel.face_gids[Dc+1]
     nlfaces = map(local_views(dmodel)) do model
       num_faces(model,dim)
     end
     cell_lfaces = map(local_views(dmodel)) do model
-      topo  = get_grid_topology(model)
-      faces = get_faces(topo, Dc, dim)
+      topo = get_grid_topology(model)
+      get_faces(topo, Dc, dim)
     end
-    dmodel.face_gids[dim+1] = generate_gids(mgids,cell_lfaces,nlfaces)
+    dmodel.face_gids[dim+1] = generate_gids(cell_gids,cell_lfaces,nlfaces)
   end
-  return
 end
 
 # CartesianDiscreteModel
