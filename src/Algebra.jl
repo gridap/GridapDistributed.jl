@@ -198,6 +198,9 @@ function change_parts(::Union{Nothing,MPIVoidVector}, new_parts, defaults)
   return defaults
 end
 
+change_parts(f::Function, x, args...; kwargs...) = change_parts(f(x), args...; kwargs...)
+change_parts(f::Function, x::Nothing, args...; kwargs...) = change_parts(nothing, args...; kwargs...)
+
 function generate_subparts(parts::MPIArray,new_comm_size)
   root_comm = parts.comm
   root_size = MPI.Comm_size(root_comm)

@@ -458,7 +458,13 @@ function redistribute_array_by_cells(
 )
   if !isnothing(old_cell_to_old_lid) && !isnothing(old_lid_to_data)
     old_cell_to_old_data = map(old_cell_to_old_lid, old_lid_to_data) do old_cell_to_old_lid, old_lid_to_data
-      jagged_array(view(old_lid_to_data,old_cell_to_old_lid.data), old_cell_to_old_lid.ptrs)
+      data = zeros(eltype(old_lid_to_data),length(old_cell_to_old_lid.data))
+      for (k,lid) in enumerate(old_cell_to_old_lid.data)
+        if lid > 0 # Avoid Dirichlet dofs
+          data[k] = old_lid_to_data[lid]
+        end
+      end
+      jagged_array(data, old_cell_to_old_lid.ptrs)
     end
   else
     old_cell_to_old_data = nothing
@@ -469,8 +475,10 @@ function redistribute_array_by_cells(
   if !isnothing(new_cell_to_new_lid) && !isnothing(new_cell_to_old_data)
     new_lid_to_old_data = map(new_cell_to_new_lid, new_cell_to_old_data) do new_cell_to_new_lid, new_cell_to_old_data
       new_lid_to_old_data = zeros(T, maximum(new_cell_to_new_lid.data;init=0))
-      for (new_lid, old_data) in zip(new_cell_to_new_lid, new_cell_to_old_data)
-        new_lid_to_old_data[new_lid] .= old_data
+      for (new_lid, old_data) in zip(new_cell_to_new_lid.data, new_cell_to_old_data.data)
+        if new_lid > 0 # Avoid Dirichlet dofs
+          new_lid_to_old_data[new_lid] = old_data
+        end
       end
       return new_lid_to_old_data
     end
