@@ -244,19 +244,12 @@ const DistributedCartesianDiscreteModel{Dc,Dp,A,B,C} =
 function Geometry.CartesianDiscreteModel(
   ranks::AbstractArray{<:Integer}, # Distributed array with the rank IDs
   parts::NTuple{N,<:Integer},      # Number of ranks (parts) in each direction
-  args...; kwargs...
+  args...; ghost = map(i -> true, parts), kwargs...
 ) where N
-  desc = CartesianDescriptor(args...;isperiodic=isperiodic,kwargs...)
-  nc = desc.partition
-  msg = """
-    A CartesianDiscreteModel needs a Cartesian subdomain partition
-    of the right dimensions.
-  """
-  @assert N == length(nc) msg
   desc = CartesianDescriptor(args...;kwargs...)
   @check N == length(desc.partition)
   @check prod(parts) == length(ranks)
-  pdesc = DistributedCartesianDescriptor(ranks,parts,desc)
+  pdesc = DistributedCartesianDescriptor(ranks,parts,desc,ghost)
   return CartesianDiscreteModel(pdesc)
 end
 
@@ -271,7 +264,7 @@ function Geometry.CartesianDiscreteModel(pdesc::DistributedCartesianDescriptor)
     ranks = pdesc.ranks
     parts = pdesc.mesh_partition
     ghost = pdesc.ghost
-    cell_indices = uniform_partition(ranks,parts,nc,ghost,isperiodic)
+    cell_indices = _uniform_partition(ranks,parts,nc,ghost,isperiodic)
     gcids  = CartesianIndices(nc)
     models = map(cell_indices) do cell_indices
       cmin = gcids[first(cell_indices)]
