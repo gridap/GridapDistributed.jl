@@ -457,7 +457,7 @@ function Geometry.DiscreteModel(
   @assert size(cell_graph,1) == ncells
   @assert size(cell_graph,2) == ncells
 
-  lcell_to_cell, lcell_to_part, gid_to_part = map(parts) do part
+  lcell_to_cell, lcell_to_part = map(parts) do part
     cell_to_mask = fill(false,ncells)
     icell_to_jcells_ptrs = cell_graph.colptr
     icell_to_jcells_data = cell_graph.rowval
@@ -473,9 +473,8 @@ function Geometry.DiscreteModel(
       end
     end
     lcell_to_cell = findall(cell_to_mask)
-    lcell_to_part = zeros(Int32,length(lcell_to_cell))
-    lcell_to_part .= cell_to_part[lcell_to_cell]
-    lcell_to_cell, lcell_to_part, cell_to_part
+    lcell_to_part = collect(Int32,view(cell_to_part,lcell_to_cell))
+    lcell_to_cell, lcell_to_part
   end |> tuple_of_arrays
 
   partition = map(parts,lcell_to_cell,lcell_to_part) do part, lcell_to_cell, lcell_to_part
@@ -506,6 +505,15 @@ function Geometry.UnstructuredDiscreteModel(model::GenericDistributedDiscreteMod
   return GenericDistributedDiscreteModel(
     map(UnstructuredDiscreteModel,local_views(model)),
     get_cell_gids(model),
+  )
+end
+
+# PolytopalDiscreteModel
+
+function Geometry.PolytopalDiscreteModel(model::GenericDistributedDiscreteModel)
+  return GenericDistributedDiscreteModel(
+    map(Geometry.PolytopalDiscreteModel,local_views(model)),
+    get_cell_gids(model)
   )
 end
 
