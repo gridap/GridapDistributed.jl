@@ -48,6 +48,7 @@ function all_tests(distribute,parts)
     TestApp.AdaptivityCartesianTests.main(distribute)
     TestApp.AdaptivityMultiFieldTests.main(distribute)
     TestApp.AdaptivityUnstructuredTests.main(distribute)
+    TestApp.PolytopalCoarseningTests.main(distribute,parts)
     PArrays.toc!(t,"Adaptivity")
   end
 

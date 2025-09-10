@@ -16,6 +16,7 @@ module TestApp
   include("../../AdaptivityCartesianTests.jl")
   include("../../AdaptivityUnstructuredTests.jl")
   include("../../AdaptivityMultiFieldTests.jl")
+  include("../../PolytopalCoarseningTests.jl")
   include("../../BlockSparseMatrixAssemblersTests.jl")
   include("../../VisualizationTests.jl")
   include("../../AutodiffTests.jl")
