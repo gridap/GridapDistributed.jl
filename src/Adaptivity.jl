@@ -909,6 +909,7 @@ function Adaptivity.coarsen(fmodel::DistributedDiscreteModel, ptopo::Distributed
   ctopo = GridapDistributed.DistributedGridTopology(
     map(Geometry.PolytopalGridTopology, cnode_coords, connectivity, polys), face_gids
   )
+  _setup_consistent_faces!(ctopo)
   labels = Geometry.FaceLabeling(ctopo)
   cmodels = map(local_views(ctopo), local_views(labels)) do ctopo, labels
     cgrid = Geometry.PolytopalGrid(ctopo)

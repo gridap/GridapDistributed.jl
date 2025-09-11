@@ -99,13 +99,72 @@ function _setup_face_gids!(topo::DistributedGridTopology{Dc},dim) where {Dc}
   end
 end
 
+# In some cases, the orientation of locally computed faces is NOT consistent. 
+# The following functions can be used to check for consistent orientation and fix it.
+function _setup_consistent_faces!(topo::DistributedGridTopology)
+  # Setting up consistent face-to-vertex maps should be enough
+  # to guarantee consistent face orientation if it is done before 
+  # any other face-to-face map is setup. So we should call this function 
+  # just after creating the new models.
+  D = num_cell_dims(topo)
+  for dimfrom in 1:D-1
+    _setup_consistent_faces!(topo, dimfrom, 0)
+  end
+end
+
+function _setup_consistent_faces!(topo::DistributedGridTopology, dimfrom::Integer, dimto::Integer)
+  @check 0 <= dimto <= dimfrom <= num_cell_dims(topo)
+  gids_from = partition(get_face_gids(topo, dimfrom))
+  gids_to   = partition(get_face_gids(topo, dimto))
+  lfrom_to_gto = map(local_views(topo), gids_to) do topo, gids_to
+    lfrom_to_lto = get_faces(topo, dimfrom, dimto)
+    to_global!(lfrom_to_lto.data, gids_to)
+    JaggedArray(lfrom_to_lto.data, lfrom_to_lto.ptrs)
+  end
+  wait(consistent!(PVector(lfrom_to_gto, gids_from)))
+  map(lfrom_to_gto, gids_to) do lfrom_to_gto, gids_to
+    to_local!(lfrom_to_gto.data, gids_to)
+  end
+  return nothing
+end
+
+function isconsistent_faces(topo::DistributedGridTopology)
+  D = num_cell_dims(topo)
+  for dimfrom in 1:D-1
+    for dimto in 0:dimfrom-1
+      !isconsistent_faces(topo, dimfrom, dimto) && return false
+    end
+  end
+  return true
+end
+
+function isconsistent_faces(topo::DistributedGridTopology, dimfrom::Integer, dimto::Integer)
+  @check 0 <= dimto <= dimfrom <= num_cell_dims(topo)
+  gids_from = partition(get_face_gids(topo, dimfrom))
+  gids_to   = partition(get_face_gids(topo, dimto))
+
+  lfrom_to_lto = map(local_views(topo)) do topo
+    get_faces(topo, dimfrom, dimto)
+  end
+  lfrom_to_gto = map(lfrom_to_lto, gids_to) do lfrom_to_lto, gids_to
+    lto_gto = local_to_global(gids_to)
+    JaggedArray(lto_gto[lfrom_to_lto.data],lfrom_to_lto.ptrs)
+  end
+  wait(consistent!(PVector(lfrom_to_gto, gids_from)))
+  isconsistent = map(lfrom_to_lto, lfrom_to_gto, gids_to) do lfrom_to_lto, lfrom_to_gto, gids_to
+    gto_to_lto = global_to_local(gids_to)
+    lfrom_to_lto.data == gto_to_lto[lfrom_to_gto.data]
+  end
+  return reduce(&, isconsistent)
+end
+
 function Geometry.get_isboundary_face(topo::DistributedGridTopology, d::Integer)
   face_gids = get_face_gids(topo, d)
   is_local_boundary = map(local_views(topo)) do topo
     get_isboundary_face(topo,d)
   end
-  t = assemble!(&,PVector(is_local_boundary, partition(face_gids))) |> fetch |> consistent!
-  is_global_boundary = partition(fetch(t))
+  t = assemble!(&,PVector(is_local_boundary, partition(face_gids)))
+  is_global_boundary = partition(fetch(consistent!(fetch(t))))
   return is_global_boundary
 end
 
@@ -515,10 +574,12 @@ end
 # PolytopalDiscreteModel
 
 function Geometry.PolytopalDiscreteModel(model::GenericDistributedDiscreteModel)
-  return GenericDistributedDiscreteModel(
+  pmodel = GenericDistributedDiscreteModel(
     map(Geometry.PolytopalDiscreteModel,local_views(model)),
     get_cell_gids(model)
   )
+  _setup_consistent_faces!(get_grid_topology(pmodel))
+  return pmodel
 end
 
 # Simplexify

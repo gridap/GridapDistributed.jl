@@ -1,5 +1,6 @@
 module PolytopalCoarseningTests
 
+using Test
 using Gridap
 using GridapDistributed, PartitionedArrays
 
@@ -28,7 +29,30 @@ function main(distribute, np)
   ptopo = Geometry.PatchTopology(get_grid_topology(fmodel), patch_cells)
 
   cmodel, glues = Adaptivity.coarsen(fmodel,ptopo; return_glue=true)
+  @test GridapDistributed.isconsistent_faces(get_grid_topology(cmodel))
   #writevtk(cmodel, "tmp/cmodel")
 end
+
+# ranks = collect(1:2)
+# 
+# fmodel_serial = Geometry.PolytopalDiscreteModel(CartesianDiscreteModel((0,1,0,1),(4,4)))
+# cmodel_serial = Adaptivity.coarsen(
+#   fmodel_serial, Geometry.PatchTopology(
+#     get_grid_topology(fmodel_serial), Table([[1,2,5,6],[3,4,7,8],[9,10,13,14],[11,12,15,16]])
+#   )
+# )
+# fmodel_good = DiscreteModel(ranks,fmodel_serial,[1,1,2,2,1,1,2,2,1,1,2,2,1,1,2,2])
+# cmodel_good = DiscreteModel(ranks,cmodel_serial,[1,2,1,2])
+# 
+# fmodel = Geometry.PolytopalDiscreteModel(CartesianDiscreteModel(ranks,(2,1),(0,1,0,1),(4,4)))
+# cmodel = Adaptivity.coarsen(
+#   fmodel, Geometry.PatchTopology(
+#     get_grid_topology(fmodel),[Table([[1,2,4,5],[7,8,10,11]]),Table([[2,3,5,6],[8,9,11,12]])]
+#   )
+# )
+# 
+# GridapDistributed.isconsistent_faces(get_grid_topology(fmodel))
+# GridapDistributed.isconsistent_faces(get_grid_topology(cmodel))
+
 
 end # module
