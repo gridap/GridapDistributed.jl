@@ -90,6 +90,7 @@ MultiField.MultiFieldStyle(a::DistributedMultiFieldFESpace) = MultiField.MultiFi
 
 local_views(a::DistributedMultiFieldFESpace) = a.part_fe_space
 MultiField.num_fields(m::DistributedMultiFieldFESpace) = length(m.field_fe_space)
+MultiField.num_fields(m::DistributedFESpace) = 1 # Default for single-field
 Base.iterate(m::DistributedMultiFieldFESpace) = iterate(m.field_fe_space)
 Base.iterate(m::DistributedMultiFieldFESpace,state) = iterate(m.field_fe_space,state)
 Base.getindex(m::DistributedMultiFieldFESpace,field_id::Integer) = m.field_fe_space[field_id]
@@ -101,6 +102,24 @@ end
 
 function FESpaces.get_free_dof_ids(fs::DistributedMultiFieldFESpace)
   fs.gids
+end
+
+function BlockArrays.blocks(f::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle})
+  block_gids   = blocks(get_free_dof_ids(f))
+  block_ranges = MultiField.get_block_ranges(MultiField.get_block_parameters(MultiFieldStyle(f))...)
+  block_spaces = map(block_ranges,block_gids) do range, gids
+    if (length(range) == 1) 
+      space = f[range[1]]
+    else
+      global_sf_spaces = f.field_fe_space[range]
+      local_sf_spaces  = to_parray_of_arrays(map(local_views,global_sf_spaces))
+      local_mf_spaces  = map(MultiFieldFESpace,local_sf_spaces)
+      vector_type = _find_vector_type(local_mf_spaces,gids)
+      space = DistributedMultiFieldFESpace(global_sf_spaces,local_mf_spaces,gids,vector_type)
+    end
+    space
+  end
+  return block_spaces
 end
 
 function MultiField.restrict_to_field(

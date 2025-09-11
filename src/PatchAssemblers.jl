@@ -45,6 +45,10 @@ function Geometry.PatchTopology(model::DistributedDiscreteModel;kwargs...)
   Geometry.PatchTopology(ReferenceFE{D},model;kwargs...)
 end
 
+function Geometry.get_patch_cells(ptopo::DistributedPatchTopology)
+  map(Geometry.get_patch_cells,local_views(ptopo))
+end
+
 # PatchTriangulation
 
 function Geometry.PatchTriangulation(model::DistributedDiscreteModel,ptopo::DistributedPatchTopology;kwargs...)
@@ -127,13 +131,19 @@ function Arrays.evaluate!(
 )
   n_fields = num_fields(v)
   mf_fields = map(evaluate,local_views(k),local_views(v))
-  sf_fields = map(1:n_fields) do field 
-    sf_fields = map(f -> f[field], mf_fields)
-    trians = map(get_triangulation,sf_fields)
+  if eltype(mf_fields) <: MultiField.MultiFieldCellField
+    sf_fields = map(1:n_fields) do field 
+      sf_fields = map(f -> f[field], mf_fields)
+      trians = map(get_triangulation,sf_fields)
+      trian = DistributedTriangulation(trians,k.model)
+      DistributedCellField(sf_fields,trian)
+    end
+    return DistributedMultiFieldCellField(sf_fields, mf_fields)
+  else
+    trians = map(get_triangulation,mf_fields)
     trian = DistributedTriangulation(trians,k.model)
-    DistributedCellField(sf_fields,trian)
+    return DistributedCellField(mf_fields,trian)
   end
-  return DistributedMultiFieldCellField(sf_fields, mf_fields)
 end
 
 # Patch assembly 
@@ -231,6 +241,35 @@ end
 
 # merge_assembly_data
 
+function merge_assembly_data(data::AbstractArray...)
+  map(FESpaces.merge_assembly_data,data...)
+end
+
 function FESpaces.merge_assembly_matvec_data(data::AbstractArray...)
   map(FESpaces.merge_assembly_matvec_data,data...)
+end
+
+
+function FESpaces.collect_and_merge_cell_matrix(assem::DistributedPatchAssembler,contributions...)
+  data = ()
+  for c in contributions
+    data = (data..., FESpaces.collect_patch_cell_matrix(assem,c...))
+  end
+  FESpaces.merge_assembly_data(data...)
+end
+
+function FESpaces.collect_and_merge_cell_vector(assem::DistributedPatchAssembler,contributions...)
+  data = ()
+  for c in contributions
+    data = (data..., FESpaces.collect_patch_cell_vector(assem,c...))
+  end
+  FESpaces.merge_assembly_data(data...)
+end
+
+function FESpaces.collect_and_merge_cell_matrix_and_vector(assem::DistributedPatchAssembler,contributions...)
+  data = ()
+  for c in contributions
+    data = (data..., FESpaces.collect_patch_cell_matrix_and_vector(assem,c...))
+  end
+  FESpaces.merge_assembly_matvec_data(data...)
 end
