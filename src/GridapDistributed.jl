@@ -25,6 +25,7 @@ using FillArrays
 using BlockArrays
 using LinearAlgebra
 using ForwardDiff
+using CircularArrays
 
 import Gridap.TensorValues: inner, outer, double_contraction, symmetric_part
 import LinearAlgebra: det, tr, cross, dot, ⋅, diag
@@ -43,6 +44,8 @@ export with_ghost, no_ghost
 
 export redistribute
 
+include("PArraysExtras.jl")
+
 include("BlockPartitionedArrays.jl")
 
 include("Algebra.jl")
@@ -60,6 +63,8 @@ include("DivConformingFESpaces.jl")
 include("MultiField.jl")
 
 include("ODEs.jl")
+
+include("Redistribution.jl")
 
 include("Adaptivity.jl")
 

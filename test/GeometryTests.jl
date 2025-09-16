@@ -109,6 +109,9 @@ function main(distribute,parts)
   Λs = Skeleton(Ωs)
   Γs = Boundary(Ωs)
 
+  # Multiple ghost layers
+  model = CartesianDiscreteModel(ranks,parts,domain,cells;ghost=map(i->2,parts))
+
 end
 
 function test_local_part_face_labelings_consistency(lmodel::CartesianDiscreteModel{D},gids,gmodel) where {D}
