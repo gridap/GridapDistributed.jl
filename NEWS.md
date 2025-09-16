@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added support for multiple ghost layers on cartesian models. Since PR[#182](https://github.com/gridap/GridapDistributed.jl/pull/182).
+
+## [0.4.9] - 2025-08-08
+
+### Added
+
+- Added a new framework for redistributing dofs, which is more efficient and flexible than the previous one. Since PR[#179](https://github.com/gridap/GridapDistributed.jl/pull/179).
+
 ### Fixed
 
 - Fixed issue [#177](https://github.com/gridap/GridapDistributed.jl/issues/177) and [#170](https://github.com/gridap/GridapDistributed.jl/issues/170). Since PR[#180](https://github.com/gridap/GridapDistributed.jl/pull/180).
