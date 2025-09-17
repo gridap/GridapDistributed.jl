@@ -67,36 +67,26 @@ function FESpaces.gather_free_and_dirichlet_values(f::DistributedFESpace,cell_va
   return free_values, dirichlet_values
 end
 
-function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_prange)
-  map(cell_wise_vector,
-          dof_wise_vector,
-          cell_to_ldofs,
-          partition(cell_prange)) do cwv,dwv,cell_to_ldofs,indices
+function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_ids)
+  map(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_ids) do cwv,dwv,cell_to_ldofs,cell_ids
     cache  = array_cache(cell_to_ldofs)
-    ncells = length(cell_to_ldofs)
-    ptrs = cwv.ptrs
-    data = cwv.data
-    cell_own_to_local = own_to_local(indices)
-    for cell in cell_own_to_local
+    for cell in cell_ids
       ldofs = getindex!(cache,cell_to_ldofs,cell)
-      p = ptrs[cell]-1
+      p = cwv.ptrs[cell]-1
       for (i,ldof) in enumerate(ldofs)
         if ldof > 0
-          data[i+p] = dwv[ldof]
+          cwv.data[i+p] = dwv[ldof]
         end
       end
     end
   end
+  return cell_wise_vector
 end
 
-function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_range)
-  map(dof_wise_vector,
-      cell_wise_vector,
-      cell_to_ldofs,
-      partition(cell_range)) do dwv,cwv,cell_to_ldofs,indices
+function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_ids)
+  map(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_ids) do dwv,cwv,cell_to_ldofs,cell_ids
     cache = array_cache(cell_to_ldofs)
-    cell_ghost_to_local = ghost_to_local(indices)
-    for cell in cell_ghost_to_local
+    for cell in cell_ids
       ldofs = getindex!(cache,cell_to_ldofs,cell)
       p = cwv.ptrs[cell]-1
       for (i,ldof) in enumerate(ldofs)
@@ -106,25 +96,24 @@ function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,c
       end
     end
   end
+  return dof_wise_vector
 end
 
-function dof_wise_to_cell_wise(dof_wise_vector,cell_to_ldofs,cell_prange)
-  cwv = map(cell_to_ldofs) do cell_to_ldofs
-    cache = array_cache(cell_to_ldofs)
-    ncells = length(cell_to_ldofs)
-    ptrs = Vector{Int32}(undef,ncells+1)
-    for cell in 1:ncells
-      ldofs = getindex!(cache,cell_to_ldofs,cell)
-      ptrs[cell+1] = length(ldofs)
-    end
-    PArrays.length_to_ptrs!(ptrs)
-    ndata = ptrs[end]-1
-    data = Vector{Int}(undef,ndata)
-    data .= -1
+function allocate_cell_wise_vector(T, cell_to_lids)
+  map(cell_to_lids) do cell_to_lids
+    ptrs = Arrays.generate_ptrs(cell_to_lids)
+    data = zeros(T,ptrs[end]-1)
     JaggedArray(data,ptrs)
   end
-  dof_wise_to_cell_wise!(cwv,dof_wise_vector,cell_to_ldofs,cell_prange)
-  cwv
+end
+
+function dof_wise_to_cell_wise(
+  dof_wise_vector, cell_to_ldofs, cell_ids; 
+  T = eltype(eltype(dof_wise_vector))
+)
+  cwv = allocate_cell_wise_vector(T,cell_to_ldofs)
+  dof_wise_to_cell_wise!(cwv,dof_wise_vector,cell_to_ldofs,cell_ids)
+  return cwv
 end
 
 function fetch_vector_ghost_values_cache(vector_partition,partition)
@@ -139,128 +128,92 @@ end
 function generate_gids(
   cell_range::PRange,
   cell_to_ldofs::AbstractArray{<:AbstractArray},
-  nldofs::AbstractArray{<:Integer})
+  nldofs::AbstractArray{<:Integer}
+)
+  ranks = linear_indices(partition(cell_range))
+  cell_ldofs_to_data = allocate_cell_wise_vector(Int, cell_to_ldofs)
+  cache_fetch = fetch_vector_ghost_values_cache(cell_ldofs_to_data,partition(cell_range))
 
   # Find and count number owned dofs
   ldof_to_owner, nodofs = map(partition(cell_range),cell_to_ldofs,nldofs) do indices,cell_to_ldofs,nldofs
     ldof_to_owner = fill(Int32(0),nldofs)
     cache = array_cache(cell_to_ldofs)
-    lcell_to_owner = local_to_owner(indices)
-    for cell in 1:length(cell_to_ldofs)
-      owner = lcell_to_owner[cell]
+    for (cell, owner) in enumerate(local_to_owner(indices))
       ldofs = getindex!(cache,cell_to_ldofs,cell)
       for ldof in ldofs
-        if ldof>0
-          # TODO this simple approach concentrates dofs
-          # in the last part and creates imbalances
+        if ldof > 0
+          # NOTE: this approach concentrates dofs in the last processor
           ldof_to_owner[ldof] = max(owner,ldof_to_owner[ldof])
         end
       end
     end
-    me = part_id(indices) 
-    nodofs = count(p->p==me,ldof_to_owner)
+    nodofs = count(isequal(part_id(indices)),ldof_to_owner)
     ldof_to_owner, nodofs
   end |> tuple_of_arrays
 
-  cell_ldofs_to_part = dof_wise_to_cell_wise(ldof_to_owner,
-                                              cell_to_ldofs,
-                                              cell_range)
-
-  # Note1 : this call potentially updates cell_prange with the 
-  #         info required to exchange info among nearest neighbours
-  #         so that it can be re-used in the future for other exchanges
-
-  # Note2 : we need to call reverse() as the senders and receivers are 
-  #         swapped in the AssemblyCache of partition(cell_range)
-
-  # Exchange the dof owners
-  cache_fetch=fetch_vector_ghost_values_cache(cell_ldofs_to_part,partition(cell_range))
-  fetch_vector_ghost_values!(cell_ldofs_to_part,cache_fetch) |> wait
-  
-  cell_wise_to_dof_wise!(ldof_to_owner,
-                         cell_ldofs_to_part,
-                         cell_to_ldofs,
-                         cell_range)
-
   # Find the global range of owned dofs
   first_gdof = scan(+,nodofs,type=:exclusive,init=one(eltype(nodofs)))
-  
-  # Distribute gdofs to owned ones
-  ldof_to_gdof = map(first_gdof,ldof_to_owner,partition(cell_range)) do first_gdof,ldof_to_owner,indices
-    me = part_id(indices)
+
+  # Exchange the dof owners. Cell owner always has correct dof owner.
+  cell_ldofs_to_owner = dof_wise_to_cell_wise!(
+    cell_ldofs_to_data,ldof_to_owner,cell_to_ldofs,own_to_local(cell_range)
+  )
+  fetch_vector_ghost_values!(cell_ldofs_to_owner,cache_fetch) |> wait
+  cell_wise_to_dof_wise!(
+    ldof_to_owner,cell_ldofs_to_owner,cell_to_ldofs,ghost_to_local(cell_range)
+  )
+
+  # Fill owned gids
+  ldof_to_gdof = map(ranks,first_gdof,ldof_to_owner) do rank,first_gdof,ldof_to_owner
     offset = first_gdof-1
-    ldof_to_gdof = Vector{Int}(undef,length(ldof_to_owner))
+    ldof_to_gdof = zeros(Int,length(ldof_to_owner))
     odof = 0
     for (ldof,owner) in enumerate(ldof_to_owner)
-      if owner == me
+      if owner == rank
         odof += 1
-        ldof_to_gdof[ldof] = odof
-      else
-        ldof_to_gdof[ldof] = 0
-      end
-    end
-    for (ldof,owner) in enumerate(ldof_to_owner)
-      if owner == me
-        ldof_to_gdof[ldof] += offset
+        ldof_to_gdof[ldof] = odof + offset
       end
     end
     ldof_to_gdof
   end
 
-  # Create cell-wise global dofs
-  cell_to_gdofs = dof_wise_to_cell_wise(ldof_to_gdof,
-                                        cell_to_ldofs,
-                                        cell_range)
-
-  # Exchange the global dofs
+  # Exchange gids
+  cell_to_gdofs = dof_wise_to_cell_wise!(
+    cell_ldofs_to_data,ldof_to_gdof,cell_to_ldofs,own_to_local(cell_range)
+  )
   fetch_vector_ghost_values!(cell_to_gdofs,cache_fetch) |> wait
 
-  # Distribute global dof ids also to ghost
-  map(cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_owner,partition(cell_range)) do cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_owner,indices
-    gdof = 0
+  # Fill ghost gids with exchanged information
+  map(
+    cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_owner,partition(cell_range)
+  ) do cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_owner,indices
     cache = array_cache(cell_to_ldofs)
-    cell_ghost_to_local = ghost_to_local(indices)
-    cell_local_to_owner = local_to_owner(indices)
-    for cell in cell_ghost_to_local
-      ldofs = getindex!(cache,cell_to_ldofs,cell)
+    lcell_to_owner = local_to_owner(indices)
+    for cell in ghost_to_local(indices)
       p = cell_to_gdofs.ptrs[cell]-1
+      ldofs = getindex!(cache,cell_to_ldofs,cell)
+      cell_owner = lcell_to_owner[cell]
       for (i,ldof) in enumerate(ldofs)
-        if ldof > 0 && ldof_to_owner[ldof] == cell_local_to_owner[cell]
+        if (ldof > 0) && isequal(ldof_to_owner[ldof],cell_owner)
           ldof_to_gdof[ldof] = cell_to_gdofs.data[i+p]
         end
       end
     end
   end
 
-  dof_wise_to_cell_wise!(cell_to_gdofs,
-                         ldof_to_gdof,
-                         cell_to_ldofs,
-                         cell_range)
-
+  dof_wise_to_cell_wise!(cell_to_gdofs,ldof_to_gdof,cell_to_ldofs,own_to_local(cell_range))
   fetch_vector_ghost_values!(cell_to_gdofs,cache_fetch) |> wait
-
-  cell_wise_to_dof_wise!(ldof_to_gdof,
-                         cell_to_gdofs,
-                         cell_to_ldofs,
-                         cell_range)
+  cell_wise_to_dof_wise!(ldof_to_gdof,cell_to_gdofs,cell_to_ldofs,ghost_to_local(cell_range))
 
   # Setup DoFs LocalIndices
   ngdofs = reduction(+,nodofs,destination=:all,init=zero(eltype(nodofs)))
-  local_indices = map(ngdofs,partition(cell_range),ldof_to_gdof,ldof_to_owner) do ngdofs,
-                                                                                  indices,
-                                                                                  ldof_to_gdof,
-                                                                                  ldof_to_owner
-     me = part_id(indices)
-     LocalIndices(ngdofs,me,ldof_to_gdof,ldof_to_owner)
-  end
+  local_indices = map(LocalIndices,ngdofs,ranks,ldof_to_gdof,ldof_to_owner)
 
-  # Setup dof range
-  dofs_range = PRange(local_indices)
-
-  return dofs_range
+  return PRange(local_indices)
 end
 
 # FEFunction related
+
 """
 """
 struct DistributedFEFunctionData{T<:AbstractVector} <: GridapType
