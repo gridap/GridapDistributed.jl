@@ -14,7 +14,22 @@ using Gridap.MultiField
 using GridapDistributed
 using PartitionedArrays
 
-function half_empty_trian(ranks,model)
+function partial_trian(ranks,model)
+  cell_ids = get_cell_gids(model)
+  trians = map(ranks,local_views(model),partition(cell_ids)) do rank, model, ids
+    cell_mask = zeros(Bool, num_cells(model))
+    if rank ∈ (1,2)
+      cell_mask[own_to_local(ids)] .= true
+    else
+      t = own_to_local(ids)
+      cell_mask[t[1:floor(Int,length(t)/2)]] .= true
+    end
+    Triangulation(model,cell_mask)
+  end
+  GridapDistributed.DistributedTriangulation(trians,model)
+end
+
+function half_empty_trian(ranks,model) # edge case
   cell_ids = get_cell_gids(model)
   trians = map(ranks,local_views(model),partition(cell_ids)) do rank, model, ids
     cell_mask = zeros(Bool, num_cells(model))
@@ -26,15 +41,27 @@ function half_empty_trian(ranks,model)
   GridapDistributed.DistributedTriangulation(trians,model)
 end
 
+function trian_with_empty_procs(ranks,model)
+  cell_ids = get_cell_gids(model)
+  trians = map(ranks,local_views(model),partition(cell_ids)) do rank, model, ids
+    cell_mask = zeros(Bool, num_cells(model))
+    if rank ∈ (1,2)
+      t = own_to_local(ids)
+      cell_mask[t[1:floor(Int,length(t)/2)]] .= true
+    end
+    Triangulation(model,cell_mask)
+  end
+  GridapDistributed.DistributedTriangulation(trians,model)
+end
+
 np = (2,2)
 ranks = with_debug() do distribute
   distribute(LinearIndices((prod(np),)))
 end
 
-model = CartesianDiscreteModel(ranks,np,(0,1,0,1),(5,5))
+model = CartesianDiscreteModel(ranks,np,(0,1,0,1),(10,10))
 Ω = Triangulation(model)
-# Γ = BoundaryTriangulation(model)
-Γ = half_empty_trian(ranks,model)
+Γ = BoundaryTriangulation(model)
 dΩ = Measure(Ω,2)
 dΓ = Measure(Γ,2)
 V1 = FESpace(Γ,ReferenceFE(lagrangian,Float64,1))
@@ -63,6 +90,8 @@ J_fwd = jacobian(op,uh)
 @test reduce(&,map(≈,partition(J),partition(J_fwd)))
 
 # Skel
+Γ = partial_trian(ranks,model)
+# Γ = half_empty_trian(ranks,model)
 V1 = FESpace(Γ,ReferenceFE(lagrangian,Float64,1),conformity=:L2)
 V2 = FESpace(model,ReferenceFE(lagrangian,VectorValue{2,Float64},1),conformity=:L2)
 V3 = FESpace(model,ReferenceFE(lagrangian,Float64,1),conformity=:L2)
