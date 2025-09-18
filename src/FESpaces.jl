@@ -83,6 +83,24 @@ function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,c
   return cell_wise_vector
 end
 
+function posneg_wise_to_cell_wise!(cell_wise_vector,pos_wise_vector,neg_wise_vector,cell_to_posneg,cell_ids)
+  map(cell_wise_vector,pos_wise_vector,neg_wise_vector,cell_to_posneg,cell_ids) do cwv,pwv,nwv,cell_to_posneg,cell_ids
+    cache  = array_cache(cell_to_posneg)
+    for cell in cell_ids
+      lids = getindex!(cache,cell_to_posneg,cell)
+      p = cwv.ptrs[cell]-1
+      for (i,lid) in enumerate(lids)
+        if lid > 0
+          cwv.data[i+p] = pwv[lid]
+        elseif lid < 0
+          cwv.data[i+p] = nwv[-lid]
+        end
+      end
+    end
+  end
+  return cell_wise_vector
+end
+
 function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_ids)
   map(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_ids) do dwv,cwv,cell_to_ldofs,cell_ids
     cache = array_cache(cell_to_ldofs)
@@ -97,6 +115,24 @@ function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,c
     end
   end
   return dof_wise_vector
+end
+
+function cell_wise_to_posneg_wise!(pos_wise_vector,neg_wise_vector,cell_wise_vector,cell_to_posneg,cell_ids)
+  map(pos_wise_vector,neg_wise_vector,cell_wise_vector,cell_to_posneg,cell_ids) do pwv,nwv,cwv,cell_to_posneg,cell_ids
+    cache = array_cache(cell_to_posneg)
+    for cell in cell_ids
+      lids = getindex!(cache,cell_to_posneg,cell)
+      p = cwv.ptrs[cell]-1
+      for (i,lid) in enumerate(lids)
+        if lid > 0
+          pwv[lid] = cwv.data[i+p]
+        elseif lid < 0
+          nwv[-lid] = cwv.data[i+p]
+        end
+      end
+    end
+  end
+  return pos_wise_vector, neg_wise_vector
 end
 
 function allocate_cell_wise_vector(T, cell_to_lids)
@@ -210,6 +246,118 @@ function generate_gids(
   local_indices = map(LocalIndices,ngdofs,ranks,ldof_to_gdof,ldof_to_owner)
 
   return PRange(local_indices)
+end
+
+function generate_posneg_gids(
+  cell_range::PRange,
+  cell_to_lposneg::AbstractArray{<:AbstractArray},
+  nlpos::AbstractArray{<:Integer},
+  nlneg::AbstractArray{<:Integer}
+)
+  ranks = linear_indices(partition(cell_range))
+  cell_lids_to_data = allocate_cell_wise_vector(Int, cell_to_lposneg)
+  cache_fetch = fetch_vector_ghost_values_cache(cell_lids_to_data,partition(cell_range))
+
+  # Find and count number owned dofs
+  lpos_to_owner, lneg_to_owner, nopos, noneg = map(
+    partition(cell_range),cell_to_lposneg,nlpos,nlneg
+  ) do indices,cell_to_lposneg,nlpos,nlneg
+    lpos_to_owner = fill(zero(Int32),nlpos)
+    lneg_to_owner = fill(zero(Int32),nlneg)
+    cache = array_cache(cell_to_lposneg)
+    for (cell, owner) in enumerate(local_to_owner(indices))
+      lids = getindex!(cache,cell_to_lposneg,cell)
+      for lid in lids
+        if lid > 0
+          lpos_to_owner[lid] = max(owner,lpos_to_owner[lid])
+        elseif lid < 0
+          lneg_to_owner[-lid] = max(owner,lneg_to_owner[-lid])
+        end
+      end
+    end
+    rank = part_id(indices)
+    nopos = count(isequal(rank),lpos_to_owner)
+    noneg = count(isequal(rank),lneg_to_owner)
+    return lpos_to_owner, lneg_to_owner, nopos, noneg
+  end |> tuple_of_arrays
+
+  # Find the global range of owned dofs
+  first_gpos = scan(+,nopos,type=:exclusive,init=1)
+  first_gneg = scan(+,noneg,type=:exclusive,init=1)
+
+  # Exchange the dof owners. Cell owner always has correct dof owner.
+  cell_ldofs_to_owner = posneg_wise_to_cell_wise!(
+    cell_lids_to_data,lpos_to_owner,lneg_to_owner,cell_to_lposneg,own_to_local(cell_range)
+  )
+  fetch_vector_ghost_values!(cell_ldofs_to_owner,cache_fetch) |> wait
+  cell_wise_to_posneg_wise!(
+    lpos_to_owner,lneg_to_owner,cell_ldofs_to_owner,cell_to_lposneg,ghost_to_local(cell_range)
+  )
+
+  # Fill owned gids
+  lpos_to_gpos = map(ranks,first_gpos,lpos_to_owner) do rank,first_gpos,lpos_to_owner
+    offset = first_gpos-1
+    lpos_to_gpos = zeros(Int,length(lpos_to_owner))
+    opos = 0
+    for (lpos,owner) in enumerate(lpos_to_owner)
+      if owner == rank
+        opos += 1
+        lpos_to_gpos[lpos] = opos + offset
+      end
+    end
+    lpos_to_gpos
+  end
+
+  lneg_to_gneg = map(ranks,first_gneg,lneg_to_owner) do rank,first_gneg,lneg_to_owner
+    offset = first_gneg-1
+    lneg_to_gneg = zeros(Int,length(lneg_to_owner))
+    oneg = 0
+    for (lneg,owner) in enumerate(lneg_to_owner)
+      if owner == rank
+        oneg += 1
+        lneg_to_gneg[lneg] = oneg + offset
+      end
+    end
+    lneg_to_gneg
+  end
+
+  # Exchange gids
+  cell_to_gposneg = posneg_wise_to_cell_wise!(
+    cell_lids_to_data,lpos_to_gpos,lneg_to_gneg,cell_to_lposneg,own_to_local(cell_range)
+  )
+  fetch_vector_ghost_values!(cell_to_gposneg,cache_fetch) |> wait
+
+  # Fill ghost gids with exchanged information
+  map(
+    cell_to_lposneg,cell_to_gposneg,lpos_to_gpos,lneg_to_gneg,lpos_to_owner,lneg_to_owner,partition(cell_range)
+  ) do cell_to_lposneg,cell_to_gposneg,lpos_to_gpos,lneg_to_gneg,lpos_to_owner,lneg_to_owner,indices
+    cache = array_cache(cell_to_lposneg)
+    lcell_to_owner = local_to_owner(indices)
+    for cell in ghost_to_local(indices)
+      p = cell_to_gposneg.ptrs[cell]-1
+      lids = getindex!(cache,cell_to_lposneg,cell)
+      cell_owner = lcell_to_owner[cell]
+      for (i,lid) in enumerate(lids)
+        if (lid > 0) && isequal(lpos_to_owner[lid],cell_owner)
+          lpos_to_gpos[lid] = cell_to_gposneg.data[i+p]
+        elseif (lid < 0) && isequal(lneg_to_owner[-lid],cell_owner)
+          lneg_to_gneg[-lid] = cell_to_gposneg.data[i+p]
+        end
+      end
+    end
+  end
+
+  posneg_wise_to_cell_wise!(cell_to_gposneg,lpos_to_gpos,lneg_to_gneg,cell_to_lposneg,own_to_local(cell_range))
+  fetch_vector_ghost_values!(cell_to_gposneg,cache_fetch) |> wait
+  cell_wise_to_posneg_wise!(lpos_to_gpos,lneg_to_gneg,cell_to_gposneg,cell_to_lposneg,ghost_to_local(cell_range))
+
+  # Setup DoFs LocalIndices
+  ngpos = reduction(+,nopos,destination=:all,init=0)
+  ngneg = reduction(+,noneg,destination=:all,init=0)
+  local_indices_pos = map(LocalIndices,ngpos,ranks,lpos_to_gpos,lpos_to_owner)
+  local_indices_neg = map(LocalIndices,ngneg,ranks,lneg_to_gneg,lneg_to_owner)
+
+  return PRange(local_indices_pos), PRange(local_indices_neg)
 end
 
 # FEFunction related
