@@ -18,7 +18,7 @@ function half_empty_trian(ranks,model) # edge case
   cell_ids = get_cell_gids(model)
   trians = map(ranks,local_views(model),partition(cell_ids)) do rank, model, ids
     cell_mask = zeros(Bool, num_cells(model))
-    if rank ∈ (1,2)
+    if rank ∈ (1,2) # (1,2)
       cell_mask[own_to_local(ids)] .= true
     end
     Triangulation(model,cell_mask)
@@ -31,7 +31,7 @@ ranks = with_debug() do distribute
   distribute(LinearIndices((prod(np),)))
 end
 
-model = CartesianDiscreteModel(ranks,np,(0,1,0,1),(5,5))
+model = CartesianDiscreteModel(ranks,np,(0,1,0,1),(10,10))
 Γ = half_empty_trian(ranks,model)
 V1 = FESpace(Γ,ReferenceFE(lagrangian,Float64,1),conformity=:L2)
 V2 = FESpace(model,ReferenceFE(lagrangian,VectorValue{2,Float64},1),conformity=:L2)
