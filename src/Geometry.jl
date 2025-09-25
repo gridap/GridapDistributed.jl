@@ -539,7 +539,7 @@ struct DistributedTriangulation{Dc,Dp,A,B,C} <: GridapType
   function DistributedTriangulation(
     trians::AbstractArray{<:Triangulation{Dc,Dp}},
     model::DistributedDiscreteModel;
-    metadata = nothing
+    metadata = nothing  
   ) where {Dc,Dp}
     A = typeof(trians)
     B = typeof(model)
@@ -814,7 +814,7 @@ function add_ghost_cells(dmodel::DistributedDiscreteModel,dtrian::DistributedTri
   add_ghost_cells(dtrian.metadata,dmodel,dtrian)
 end
 
-# We already have the parents saved up
+# We already have the parents saved up 
 function add_ghost_cells(
   metadata::RemoveGhostsMetadata, dmodel::DistributedDiscreteModel{Dm}, dtrian::DistributedTriangulation{Dt}
 ) where {Dm,Dt}
