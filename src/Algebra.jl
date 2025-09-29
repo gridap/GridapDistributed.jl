@@ -117,6 +117,15 @@ function to_parray_of_arrays(a::AbstractArray{<:DebugArray})
   end
 end
 
+function to_parray_of_arrays(a::AbstractArray{<:Vector})
+  indices = linear_indices(first(a))
+  map(indices) do i
+    map(a) do aj
+      aj[i]
+    end
+  end
+end
+
 # This type is required because MPIArray from PArrays 
 # cannot be instantiated with a NULL communicator
 struct MPIVoidVector{T} <: AbstractVector{T}
@@ -174,17 +183,19 @@ end
 @inline i_am_in(comm::MPIVoidVector) = i_am_in(comm.comm)
 @inline i_am_in(comm::DebugArray) = true
 
-function change_parts(x::Union{MPIArray,DebugArray,Nothing,MPIVoidVector}, new_parts; default=nothing)
-  x_new = map(new_parts) do p
-    if isa(x,MPIArray)
-      PartitionedArrays.getany(x)
-    elseif isa(x,DebugArray) && (p <= length(x.items))
-      x.items[p]
-    else
-      default
-    end
-  end
+change_parts(x, new_parts; default=nothing) = change_parts(x, new_parts, map(_ -> default, new_parts))
+
+function change_parts(x::MPIArray, new_parts, defaults)
+  x_new = map((p,d) -> x.item, new_parts, defaults)
   return x_new
+end
+change_parts(x::DebugArray, new_parts, args...) = change_parts(x.items, new_parts, args...)
+function change_parts(x::AbstractArray, new_parts, defaults)
+  x_new = map((p,d) -> (p <= length(x)) ? x[p] : d, new_parts, defaults)
+  return x_new
+end
+function change_parts(::Union{Nothing,MPIVoidVector}, new_parts, defaults)
+  return defaults
 end
 
 function generate_subparts(parts::MPIArray,new_comm_size)
@@ -1129,25 +1140,29 @@ function _setup_prange(dofs_gids_prange::PRange,gids;ghost=true,owners=nothing,k
   end
 end
 
-function _setup_prange(dofs_gids_prange::AbstractVector{<:PRange},
-                       gids::AbstractMatrix;
-                       ax=:rows,ghost=true,owners=nothing)
+function _setup_prange(
+  dofs_gids_prange::AbstractVector{<:PRange},
+  gids::AbstractMatrix;
+  ax=:rows,ghost=true,owners=nothing
+)
   @check ax ∈ (:rows,:cols)
   block_ids = LinearIndices(dofs_gids_prange)
+  pvcat(x) = map(xi -> vcat(xi...), to_parray_of_arrays(x))
 
-  gids_ax_slice, _owners = map(block_ids,dofs_gids_prange) do id,prange
-    gids_ax_slice = (ax == :rows) ? gids[id,:] : gids[:,id]
-    _owners = nothing
-    if ghost
-      gids_ax_slice = map(x -> union(x...), to_parray_of_arrays(gids_ax_slice))
-      if !isa(owners,Nothing) # Recompute owners for the union
-        _owners = get_gid_owners(gids_ax_slice,prange)
-      end
+  gids_union, owners_union = map(block_ids,dofs_gids_prange) do id, prange
+    gids_slice = (ax == :rows) ? gids[id,:] : gids[:,id]
+    gids_union = pvcat(gids_slice)
+
+    owners_union = nothing
+    if !isnothing(owners)
+      owners_slice = (ax == :rows) ? owners[id,:] : owners[:,id]
+      owners_union = pvcat(owners_slice)
     end
-    return gids_ax_slice, _owners
+
+    return gids_union, owners_union
   end |> tuple_of_arrays
   
-  return map((p,g,o) -> _setup_prange(p,g;ghost=ghost,owners=o),dofs_gids_prange,gids_ax_slice,_owners)
+  return map((p,g,o) -> _setup_prange(p,g;ghost=ghost,owners=o),dofs_gids_prange,gids_union,owners_union)
 end
 
 # Create PRange for the rows of the linear system

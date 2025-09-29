@@ -197,9 +197,9 @@ end
 
 local_views(a::DistributedMeasure) = a.measures
 
-function CellData.Measure(t::DistributedTriangulation,args...)
+function CellData.Measure(t::DistributedTriangulation,args...;kwargs...)
   measures = map(t.trians) do trian
-    Measure(trian,args...)
+    Measure(trian,args...;kwargs...)
   end
   DistributedMeasure(measures,t)
 end
@@ -346,10 +346,165 @@ function Gridap.Arrays.evaluate!(cache,s::DistributedCellDof,f::DistributedCellF
 end
 
 function Gridap.Arrays.evaluate!(cache, ::DistributedCellField, ::DistributedCellDof)
-  @unreachable """\n
-  CellField (f) objects cannot be evaluated at CellDof (s) objects.
-  However, CellDofs objects can be evaluated at CellField objects.
-  Did you mean evaluate(f,s) instead of evaluate(s,f), i.e.
-  f(s) instead of s(f)?
+@unreachable """\n
+CellField (f) objects cannot be evaluated at CellDof (s) objects.
+However, CellDofs objects can be evaluated at CellField objects.
+Did you mean evaluate(f,s) instead of evaluate(s,f), i.e.
+f(s) instead of s(f)?
+"""
+end
+
+# Interpolation at arbitrary points (returns -Inf if the point is not found)
+Arrays.evaluate!(cache,f::DistributedCellField,x::Point) = evaluate(Interpolable(f),x)
+Arrays.evaluate!(cache,f::DistributedCellField,x::AbstractVector{<:Point}) = evaluate(Interpolable(f),x)
+
+struct DistributedInterpolable{Tx,Ty,A} <: Function
+  interps::A
+  function DistributedInterpolable(interps::AbstractArray{<:Interpolable})
+    Tx,Ty = map(interps) do I
+      trian = get_triangulation(I.uh)
+      x = mean(testitem(get_cell_coordinates(trian)))
+      return typeof(x), return_type(I,x)
+    end |> tuple_of_arrays
+    Tx = getany(Tx)
+    Ty = getany(Ty)
+    A  = typeof(interps)
+    new{Tx,Ty,A}(interps)
+  end
+end
+
+local_views(a::DistributedInterpolable) = a.interps
+
+function Interpolable(f::DistributedCellField;kwargs...) 
+  interps = map(local_views(f)) do f
+    Interpolable(f,kwargs...)
+  end
+  DistributedInterpolable(interps)
+end
+
+(a::DistributedInterpolable)(x) = evaluate(a,x)
+
+Arrays.return_cache(f::DistributedInterpolable,x::Point) = return_cache(f,[x])
+Arrays.evaluate!(caches,I::DistributedInterpolable,x::Point) = first(evaluate!(caches,I,[x]))
+
+function Arrays.return_cache(I::DistributedInterpolable{Tx,Ty},x::AbstractVector{<:Point}) where {Tx,Ty}
+  msg = "Can only evaluate DistributedInterpolable at physical points of the same dimension of the underlying triangulation"
+  @check Tx == eltype(x) msg
+  caches = map(local_views(I)) do I
+    trian = get_triangulation(I.uh)
+    y = mean(testitem(get_cell_coordinates(trian)))
+    return_cache(I,y)
+  end
+  caches
+end
+
+function Arrays.evaluate!(cache,I::DistributedInterpolable{Tx,Ty},x::AbstractVector{<:Point}) where {Tx,Ty}
+  _allgather(x) = PartitionedArrays.getdata(getany(gather(x;destination=:all)))
+
+  # Evaluate in local portions of the domain. Only keep points inside the domain.
+  nx = length(x)
+  my_ids, my_vals = map(local_views(I),local_views(cache)) do I, cache
+    ids  = Vector{Int}(undef,nx)
+    vals = Vector{Ty}(undef,nx)
+    k = 1
+    yi = zero(Ty)
+    for (i,xi) in enumerate(x)
+      inside = true
+      try
+        yi = evaluate!(cache,I,xi)
+      catch
+        inside = false
+      end
+      if inside
+        ids[k] = i
+        vals[k] = copy(yi)
+        k += 1
+      end
+    end
+    resize!(ids,k-1)
+    resize!(vals,k-1)
+    return ids, vals
+  end |> tuple_of_arrays
+
+  # Communicate results, so that every (id,value) pair is known by every process
+  if Ty <: VectorValue
+    D = num_components(Ty)
+    vals_d = Vector{Vector{eltype(Ty)}}(undef,D)
+    for d in 1:D
+      my_vals_d = map(y_p -> map(y_p_i -> y_p_i[d],y_p),my_vals)
+      vals_d[d] = _allgather(my_vals_d)
+    end
+    vals = map(VectorValue,vals_d...)
+  else
+    vals = _allgather(my_vals)
+  end
+  ids = _allgather(my_ids)
+
+  # Combine results
+  w = Vector{Ty}(undef,nx)
+  for (i,v) in zip(ids,vals)
+    w[i] = v
+  end
+
+  return w
+end
+
+# Support for distributed Dirac deltas
+struct DistributedDiracDelta{D} <: GridapType
+  Γ::DistributedTriangulation
+  dΓ::DistributedMeasure
+end
+# This code is from Gridap, repeated in BoundaryTriangulations.jl and DiracDelta.jl.
+# We could refactor...
+import Gridap.Geometry: FaceToCellGlue
+function BoundaryTriangulation{D}(
+  model::DiscreteModel,
+  face_to_bgface::AbstractVector{<:Integer}) where D
+
+  bgface_to_lcell = Fill(1,num_faces(model,D))
+
+  topo = get_grid_topology(model)
+  bgface_grid = Grid(ReferenceFE{D},model)
+  face_grid = view(bgface_grid,face_to_bgface)
+  cell_grid = get_grid(model)
+  glue = FaceToCellGlue(topo,cell_grid,face_grid,face_to_bgface,bgface_to_lcell)
+  trian = BodyFittedTriangulation(model,face_grid,face_to_bgface)
+  BoundaryTriangulation(trian,glue)
+end
+
+function BoundaryTriangulation{D}(model::DiscreteModel;tags) where D
+  labeling = get_face_labeling(model)
+  bgface_to_mask = get_face_mask(labeling,tags,D)
+  face_to_bgface = findall(bgface_to_mask)
+  BoundaryTriangulation{D}(model,face_to_bgface)
+end
+
+function DiracDelta{D}(model::DistributedDiscreteModel{Dc},degree::Integer;kwargs...) where {D,Dc}
+
+  @assert 0 <= D && D < num_cell_dims(model) """\n
+  Incorrect value of D=$D for building a DiracDelta{D} on a model with $(num_cell_dims(model)) cell dims.
+
+  D should be in [0,$(num_cell_dims(model))).
   """
+
+  gids   = get_face_gids(model,Dc)
+  trians = map(local_views(model),partition(gids)) do model, gids
+      trian = BoundaryTriangulation{D}(model;kwargs...)
+      filter_cells_when_needed(no_ghost,gids,trian)
+  end
+  Γ=DistributedTriangulation(trians,model)
+  dΓ=Measure(Γ,degree)
+  DistributedDiracDelta{D}(Γ,dΓ)
+end
+
+# Following functions can be eliminated introducing an abstract delta in Gridap.jl
+function DiracDelta{0}(model::DistributedDiscreteModel;tags)
+  degree = 0
+  DiracDelta{0}(model,degree;tags=tags)
+end
+function (d::DistributedDiracDelta)(f)
+ evaluate(d,f)
+end
+function Gridap.Arrays.evaluate!(cache,d::DistributedDiracDelta,f)
+ ∫(f)*d.dΓ
 end

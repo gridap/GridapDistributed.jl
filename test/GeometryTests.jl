@@ -59,15 +59,19 @@ function main(distribute,parts)
 
   Ω = Triangulation(with_ghost,model)
   writevtk(Ω,joinpath(output,"Ω"))
+  @test num_cells(Ω) == num_cells(model)
 
   Ω = Triangulation(no_ghost,model)
   writevtk(Ω,joinpath(output,"Ω"))
+  @test num_cells(Ω) == num_cells(model)
 
   Γ = Boundary(with_ghost,model,tags="boundary")
   writevtk(Γ,joinpath(output,"Γ"))
+  nbfacets = num_cells(Γ)
 
   Γ = Boundary(no_ghost,model,tags="boundary")
   writevtk(Γ,joinpath(output,"Γ"))
+  @test num_cells(Γ) == nbfacets
 
   function is_in(coords)
     R = 1.6
@@ -92,13 +96,21 @@ function main(distribute,parts)
     add_tag!(labels,"fluid",[fluid])
     cell_to_entity
   end
-  cell_gids=get_cell_gids(model)
-  vcache=PartitionedArrays.p_vector_cache(cell_to_entity,partition(cell_gids))
-  assemble!((a,b)->b, cell_to_entity, map(reverse,vcache) ) |> wait # Make tags consistent
+  cell_gids = get_cell_gids(model)
+  consistent!(PVector(cell_to_entity,partition(cell_gids))) |> wait # Make tags consistent
 
   Ωs = Interior(model,tags="solid")
   Ωf = Interior(model,tags="fluid")
   Γfs = Interface(Ωf,Ωs)
+
+  # CompositeTriangulations
+  Γf = Boundary(Ωf)
+  Λf = Skeleton(Ωf)
+  Λs = Skeleton(Ωs)
+  Γs = Boundary(Ωs)
+
+  # Multiple ghost layers
+  model = CartesianDiscreteModel(ranks,parts,domain,cells;ghost=map(i->2,parts))
 
 end
 

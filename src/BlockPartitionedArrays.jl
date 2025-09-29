@@ -25,6 +25,21 @@ function Base.getindex(a::BlockPRange,inds::Block{1})
   a.ranges[inds.n...]
 end
 
+function PartitionedArrays.matching_local_indices(a::BlockPRange,b::BlockPRange)
+  c = map(PartitionedArrays.matching_local_indices,blocks(a),blocks(b))
+  reduce(&,c,init=true)
+end
+
+function PartitionedArrays.matching_own_indices(a::BlockPRange,b::BlockPRange)
+  c = map(PartitionedArrays.matching_own_indices,blocks(a),blocks(b))
+  reduce(&,c,init=true)
+end
+
+function PartitionedArrays.matching_ghost_indices(a::BlockPRange,b::BlockPRange)
+  c = map(PartitionedArrays.matching_ghost_indices,blocks(a),blocks(b))
+  reduce(&,c,init=true)
+end
+
 """
   struct BlockPArray{V,T,N,A,B} <: BlockArrays.AbstractBlockArray{T,N}
 """
@@ -336,6 +351,11 @@ function LinearAlgebra.dot(x::BlockPVector,y::BlockPVector)
 end
 
 function LinearAlgebra.norm(v::BlockPVector,p::Real=2)
+  if p == 2
+    # More accurate, I think, given the fact we are not 
+    # repeating the sqrt(square(sqrt...)) process in every block and every processor
+    return sqrt(dot(v,v)) 
+  end
   block_norms = map(vi->norm(vi,p),blocks(v))
   return sum(block_norms.^p)^(1/p)
 end

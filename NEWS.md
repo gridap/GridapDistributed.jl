@@ -5,7 +5,89 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] 2024-04-12
+## [0.4.10] - 2025-09-29
+
+### Added
+
+- Added support for multiple ghost layers on cartesian models. Since PR[#182](https://github.com/gridap/GridapDistributed.jl/pull/182).
+- Added new way of doing AD for MultiField, where partials are computed separately for each field then merged together. Since PR[#176](https://github.com/gridap/GridapDistributed.jl/pull/176).
+
+### Fixed
+
+- Fixed issue [#177](https://github.com/gridap/GridapDistributed.jl/issues/177) and [#170](https://github.com/gridap/GridapDistributed.jl/issues/170). Since PR[#180](https://github.com/gridap/GridapDistributed.jl/pull/180).
+- Fixed issue where calling `Boundary(with_ghost, dmodel)` would return the local processor boundaries (which include the faces at the interface between processors) instead of returning the local part of the global boundary. Since PR[#180](https://github.com/gridap/GridapDistributed.jl/pull/180).
+
+## [0.4.9] - 2025-08-08
+
+### Added
+
+- Added a new framework for redistributing dofs, which is more efficient and flexible than the previous one. Since PR[#179](https://github.com/gridap/GridapDistributed.jl/pull/179).
+
+### Fixed
+
+- Fixed bug when redistributing periodic cartesian models. Since PR[#179](https://github.com/gridap/GridapDistributed.jl/pull/179).
+
+## [0.4.8] - 2025-06-11
+
+### Added
+
+- Added support for Gridap v0.19, with distributed counterparts for the new feaures introduced. This includes support for polytopal meshes, polytopal methods and patch assembly. Since PR[#175](https://github.com/gridap/GridapDistributed.jl/pull/175).
+- Added `MacroDiscreteModel`, which gives a global numbering and classification of the interfaces between processors. Since PR[#175](https://github.com/gridap/GridapDistributed.jl/pull/175).
+
+## [0.4.7] - 2025-03-04
+
+### Added
+
+- Extended support for automatic differentiation to multi-field spaces and skeleton triangulations. Since PR[#169](https://github.com/gridap/GridapDistributed.jl/pull/169).
+
+## [0.4.6] - 2024-12-03
+
+### Added
+
+- Added support for automatic differentiation with ForwardDiff. Since PR[#167](https://github.com/gridap/GridapDistributed.jl/pull/167).
+- Added ConstantFESpaces. Since PR[#166](https://github.com/gridap/GridapDistributed.jl/pull/166).
+
+## [0.4.5] - 2024-10-08
+
+### Fixed
+
+- Fixed bug in `num_cells` in the case where a `DistributedTriangulation` contained ghost cells. Since PR[#160](https://github.com/gridap/GridapDistributed.jl/pull/160).
+- Fixed bug in writevtk when dealing with empty processors. Since PR[#158](https://github.com/gridap/GridapDistributed.jl/pull/158).
+
+## [0.4.4] - 2024-08-14
+
+### Added
+
+- Added kwargs for VTK encoding options. Since PR[#156](https://github.com/gridap/GridapDistributed.jl/pull/156).
+- Reimplemented distributed ZeroMeanFESpaces. Since PR[#155](https://github.com/gridap/GridapDistributed.jl/pull/155).
+
+### Fixed
+
+- Fixed distributed interpolators for Vector-Valued FESpaces. Since PR[#152](https://github.com/gridap/GridapDistributed.jl/pull/152).
+
+## [0.4.3] - 2024-07-18
+
+### Added
+
+- Added distributed refinement of unstructured meshes. Since PR[#149](https://github.com/gridap/GridapDistributed.jl/pull/149).
+
+- Added keyword arguments in the signature of the constructor of `DistributedMeasure`. Since PR[#150](https://github.com/gridap/GridapDistributed.jl/pull/150).
+
+- Added DiracDelta in distributed setting. Since PR[#133](https://github.com/gridap/GridapDistributed.jl/pull/133).
+
+## [0.4.2] - 2024-07-4
+
+### Added
+
+- Added uniform anisotropic refinement of distributed cartesian meshes. Since PR[#148](https://github.com/gridap/GridapDistributed.jl/pull/148).
+
+## [0.4.1] - 2024-06-25
+
+### Fixed
+
+- Fixed bug in block-assembly whenever owners of touched dofs were not present in the local portion of the FESpace. Since PR[#147](https://github.com/gridap/GridapDistributed.jl/pull/147).
+
+## [0.4.0] - 2024-04-12
 
 ### Changed
 
@@ -13,7 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All the distributed `Multifield` cellfield types are now represented by a `DistributedMultiFieldCellField`. Both `DistributedMultiFieldFEFunction` and `DistributedMultiFieldFEBasis` structs have been removed and replaced with constant aliases, which makes it more consistent with single-field types. Since PR[#141](https://github.com/gridap/GridapDistributed.jl/pull/141).
 - Major refactor of ODE module. Implementation has been significantly simplified, while increasing the capability of the API. All `TransientDistributedObjects` structs have been removed, and replaced by `DistributedTransientObjects = DistributedObjects{TransientObject}`. Full support for EX/IM/IMEX methods. See Gridap's release for details. Since PR[#141](https://github.com/gridap/GridapDistributed.jl/pull/141).
 
-## [0.3.6] 2024-01-28
+## [0.3.6] - 2024-01-28
 
 ### Added
 
@@ -78,7 +160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Added missing parameter to `allocate_jacobian`, needed after Gridap v0.17.18. Since PR [126](https://github.com/gridap/GridapDistributed.jl/pull/126). 
+- Added missing parameter to `allocate_jacobian`, needed after Gridap v0.17.18. Since PR [126](https://github.com/gridap/GridapDistributed.jl/pull/126).
 
 ## [0.2.8] - 2023-07-31
 

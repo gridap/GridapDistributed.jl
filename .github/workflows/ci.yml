@@ -4,69 +4,52 @@ on:
   - pull_request
 jobs:
   SequentialTests:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    name: Serial Tests - Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         version:
-          - '1.9'
+          - '1.10'
         os:
           - ubuntu-latest
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/setup-julia@v1
+      - uses: actions/checkout@v5
+      - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: actions/cache@v1
-        env:
-          cache-name: cache-artifacts
-        with:
-          path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
+      - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
       - run: julia --project=. --color=yes --check-bounds=yes test/sequential/runtests.jl
       - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v1
+      - uses: codecov/codecov-action@v5
         with:
-          file: lcov.info
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: sequential
   MPITests:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    name: MPI Tests - Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         version:
-          - '1.9'
+          - '1.10'
         os:
           - ubuntu-latest
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/cache@v1
-        env:
-          cache-name: cache-artifacts
-        with:
-          path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
-      - uses: julia-actions/setup-julia@v1
+      - uses: actions/checkout@v5
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      #- uses: julia-actions/julia-buildpkg@v1
       - run: |
           julia --project=test/TestApp/ -e '
             using Pkg
@@ -75,27 +58,24 @@ jobs:
       - run: cd test/TestApp/compile; ./compile.sh 
       - run: julia --project=test/TestApp/ --color=yes --check-bounds=yes test/mpi/runtests.jl test/TestApp/compile/TestApp.so
       - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v1
+      - uses: codecov/codecov-action@v5
         with:
-          file: lcov.info
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: mpi
   docs:
     name: Documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/setup-julia@v1
+      - uses: actions/checkout@v5
+      - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.8'
+          version: '1.10'
       - run: |
           julia --project=docs -e '
             using Pkg
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
-#      - run: |
-#          julia --project=docs -e '
-#            using Documenter: doctest
-#            using Gridap
-#            doctest(Gridap)'
       - run: julia --project=docs docs/make.jl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

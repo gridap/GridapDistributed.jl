@@ -28,6 +28,9 @@ function all_tests(distribute,parts)
   TestApp.TransientMultiFieldDistributedCellFieldTests.main(distribute,parts)
   PArrays.toc!(t,"TransientMultiFieldDistributedCellField")
 
+  TestApp.ZeroMeanFESpacesTests.main(distribute,parts)
+  PArrays.toc!(t,"ZeroMeanFESpaces")
+
   TestApp.PeriodicBCsTests.main(distribute,parts)
   PArrays.toc!(t,"PeriodicBCs")
 
@@ -42,12 +45,32 @@ function all_tests(distribute,parts)
 
   if prod(parts) == 4
     TestApp.AdaptivityTests.main(distribute)
+    TestApp.AdaptivityCartesianTests.main(distribute)
     TestApp.AdaptivityMultiFieldTests.main(distribute)
+    TestApp.AdaptivityUnstructuredTests.main(distribute)
     PArrays.toc!(t,"Adaptivity")
   end
 
   TestApp.BlockSparseMatrixAssemblersTests.main(distribute,parts)
   PArrays.toc!(t,"BlockSparseMatrixAssemblers")
+
+  if prod(parts) == 4
+    TestApp.ConstantFESpacesTests.main(distribute,parts)
+    PArrays.toc!(t,"ConstantFESpaces")
+  end
+  
+  if prod(parts) == 4
+    TestApp.VisualizationTests.main(distribute,parts)
+    PArrays.toc!(t,"Visualization")
+  end
+
+  TestApp.AutodiffTests.main(distribute,parts)
+  PArrays.toc!(t,"Autodiff")
+
+  if prod(parts) == 4
+    TestApp.MacroDiscreteModelsTests.main(distribute,parts)
+    PArrays.toc!(t,"MacroDiscreteModels")
+  end
 
   display(t)
 end

@@ -30,6 +30,8 @@ end
   include("TransientMultiFieldDistributedCellFieldTests.jl")
 end
 
+@time @testset "ZeroMeanFESpaces" begin include("ZeroMeanFESpacesTests.jl") end
+
 @time @testset "HeatEquation" begin include("HeatEquationTests.jl") end
 
 @time @testset "StokesOpenBoundary" begin include("StokesOpenBoundaryTests.jl") end
@@ -38,6 +40,10 @@ end
 
 @time @testset "BlockSparseMatrixAssemblers" begin 
   include("BlockSparseMatrixAssemblersTests.jl") 
+end
+
+@time @testset "AdaptivityTests" begin
+  include("AdaptivityTests.jl")
 end
 
 end # module
