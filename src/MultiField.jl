@@ -33,6 +33,8 @@ MultiField.num_fields(m::DistributedMultiFieldCellField) = length(m.field_fe_fun
 Base.iterate(m::DistributedMultiFieldCellField) = iterate(m.field_fe_fun)
 Base.iterate(m::DistributedMultiFieldCellField,state) = iterate(m.field_fe_fun,state)
 Base.getindex(m::DistributedMultiFieldCellField,field_id::Integer) = m.field_fe_fun[field_id]
+Base.getindex(m::DistributedMultiFieldCellField,field_id::AbstractUnitRange) = m.field_fe_fun[field_id]
+Base.lastindex(m::DistributedMultiFieldCellField) = num_fields(m)
 Base.length(m::DistributedMultiFieldCellField) = num_fields(m)
 
 function LinearAlgebra.dot(a::DistributedMultiFieldCellField,b::DistributedMultiFieldCellField)
@@ -180,7 +182,7 @@ function FESpaces.EvaluationFunction(
   isconsistent=false
 )
   free_values = change_ghost(_free_values,f.gids;is_consistent=isconsistent,make_consistent=true)
-  
+
   # Create distributed single field functions
   field_fe_fun = DistributedSingleFieldFEFunction[]
   for i in 1:num_fields(f)
@@ -240,7 +242,7 @@ function FESpaces.interpolate_everywhere!(
 )
   msg = "free_values and FESpace have incompatible index partitions."
   @check PartitionedArrays.matching_local_indices(axes(free_values,1),get_free_dof_ids(space)) msg
-  
+
   # Interpolate each field
   field_fe_fun = DistributedSingleFieldFEFunction[]
   for i in 1:num_fields(space)
@@ -415,16 +417,16 @@ function generate_multi_field_gids(
     end
     collect(keys(dict))
   end
-  
+
   f_p_parts_snd, f_p_parts_rcv = map(x->assembly_neighbors(partition(x)),f_frange) |> tuple_of_arrays
   p_f_parts_snd = map(v,f_p_parts_snd...)
   p_f_parts_rcv = map(v,f_p_parts_rcv...)
   p_neigs_snd = map(merge_neigs,p_f_parts_snd)
   p_neigs_rcv = map(merge_neigs,p_f_parts_rcv)
-  
+
   exchange_graph = ExchangeGraph(p_neigs_snd,p_neigs_rcv)
   assembly_neighbors(p_iset;neighbors=exchange_graph)
-  
+
   PRange(p_iset)
 end
 
@@ -465,7 +467,7 @@ end
 
 # BlockSparseMatrixAssemblers
 
-const DistributedBlockSparseMatrixAssembler{R,C} = 
+const DistributedBlockSparseMatrixAssembler{R,C} =
   MultiField.BlockSparseMatrixAssembler{R,C,<:AbstractMatrix{<:DistributedSparseMatrixAssembler}}
 
 function FESpaces.SparseMatrixAssembler(
