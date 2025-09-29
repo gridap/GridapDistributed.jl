@@ -394,7 +394,7 @@ function _cartesian_model_with_periodic_bcs(pdesc::DistributedCartesianDescripto
     remove_boundary = map((p,n)->((p && (n!=1)) ? true : false),desc.isperiodic,parts)
     CartesianDiscreteModel(_desc,cmin,cmax,remove_boundary)
   end
-  
+
   return models, global_partition
 end
 
@@ -659,7 +659,7 @@ function Geometry.SkeletonTriangulation(
   return filter_cells_when_needed(portion,gids,parent)
 end
 
-# NOTE: The following constructors require adding back the ghost cells: 
+# NOTE: The following constructors require adding back the ghost cells:
 # Potentially, the input `trian` has had some/all of its ghost cells removed. If we do not
 # add them back, some skeleton facets might look like boundary facets to the local constructors...
 function Geometry.BoundaryTriangulation(
