@@ -108,8 +108,8 @@ end
 
 # LocalOperators
 
-struct DistributedLocalOperator
-  ops :: AbstractArray{<:LocalOperator}
+struct DistributedLocalOperator{A}
+  ops :: A
   model :: DistributedDiscreteModel
 end
 
