@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- New overloads for the `TrialFESpace` constructor where the data to be imposed is passed as a `DistributedCellField`. Since PR[#XXX](https://github.com/gridap/GridapDistributed.jl/pull/XXX).
+- New overloads for the `TrialFESpace` constructor where the data to be imposed is passed as a `DistributedCellField`. Since PR[#183](https://github.com/gridap/GridapDistributed.jl/pull/183).
 
 ## [0.4.10] - 2025-09-29
 
