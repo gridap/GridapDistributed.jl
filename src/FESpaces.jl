@@ -414,6 +414,21 @@ function FESpaces.TrialFESpace!(f::DistributedSingleFieldFESpace,fun)
   DistributedSingleFieldFESpace(spaces,f.gids,f.trian,f.vector_type,f.metadata)
 end
 
+function FESpaces.TrialFESpace(f::DistributedSingleFieldFESpace,cf::DistributedCellField)
+  spaces = map(local_views(f),local_views(cf)) do s, field
+    TrialFESpace(s,field)
+  end
+  DistributedSingleFieldFESpace(spaces,f.gids,f.trian,f.vector_type,f.metadata)
+end
+
+function FESpaces.TrialFESpace(cf::DistributedCellField,f::DistributedSingleFieldFESpace)
+  spaces = map(local_views(f),local_views(cf)) do s, field
+    TrialFESpace(s,field)
+  end
+  DistributedSingleFieldFESpace(spaces,f.gids,f.trian,f.vector_type,f.metadata)
+end
+
+
 function FESpaces.HomogeneousTrialFESpace(f::DistributedSingleFieldFESpace)
   spaces = map(f.spaces) do s
     HomogeneousTrialFESpace(s)
@@ -473,6 +488,16 @@ function FESpaces.interpolate_dirichlet!(
   dirichlet_values::AbstractArray{<:AbstractVector},
   f::DistributedSingleFieldFESpace)
   map(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
+    interpolate_dirichlet!(u,fvec,dvec,V)
+  end
+  FEFunction(f,free_values,dirichlet_values)
+end
+
+function FESpaces.interpolate_dirichlet!(
+  u::DistributedCellField, free_values::AbstractVector,
+  dirichlet_values::AbstractArray{<:AbstractVector},
+  f::DistributedSingleFieldFESpace)
+  map(local_views(u), f.spaces,local_views(free_values),dirichlet_values) do u,V,fvec,dvec
     interpolate_dirichlet!(u,fvec,dvec,V)
   end
   FEFunction(f,free_values,dirichlet_values)
