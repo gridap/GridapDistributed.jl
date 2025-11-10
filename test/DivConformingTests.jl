@@ -59,12 +59,10 @@ function setup_p2_model()
   Gridap.Geometry.UnstructuredDiscreteModel(grid)
 end
 
-function f(model,reffe)
+function f(model,reffe,trian,das)
     V = FESpace(model,reffe,conformity=:Hdiv)
     U = TrialFESpace(V)
 
-    das = FullyAssembledRows()
-    trian = Triangulation(das,model)
     degree = 2
     dΩ = Measure(trian,degree)
     a(u,v) = ∫( u⋅v )*dΩ
@@ -82,6 +80,7 @@ function f(model,reffe)
     dc2 = dc.contribs.items[2]
     c1  = Gridap.CellData.get_contribution(dc1,t1)
     c2  = Gridap.CellData.get_contribution(dc2,t2)
+    
     tol = 1.0e-12
     @test norm(c1[1]-c2[2]) < tol
     @test norm(c1[2]-c2[1]) < tol
@@ -122,10 +121,18 @@ function main(distribute,nranks)
 
     model = GridapDistributed.DistributedDiscreteModel(models,gids)
 
+    das = FullyAssembledRows()
+    trian = Triangulation(das,model)
+
     reffe=ReferenceFE(raviart_thomas,Float64,0)
-    f(model,reffe)
+    f(model,reffe,trian,das)
+    f(trian,reffe,trian,das)
+    f(Triangulation(model),reffe,trian,das)
+    
     reffe=ReferenceFE(QUAD, raviart_thomas, 0)
-    f(model,reffe)
+    f(model,reffe,trian,das)
+    f(trian,reffe,trian,das)
+    f(Triangulation(model),reffe,trian,das)
   end
 
 end # module
