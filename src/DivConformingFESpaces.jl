@@ -1,4 +1,3 @@
-
 function FESpaces.FESpace(model::DistributedDiscreteModel,
                           reffe::Tuple{RaviartThomas,Any,Any};
                           conformity=nothing,
@@ -25,15 +24,13 @@ function FESpace(model::DistributedDiscreteModel,
   _common_fe_space_constructor(model,cell_reffes;conformity,split_own_and_ghost,kwargs...)
 end
 
-function _setup_dmodel(_trian::DistributedTriangulation)
+function _setup_dmodel_and_dtrian(_trian::DistributedTriangulation)
   trian = add_ghost_cells(_trian)
   models = map(local_views(trian)) do t
     get_active_model(t)
   end
-  GenericDistributedDiscreteModel(models, generate_cell_gids(trian))
+  GenericDistributedDiscreteModel(models, generate_cell_gids(trian)), trian
 end  
-
-
 
 function FESpace(
   _trian::DistributedTriangulation,
@@ -42,10 +39,12 @@ function FESpace(
   split_own_and_ghost=false,
   constraint=nothing,kwargs...
 )
-  dmodel = _setup_dmodel(_trian)
-  FESpace(dmodel, reffe; conformity=conformity,
-           split_own_and_ghost=split_own_and_ghost,
-           constraint=constraint, kwargs...)
+  dmodel, dtrian = _setup_dmodel_and_dtrian(_trian)
+  cell_reffes = map(local_views(dmodel)) do m
+    basis,reffe_args,reffe_kwargs = reffe
+    cell_reffe = ReferenceFE(m,basis,reffe_args...;reffe_kwargs...)
+  end
+  _common_fe_space_constructor(dmodel,cell_reffes,dtrian;conformity,split_own_and_ghost,kwargs...)
 end
 
 function FESpace(_trian::DistributedTriangulation,
@@ -54,10 +53,23 @@ function FESpace(_trian::DistributedTriangulation,
                  split_own_and_ghost=false,
                  constraint=nothing,
                  kwargs...)
-  dmodel = _setup_dmodel(_trian)
-  FESpace(dmodel, reffe; conformity=conformity,
-          split_own_and_ghost=split_own_and_ghost,
-          constraint=constraint, kwargs...)
+  dmodel, dtrian = _setup_dmodel_and_dtrian(_trian)
+  cell_reffes = map(local_views(dmodel)) do m
+     Fill(reffe,num_cells(m))
+  end
+  _common_fe_space_constructor(dmodel,cell_reffes,dtrian;conformity,split_own_and_ghost,kwargs...)
+end
+
+function _common_fe_space_constructor(model,cell_reffes,trian;conformity,split_own_and_ghost,kwargs...)
+  sign_flips=_generate_sign_flips(model,cell_reffes)
+  spaces = map(local_views(model),sign_flips,cell_reffes,local_views(trian)) do m,sign_flip,cell_reffe,trian
+     conf = Conformity(testitem(cell_reffe),conformity)
+     cell_fe = CellFE(m,cell_reffe,conf,sign_flip)
+     FESpace(m, cell_fe; trian=trian, kwargs...)
+  end
+  gids = generate_gids(model,spaces)
+  vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
+  DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
 end
 
 function _common_fe_space_constructor(model,cell_reffes;conformity,split_own_and_ghost,kwargs...)
