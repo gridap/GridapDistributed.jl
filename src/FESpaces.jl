@@ -360,6 +360,71 @@ function generate_posneg_gids(
   return PRange(local_indices_pos), PRange(local_indices_neg)
 end
 
+function split_gids_by_color(
+  gids::PRange, lid_to_color::AbstractArray, 
+  ncolors = getany(reduction(max,map(maximum,lid_to_color);destination=:all))
+)
+  color_to_nlids, color_to_noids = map(partition(gids), lid_to_color) do ids, lid_to_color
+    rank = part_id(ids)
+    lid_to_owner = local_to_owner(ids)
+    color_to_nlids = zeros(Int,ncolors)
+    color_to_noids = zeros(Int,ncolors)
+    for (owner,color) in zip(lid_to_owner,lid_to_color)
+      color_to_nlids[color] += 1
+      color_to_noids[color] += isequal(owner,rank)
+    end
+    return color_to_nlids, color_to_noids
+  end |> tuple_of_arrays
+
+  # I wish we could reduce arrays directly...
+  color_to_fgid = map(1:ncolors) do c
+    scan(+,map(Base.Fix2(getindex,c), color_to_noids); type=:exclusive, init=1)
+  end |> to_parray_of_arrays
+  color_to_ngids = map(1:ncolors) do c
+    reduction(+,map(Base.Fix2(getindex,c), color_to_noids); destination=:all, init=0)
+  end |> to_parray_of_arrays
+
+  lid_to_cgid = map(partition(gids), lid_to_color, color_to_fgid) do ids, lid_to_color, color_to_fgid
+    rank = part_id(ids)
+    lid_to_cgid = zeros(Int,length(lid_to_color))
+    color_to_offset = zeros(Int,ncolors)
+    for (lid,(owner,color)) in enumerate(zip(local_to_owner(ids),lid_to_color))
+      if isequal(owner,rank)
+        lid_to_cgid[lid] = color_to_fgid[color] + color_to_offset[color]
+        color_to_offset[color] += 1
+      end
+    end
+    return lid_to_cgid
+  end
+  consistent!(PVector(lid_to_cgid,partition(gids))) |> wait
+
+  color_to_gids = map(
+    partition(gids), lid_to_color, lid_to_cgid, color_to_nlids, color_to_ngids
+  ) do ids, lid_to_color, lid_to_cgid, color_to_nlids, color_to_ngids
+    color_to_lid_to_gid = [zeros(Int, n) for n in color_to_nlids]
+    color_to_lid_to_owner = [zeros(Int32, n) for n in color_to_nlids]
+    offsets = zeros(Int, ncolors)
+    for (color, cgid, owner) in zip(lid_to_color, lid_to_cgid, local_to_owner(ids))
+      offsets[color] += 1
+      lid = offsets[color]
+      color_to_lid_to_gid[color][lid] = cgid
+      color_to_lid_to_owner[color][lid] = owner
+    end
+
+    color_to_ids = ()
+    for color in 1:ncolors
+      cids = LocalIndices(
+        color_to_ngids[color], part_id(ids), 
+        color_to_lid_to_gid[color], color_to_lid_to_owner[color]
+      )
+      color_to_ids = (color_to_ids..., cids)
+    end
+    return color_to_ids
+  end |> tuple_of_arrays
+
+  return map(PRange,color_to_gids)
+end
+
 # FEFunction related
 
 """
