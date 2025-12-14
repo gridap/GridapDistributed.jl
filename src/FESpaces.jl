@@ -403,7 +403,7 @@ function generate_gids_by_color(
   t1 = fetch_vector_ghost_values!(cell_lids_to_owner,cache_fetch)
 
   # Note: lid_to_owner is still not consistent, but owned data is correct
-  lid_to_gid, color_to_clid_to_lid = map(
+  lid_to_gid, lid_to_clid, color_to_clid_to_lid = map(
     partition(cell_range), lid_to_color, lid_to_owner, color_to_fgid
   ) do indices, lid_to_color, lid_to_owner, color_to_fgid
     
@@ -426,7 +426,7 @@ function generate_gids_by_color(
     for (lid, (color, clid)) in enumerate(zip(lid_to_color,lid_to_clid))
       color_to_clid_to_lid[color][clid] = lid
     end
-    return lid_to_gid, color_to_clid_to_lid
+    return lid_to_gid, lid_to_clid, color_to_clid_to_lid
   end |> tuple_of_arrays
 
   # Finish exchanging the dof owners.
@@ -487,7 +487,7 @@ function generate_gids_by_color(
     return color_to_indices
   end |> tuple_of_arrays
 
-  return map(PRange,color_to_indices)
+  return map(PRange,color_to_indices), lid_to_clid, color_to_clid_to_lid
 end
 
 function split_gids_by_color(
