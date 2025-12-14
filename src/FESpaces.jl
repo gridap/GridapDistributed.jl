@@ -161,6 +161,15 @@ function fetch_vector_ghost_values!(vector_partition,cache)
   assemble!((a,b)->b, vector_partition, cache) 
 end
 
+"""
+    generate_gids(cell_gids::PRange, cell_to_lids, nlids) -> PRange
+
+Given a set of cell global ids, a distributed array of local tables mapping cells to local dof ids,
+and a distributed array with the number of local dofs in each partition, this function 
+generates the global dof ids and returns them as a `PRange` of `LocalIndices`.
+
+Ignores negative local dof ids (usually used for Dirichlet dofs).
+"""
 function generate_gids(
   cell_range::PRange,
   cell_to_ldofs::AbstractArray{<:AbstractArray},
@@ -248,6 +257,13 @@ function generate_gids(
   return PRange(local_indices)
 end
 
+"""
+    generate_posneg_gids(cell_gids::PRange, cell_to_lposneg, nlpos, nlneg) -> (PRange,PRange)
+
+Similar to `generate_gids`, but also handles negative local dof ids. Returns two sets of 
+global ids: one for positive local ids and another for negative local ids.
+This can be used to generate simultaneously free and dirichlet dof global ids.
+"""
 function generate_posneg_gids(
   cell_range::PRange,
   cell_to_lposneg::AbstractArray{<:AbstractArray},
@@ -360,6 +376,16 @@ function generate_posneg_gids(
   return PRange(local_indices_pos), PRange(local_indices_neg)
 end
 
+"""
+    generate_gids_by_color(cell_gids::PRange, cell_to_lids, lid_to_color, ncolors)
+
+Similar to `generate_gids`, but uses a global partition given by `lid_to_color` to generate
+a different set of global ids per color. Returns:
+
+- a tuple with a `PRange` of `LocalIndices` per color.
+- a mapping `lid_to_clid` that maps local ids to local color ids
+- a mapping `color_to_clid_to_lid` that maps, for each color, local color ids to local ids.
+"""
 function generate_gids_by_color(
   cell_range::PRange, 
   cell_to_lids::AbstractArray{<:AbstractArray},
@@ -490,6 +516,13 @@ function generate_gids_by_color(
   return map(PRange,color_to_indices), lid_to_clid, color_to_clid_to_lid
 end
 
+"""
+    split_gids_by_color(gids::PRange, lid_to_color::AbstractArray, ncolors) -> NTuple{ncolors,PRange}
+
+Given a set of global ids and a mapping from local ids to colors, this function splits
+the global ids into different sets of global ids per color. Returns a tuple with a `PRange`
+of `LocalIndices` per color.
+"""
 function split_gids_by_color(
   gids::PRange, lid_to_color::AbstractArray, 
   ncolors = getany(reduction(max,map(maximum,lid_to_color);destination=:all))
