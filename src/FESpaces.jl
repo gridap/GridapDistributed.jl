@@ -360,6 +360,136 @@ function generate_posneg_gids(
   return PRange(local_indices_pos), PRange(local_indices_neg)
 end
 
+function generate_gids_by_color(
+  cell_range::PRange, 
+  cell_to_lids::AbstractArray{<:AbstractArray},
+  lid_to_color::AbstractArray,
+  ncolors = getany(reduction(max,map(maximum,lid_to_color);destination=:all))
+)
+  cell_lids_to_data = allocate_cell_wise_vector(Int, cell_to_lids)
+  cache_fetch = fetch_vector_ghost_values_cache(cell_lids_to_data,partition(cell_range))
+
+  lid_to_owner, color_to_noids = map(
+    partition(cell_range),cell_to_lids,lid_to_color
+  ) do indices, cell_to_lids, lid_to_color
+    lid_to_owner = fill(zero(Int32),length(lid_to_color))
+    cache = array_cache(cell_to_lids)
+    for (cell, owner) in enumerate(local_to_owner(indices))
+      lids = getindex!(cache,cell_to_lids,cell)
+      for lid in lids
+        (lid < 0) && continue
+        lid_to_owner[lid] = max(owner,lid_to_owner[lid])
+      end
+    end
+
+    rank = part_id(indices)
+    color_to_noids = zeros(Int,ncolors)
+    for (owner, color) in zip(lid_to_owner,lid_to_color)
+      color_to_noids[color] += isequal(owner,rank)
+    end
+
+    return lid_to_owner, color_to_noids
+  end |> tuple_of_arrays
+
+  # Find first gid per color
+  color_to_fgid = map(1:ncolors) do c
+    scan(+,map(Base.Fix2(getindex,c), color_to_noids); type=:exclusive, init=1)
+  end |> to_parray_of_arrays
+
+  # Start exchanging dof owners
+  cell_lids_to_owner = dof_wise_to_cell_wise!(
+    cell_lids_to_data,lid_to_owner,cell_to_lids,own_to_local(cell_range)
+  )
+  t1 = fetch_vector_ghost_values!(cell_lids_to_owner,cache_fetch)
+
+  # Note: lid_to_owner is still not consistent, but owned data is correct
+  lid_to_gid, color_to_clid_to_lid = map(
+    partition(cell_range), lid_to_color, lid_to_owner, color_to_fgid
+  ) do indices, lid_to_color, lid_to_owner, color_to_fgid
+    
+    # Count number of dofs per color
+    rank = part_id(indices)
+    color_to_nldofs = zeros(Int,ncolors)
+    lid_to_clid = zeros(Int32,length(lid_to_color))
+    lid_to_gid = zeros(Int,length(lid_to_color))
+    for (lid, (color, owner)) in enumerate(zip(lid_to_color,lid_to_owner))
+      color_to_nldofs[color] += 1
+      lid_to_clid[lid] = color_to_nldofs[color]
+      if isequal(owner,rank)
+        lid_to_gid[lid] = color_to_fgid[color]
+        color_to_fgid[color] += 1
+      end
+    end
+
+    # Find clid to lid mapping
+    color_to_clid_to_lid = [fill(zero(Int32),n) for n in color_to_nldofs]
+    for (lid, (color, clid)) in enumerate(zip(lid_to_color,lid_to_clid))
+      color_to_clid_to_lid[color][clid] = lid
+    end
+    return lid_to_gid, color_to_clid_to_lid
+  end |> tuple_of_arrays
+
+  # Finish exchanging the dof owners.
+  wait(t1)
+  cell_wise_to_dof_wise!(
+    lid_to_owner,cell_lids_to_owner,cell_to_lids,ghost_to_local(cell_range)
+  )
+
+  # Start exchanging gids
+  cell_to_gids = dof_wise_to_cell_wise!(
+    cell_lids_to_data,lid_to_gid,cell_to_lids,own_to_local(cell_range)
+  )
+  t2 = fetch_vector_ghost_values!(cell_to_gids,cache_fetch)
+
+  # Find the global range of owned dofs
+  color_to_ngids = map(1:ncolors) do c
+    reduction(+,map(Base.Fix2(getindex,c), color_to_noids); destination=:all, init=0)
+  end |> to_parray_of_arrays
+
+  # Finish exchanging the gids.
+  wait(t2)
+  map(
+    cell_to_lids,cell_to_gids,lid_to_gid,lid_to_owner,partition(cell_range)
+  ) do cell_to_lids,cell_to_gids,lid_to_gid,lid_to_owner,indices
+    cache = array_cache(cell_to_lids)
+    lcell_to_owner = local_to_owner(indices)
+    for cell in ghost_to_local(indices)
+      p = cell_to_gids.ptrs[cell]-1
+      lids = getindex!(cache,cell_to_lids,cell)
+      cell_owner = lcell_to_owner[cell]
+      for (i,lid) in enumerate(lids)
+        if (lid > 0) && isequal(lid_to_owner[lid],cell_owner)
+          lid_to_gid[lid] = cell_to_gids.data[i+p]
+        end
+      end
+    end
+  end
+
+  dof_wise_to_cell_wise!(cell_to_gids,lid_to_gid,cell_to_lids,own_to_local(cell_range))
+  fetch_vector_ghost_values!(cell_to_gids,cache_fetch) |> wait
+  cell_wise_to_dof_wise!(lid_to_gid,cell_to_gids,cell_to_lids,ghost_to_local(cell_range))
+
+  # Setup DoFs LocalIndices per color
+  color_to_indices = map(
+    partition(cell_range), lid_to_color, lid_to_gid, lid_to_owner, color_to_clid_to_lid, color_to_ngids
+  ) do indices, lid_to_color, lid_to_gid, lid_to_owner, color_to_clid_to_lid, color_to_ngids
+    rank = part_id(indices)
+
+    color_to_indices = ()
+    for c in 1:ncolors
+      cids = LocalIndices(
+        color_to_ngids[c], rank, 
+        lid_to_gid[color_to_clid_to_lid[c]], 
+        lid_to_owner[color_to_clid_to_lid[c]]
+      )
+      color_to_indices = (color_to_indices..., cids)
+    end
+    return color_to_indices
+  end |> tuple_of_arrays
+
+  return map(PRange,color_to_indices)
+end
+
 function split_gids_by_color(
   gids::PRange, lid_to_color::AbstractArray, 
   ncolors = getany(reduction(max,map(maximum,lid_to_color);destination=:all))
