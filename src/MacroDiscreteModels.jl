@@ -95,7 +95,7 @@ function classify_interfaces(model::DistributedDiscreteModel{Dc};sort_faces=true
     cell_owners = local_to_owner(cgids)
 
     # Count dfaces in each interface
-    owners_to_interface = Dict{UInt64,Int8}()
+    owners_to_interface = Dict{UInt,Int8}()
     ptrs = Vector{Int32}[]
     num_interfaces = 0
     d_to_num_interfaces = zeros(Int8,Dc+1)
@@ -195,7 +195,7 @@ function generate_interface_gids(nbors,keys)
     end
 
     nprocs = length(nbors)
-    gid_data = Vector{Int64}(undef,length(keys.data))
+    gid_data = Vector{Int}(undef,length(keys.data))
   
     gid = 0
     for proc in 1:nprocs
@@ -259,7 +259,7 @@ function generate_nbors_and_keys(
     # For each interface, we consider any face and take the minimum rank of the neighboring processors. 
     # All faces should have the same neighboring processors.
     i = 1
-    nbors = Vector{Int64}(undef,n_interfaces)
+    nbors = Vector{Int}(undef,n_interfaces)
     for (d,interfaces) in enumerate(d_to_interfaces)
       Df = d-1
       if Df ∈ dimensions
@@ -282,7 +282,7 @@ function generate_nbors_and_keys(
   PartitionedArrays.length_to_ptrs!(offsets)
   keys = map(n_interfaces,d_to_interfaces,d_to_fgids) do n_interfaces, d_to_interfaces, d_to_fgids
     i = 1
-    keys = Vector{Int64}(undef,n_interfaces)
+    keys = Vector{Int}(undef,n_interfaces)
     for (d,interfaces) in enumerate(d_to_interfaces)
       Df = d-1
       if Df ∈ dimensions
