@@ -1138,7 +1138,7 @@ function FESpaces.ZeroMeanFESpace(space::DistributedSingleFieldFESpace,dΩ::Dist
     vol  = sum(dvol)
     return vol, dvol
   end |> tuple_of_arrays
-  vol  = reduce(+,_vol,init=zero(eltype(vol)))
+  vol = reduce(+,_vol,init=zero(eltype(_vol)))
   metadata = DistributedZeroMeanCache(dvol,vol)
 
   return DistributedSingleFieldFESpace(
