@@ -85,66 +85,87 @@ function main(distribute,parts,das)
   model = CartesianDiscreteModel(ranks,parts,domain,cells)
   Ω = Triangulation(model)
   Γ = Boundary(model)
+  dΩ = Measure(Ω,3)
 
+  function _interpolation_tests(u,model,Ω,Γ,output)
+      reffe = ReferenceFE(lagrangian,Float64,1)
+      V = TestFESpace(model,reffe,dirichlet_tags="boundary")
+      U = TrialFESpace(u,V)
+      V2 = FESpace(Ω,reffe)
+      @test get_vector_type(V) <: PVector{<:Vector}
+      @test get_vector_type(U) <: PVector{<:Vector}
+      @test get_vector_type(V2) <: PVector{<:Vector}
+
+      free_values_partition = map(partition(V.gids)) do indices 
+        ones(Float64,local_length(indices))
+      end 
+
+      free_values = PVector(free_values_partition,partition(V.gids))
+      fh = FEFunction(U,free_values)
+      zh = zero(U)
+      uh = interpolate(u,U)
+      eh = u - uh
+
+      uh_dir = interpolate_dirichlet(u,U)
+      free_values = zero_free_values(U)
+      dirichlet_values = get_dirichlet_dof_values(U)
+      uh_dir2 = interpolate_dirichlet!(u,free_values,dirichlet_values,U)
+
+      uh_everywhere = interpolate_everywhere(u,U)
+      dirichlet_values0 = zero_dirichlet_values(U)
+      uh_everywhere_ = interpolate_everywhere!(u,free_values,dirichlet_values0,U)
+      eh2 = u - uh_everywhere
+      eh2_ = u - uh_everywhere_
+
+      uh_everywhere2 = interpolate_everywhere(uh_everywhere,U)
+      uh_everywhere2_ = interpolate_everywhere!(uh_everywhere,free_values,dirichlet_values,U)
+      eh3 = u - uh_everywhere2
+
+      dofs      = get_fe_dof_basis(U)
+      cell_vals = dofs(uh)
+      gather_free_values!(free_values,U,cell_vals)
+      gather_free_and_dirichlet_values!(free_values,dirichlet_values,U,cell_vals)
+      uh4 = FEFunction(U,free_values,dirichlet_values)
+      eh4 = u - uh4
+
+      dΩ = Measure(Ω,3)
+      cont   = ∫( abs2(eh) )dΩ
+      cont2  = ∫( abs2(eh2) )dΩ
+      cont2_ = ∫( abs2(eh2_) )dΩ
+      cont3  = ∫( abs2(eh3) )dΩ
+      cont4  = ∫( abs2(eh4) )dΩ
+      @test sqrt(sum(cont))   < 1.0e-9
+      @test sqrt(sum(cont2))  < 1.0e-9
+      @test sqrt(sum(cont2_)) < 1.0e-9
+      @test sqrt(sum(cont3))  < 1.0e-9
+      @test sqrt(sum(cont4))  < 1.0e-9
+
+      writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
+               celldata=["err"=>cont[Ω]],
+               cellfields=["uh"=>uh,"zh"=>zh,"eh"=>eh])
+
+      writevtk(Γ,joinpath(output,"Γ"),cellfields=["uh"=>uh])
+  end
+
+  # Testing interpolation with a Julia function
   u((x,y)) = x+y
+  _interpolation_tests(u,model,Ω,Γ,output)
+
+  # Testing interpolation with a DistributedCellField
+  # The DistributedCellField MUST be defined in all cells
+  # (i.e., owned + ghost) for the tests within 
+  # _interpolation_tests(...) to pass. The problematic part is 
+  # in the interpolation of the dirichlet values
+  Ωghosts = Triangulation(with_ghost, model)
+  fields = map(local_views(Ωghosts)) do Ω
+    CellField(u,Ω)
+  end
+  u_cf = GridapDistributed.DistributedCellField(fields,Ωghosts)
+  _interpolation_tests(u_cf,model,Ωghosts,Γ,output)
+
   reffe = ReferenceFE(lagrangian,Float64,1)
   V = TestFESpace(model,reffe,dirichlet_tags="boundary")
   U = TrialFESpace(u,V)
-  V2 = FESpace(Ω,reffe)
-  @test get_vector_type(V) <: PVector{<:Vector}
-  @test get_vector_type(U) <: PVector{<:Vector}
-  @test get_vector_type(V2) <: PVector{<:Vector}
-
-  free_values_partition = map(partition(V.gids)) do indices 
-    ones(Float64,local_length(indices))
-  end 
-
-  free_values = PVector(free_values_partition,partition(V.gids))
-  fh = FEFunction(U,free_values)
-  zh = zero(U)
-  uh = interpolate(u,U)
-  eh = u - uh
-
-  uh_dir = interpolate_dirichlet(u,U)
-  free_values = zero_free_values(U)
-  dirichlet_values = get_dirichlet_dof_values(U)
-  uh_dir2 = interpolate_dirichlet!(u,free_values,dirichlet_values,U)
-
-  uh_everywhere = interpolate_everywhere(u,U)
-  dirichlet_values0 = zero_dirichlet_values(U)
-  uh_everywhere_ = interpolate_everywhere!(u,free_values,dirichlet_values0,U)
-  eh2 = u - uh_everywhere
-  eh2_ = u - uh_everywhere_
-
-  uh_everywhere2 = interpolate_everywhere(uh_everywhere,U)
-  uh_everywhere2_ = interpolate_everywhere!(uh_everywhere,free_values,dirichlet_values,U)
-  eh3 = u - uh_everywhere2
-
-  dofs      = get_fe_dof_basis(U)
-  cell_vals = dofs(uh)
-  gather_free_values!(free_values,U,cell_vals)
-  gather_free_and_dirichlet_values!(free_values,dirichlet_values,U,cell_vals)
-  uh4 = FEFunction(U,free_values,dirichlet_values)
-  eh4 = u - uh4
-
-  dΩ = Measure(Ω,3)
-  cont   = ∫( abs2(eh) )dΩ
-  cont2  = ∫( abs2(eh2) )dΩ
-  cont2_ = ∫( abs2(eh2_) )dΩ
-  cont3  = ∫( abs2(eh3) )dΩ
-  cont4  = ∫( abs2(eh4) )dΩ
-  @test sqrt(sum(cont))   < 1.0e-9
-  @test sqrt(sum(cont2))  < 1.0e-9
-  @test sqrt(sum(cont2_)) < 1.0e-9
-  @test sqrt(sum(cont3))  < 1.0e-9
-  @test sqrt(sum(cont4))  < 1.0e-9
-
-
-  writevtk(Ω,joinpath(output,"Ω"), nsubcells=10,
-           celldata=["err"=>cont[Ω]],
-           cellfields=["uh"=>uh,"zh"=>zh,"eh"=>eh])
-
-  writevtk(Γ,joinpath(output,"Γ"),cellfields=["uh"=>uh])
 
   # Assembly
   Ωass  = Triangulation(das,model)
