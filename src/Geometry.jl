@@ -596,6 +596,14 @@ function Geometry.simplexify(model::DistributedDiscreteModel;kwargs...)
   return UnstructuredDiscreteModel(Adaptivity.get_model(ref_model))
 end
 
+# Restrict
+
+function Geometry.restrict(model::DistributedDiscreteModel, cell_to_parent_cell::AbstractArray)
+  models = map(Geometry.restrict, local_views(model), cell_to_parent_cell)
+  gids = restrict_gids(get_cell_gids(model), cell_to_parent_cell)
+  return GenericDistributedDiscreteModel(models, gids)
+end
+
 # Triangulation
 
 # We do not inherit from Triangulation on purpose.
@@ -957,54 +965,53 @@ function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
   if (covers_all_faces)
     tgids = mgids
   else
-    # count number owned cells
-    notcells, tcell_to_mcell = map(
-      local_views(dmodel),local_views(dtrian),PArrays.partition(mgids)) do model,trian,partition
-      lid_to_owner = local_to_owner(partition)
-      part = part_id(partition)
+    tcell_to_mcell = map(local_views(dtrian)) do trian
       glue = get_glue(trian,Val(Dt))
       @assert isa(glue,FaceToFaceGlue)
-      tcell_to_mcell = glue.tface_to_mface
-      notcells = count(tcell_to_mcell) do mcell
-        lid_to_owner[mcell] == part
-      end
-      notcells, tcell_to_mcell
-    end |> tuple_of_arrays
-
-    # Find the global range of owned dofs
-    first_gtcell = scan(+,notcells,type=:exclusive,init=one(eltype(notcells)))
-
-    # Assign global cell ids to owned cells
-    mcell_to_gtcell = map(
-      first_gtcell,tcell_to_mcell,partition(mgids)) do first_gtcell,tcell_to_mcell,partition
-      mcell_to_gtcell = zeros(Int,local_length(partition))
-      loc_to_owner = local_to_owner(partition)
-      part = part_id(partition)
-      gtcell = first_gtcell
-      for mcell in tcell_to_mcell
-        if loc_to_owner[mcell] == part
-          mcell_to_gtcell[mcell] = gtcell
-          gtcell += 1
-        end
-      end
-      mcell_to_gtcell
+      return glue.tface_to_mface
     end
-
-    cache = fetch_vector_ghost_values_cache(mcell_to_gtcell,partition(mgids))
-    fetch_vector_ghost_values!(mcell_to_gtcell,cache) |> wait
-
-    # Prepare new partition
-    ngtcells = reduction(+,notcells,destination=:all,init=zero(eltype(notcells)))
-    indices = map(
-      ngtcells,mcell_to_gtcell,tcell_to_mcell,partition(mgids)
-    ) do ngtcells,mcell_to_gtcell,tcell_to_mcell,partition
-      tcell_to_gtcell = mcell_to_gtcell[tcell_to_mcell]
-      lid_to_owner  = local_to_owner(partition)
-      tcell_to_part = lid_to_owner[tcell_to_mcell]
-      LocalIndices(ngtcells,part_id(partition),tcell_to_gtcell,tcell_to_part)
-    end
-    _find_neighbours!(indices, partition(mgids))
-    tgids = PRange(indices)
+    tgids = restrict_gids(mgids,tcell_to_mcell)
   end
   return tgids
+end
+
+function restrict_gids(gids::PRange, new_to_old_lid::AbstractArray)
+
+  n_own = map(partition(gids), new_to_old_lid) do ids, n2o_lid
+    rank = part_id(ids)
+    return count(isequal(rank), view(local_to_owner(ids), n2o_lid)) 
+  end
+
+  # Assign global ids to owned lids
+  first_gid = scan(+,n_own,type=:exclusive,init=one(eltype(n_own)))
+  
+  old_lid_to_new_gid = map(first_gid,new_to_old_lid,partition(gids)) do first_gid, n2o_lid, ids
+    old_lid_to_new_gid = zeros(Int,local_length(ids))
+    old_lid_to_owner = local_to_owner(ids)
+    rank = part_id(ids)
+    gid = first_gid
+    for old in n2o_lid
+      if old_lid_to_owner[old] == rank
+        old_lid_to_new_gid[old] = gid
+        gid += 1
+      end
+    end
+    return old_lid_to_new_gid
+  end
+
+  consistent!(PVector(old_lid_to_new_gid,partition(gids))) |> wait
+
+  # Prepare new partition
+  n_gids = reduction(+,n_own,destination=:all,init=zero(eltype(n_own)))
+
+  new_indices = map(
+    n_gids, old_lid_to_new_gid, new_to_old_lid, partition(gids)
+  ) do n_gids, old_lid_to_new_gid, new_to_old_lid, ids
+    lid_to_gid = old_lid_to_new_gid[new_to_old_lid]
+    lid_to_owner  = local_to_owner(ids)[new_to_old_lid]
+    return LocalIndices(n_gids,part_id(ids),lid_to_gid,lid_to_owner)
+  end
+  _find_neighbours!(new_indices, partition(gids))
+
+  return PRange(new_indices)
 end
