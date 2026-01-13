@@ -146,6 +146,4 @@ function main(distribute,parts)
   _main(2,BlockMultiFieldStyle(),(biform4,liform4),D,D)
 end
 
-main(DebugArray, (2,2))
-
 end

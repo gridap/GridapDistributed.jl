@@ -80,6 +80,34 @@ function FESpaces._change_argument(op,f,local_trians,uh::DistributedADTypes)
   g
 end
 
+# Distributed counterpart of: src/MultiField/MultiFieldAutodiff.jl
+
+for (op,_op) in ((:gradient,:_gradient),(:jacobian,:_jacobian))
+  @eval begin
+    function FESpaces.$(op)(f::Function,uh::DistributedMultiFieldFEFunction;ad_type=:split)
+      fuh = f(uh)
+      if ad_type == :split
+        MultiField.multifield_autodiff_split($op,f,uh,fuh)
+      elseif ad_type == :monolithic
+        FESpaces.$(_op)(f,uh,fuh)
+      else
+        @notimplemented """Unknown ad_type = $ad_type
+          Options:
+          - :split      -- compute the gradient for each field separately, then merge
+          - :monolithic -- compute the gradient for all fields together
+          """
+      end
+    end
+  end
+end
+
+function MultiField._combine_contributions(op::Function,terms,fuh::DistributedDomainContribution)
+  local_terms = map(local_views(fuh),local_views.(terms)...) do fuh,terms...
+    MultiField._combine_contributions(op,terms,fuh)
+  end
+  DistributedDomainContribution(local_terms)
+end
+
 # Distributed counterpart of: src/Arrays/Autodiff.jl
 # autodiff_array_xxx
 
@@ -209,7 +237,7 @@ function distributed_autodiff_array_gradient(a, i_to_x, j_to_i::AbstractArray{<:
     # where each entry is a 2-block BlockVector with the first block being the
     # contribution of the plus side and the second, the one of the minus side
     is_single_field = eltype(eltype(j_to_result_plus)) <: Number
-    k = is_single_field ? BlockMap(2,[1,2]) : Fields.BlockBroadcasting(BlockMap(2,[1,2]))
+    k = is_single_field ? BlockMap(2,[1,2]) : Arrays.BlockBroadcasting(BlockMap(2,[1,2]))
     lazy_map(k,j_to_result_plus,j_to_result_minus)
   end
 
@@ -244,7 +272,7 @@ function distributed_autodiff_array_jacobian(a, i_to_x, j_to_i::AbstractArray{<:
       [(CartesianIndex(1,), CartesianIndex(1, 2)), (CartesianIndex(2,), CartesianIndex(2, 2))]  # Minus -> Second column
     ]
     is_single_field = eltype(eltype(j_to_result_plus)) <: AbstractArray
-    k = is_single_field ? Fields.MergeBlockMap((2,2),I) : Fields.BlockBroadcasting(Fields.MergeBlockMap((2,2),I))
+    k = is_single_field ? Arrays.MergeBlockMap((2,2),I) : Arrays.BlockBroadcasting(Arrays.MergeBlockMap((2,2),I))
     lazy_map(k,j_to_result_plus,j_to_result_minus)
   end
 
