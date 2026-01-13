@@ -5,43 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased 
+## [Unreleased]
 
-### Added
+### Fixed 
 
-- New overloads for the `TrialFESpace` constructor where the data to be imposed is passed as a `DistributedCellField`. Since PR[#183](https://github.com/gridap/GridapDistributed.jl/pull/183).
-- Added missing `FESpace` constructors for distributed triangulations specialized for the RT FEs case. Since PR[#188](https://github.com/gridap/GridapDistributed.jl/pull/188)
+- Added support to create pvd files when the triangulation is not there on all processes. To achive this, a new method for the createpvd function is added. 
 
-## [0.4.10] - 2025-09-29
-
-### Added
-
-- Added support for multiple ghost layers on cartesian models. Since PR[#182](https://github.com/gridap/GridapDistributed.jl/pull/182).
-- Added new way of doing AD for MultiField, where partials are computed separately for each field then merged together. Since PR[#176](https://github.com/gridap/GridapDistributed.jl/pull/176).
-
-### Fixed
-
-- Fixed issue [#177](https://github.com/gridap/GridapDistributed.jl/issues/177) and [#170](https://github.com/gridap/GridapDistributed.jl/issues/170). Since PR[#180](https://github.com/gridap/GridapDistributed.jl/pull/180).
-- Fixed issue where calling `Boundary(with_ghost, dmodel)` would return the local processor boundaries (which include the faces at the interface between processors) instead of returning the local part of the global boundary. Since PR[#180](https://github.com/gridap/GridapDistributed.jl/pull/180).
-
-## [0.4.9] - 2025-08-08
-
-### Added
-
-- Added a new framework for redistributing dofs, which is more efficient and flexible than the previous one. Since PR[#179](https://github.com/gridap/GridapDistributed.jl/pull/179).
-
-### Fixed
-
-- Fixed bug when redistributing periodic cartesian models. Since PR[#179](https://github.com/gridap/GridapDistributed.jl/pull/179).
-
-## [0.4.8] - 2025-06-11
-
-### Added
-
-- Added support for Gridap v0.19, with distributed counterparts for the new feaures introduced. This includes support for polytopal meshes, polytopal methods and patch assembly. Since PR[#175](https://github.com/gridap/GridapDistributed.jl/pull/175).
-- Added `MacroDiscreteModel`, which gives a global numbering and classification of the interfaces between processors. Since PR[#175](https://github.com/gridap/GridapDistributed.jl/pull/175).
-
-## [0.4.7] - 2025-03-04
+## [0.4.7] 2025-03-04
 
 ### Added
 
