@@ -40,7 +40,7 @@ end
 # PartitionedArrays extras
 
 function LinearAlgebra.axpy!(α,x::PVector,y::PVector)
-  @check ( partition(axes(x,1)) === partition(axes(y,1)) || ( matching_own_indices(axes(x,1),axes(y,1)) && matching_ghost_indices(axes(x,1),axes(y,1)) ) 
+  @check ( partition(axes(x,1)) === partition(axes(y,1)) ) || ( matching_own_indices(axes(x,1),axes(y,1)) && matching_ghost_indices(axes(x,1),axes(y,1)) ) 
   map(partition(x),partition(y)) do x,y
     LinearAlgebra.axpy!(α,x,y)
   end
