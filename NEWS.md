@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - New overloads for the `TrialFESpace` constructor where the data to be imposed is passed as a `DistributedCellField`. Since PR[#185](https://github.com/gridap/GridapDistributed.jl/pull/185).
 - Added missing `FESpace` constructors for distributed triangulations specialized for the RT FEs case. Since PR[#188](https://github.com/gridap/GridapDistributed.jl/pull/188)
-- Added optional argument isconsistent to interpolate functions. Since PR[#XXX]((https://github.com/gridap/GridapDistributed.jl/pull/XXX).
+- Added optional argument isconsistent to interpolate functions. Since PR[#190]((https://github.com/gridap/GridapDistributed.jl/pull/190).
 
 ## [0.4.10] - 2025-09-29
 

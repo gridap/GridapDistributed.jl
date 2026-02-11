@@ -456,15 +456,15 @@ function generate_gids(
   generate_gids(cell_gids,cell_to_ldofs,nldofs)
 end
 
-function FESpaces.interpolate(u,f::GridapDistributed.DistributedSingleFieldFESpace, isconsistent=false)
-  free_values = GridapDistributed.zero_free_values(f)
+function FESpaces.interpolate(u,f::DistributedSingleFieldFESpace, isconsistent=false)
+  free_values = zero_free_values(f)
   interpolate!(u,free_values,f,isconsistent)
 end
 
 function FESpaces.interpolate!(
   u,
   free_values::AbstractVector,
-  f::GridapDistributed.DistributedSingleFieldFESpace, 
+  f::DistributedSingleFieldFESpace, 
   isconsistent=false)
   map(f.spaces,local_views(free_values)) do V,vec
     interpolate!(u,vec,V)
@@ -473,9 +473,9 @@ function FESpaces.interpolate!(
 end
 
 function FESpaces.interpolate!(
-  u::GridapDistributed.DistributedCellField,
+  u::DistributedCellField,
   free_values::AbstractVector,
-  f::GridapDistributed.DistributedSingleFieldFESpace, 
+  f::DistributedSingleFieldFESpace, 
   isconsistent=false)
   map(local_views(u),f.spaces,local_views(free_values)) do u, V,vec
     interpolate!(u,vec,V)
