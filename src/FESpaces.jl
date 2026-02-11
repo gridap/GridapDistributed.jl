@@ -456,77 +456,83 @@ function generate_gids(
   generate_gids(cell_gids,cell_to_ldofs,nldofs)
 end
 
-function FESpaces.interpolate(u,f::DistributedSingleFieldFESpace)
-  free_values = zero_free_values(f)
-  interpolate!(u,free_values,f)
+function FESpaces.interpolate(u,f::GridapDistributed.DistributedSingleFieldFESpace, isconsistent=false)
+  free_values = GridapDistributed.zero_free_values(f)
+  interpolate!(u,free_values,f,isconsistent)
 end
 
 function FESpaces.interpolate!(
-  u,free_values::AbstractVector,f::DistributedSingleFieldFESpace)
+  u,
+  free_values::AbstractVector,
+  f::GridapDistributed.DistributedSingleFieldFESpace, 
+  isconsistent=false)
   map(f.spaces,local_views(free_values)) do V,vec
     interpolate!(u,vec,V)
   end
-  FEFunction(f,free_values)
+  FEFunction(f,free_values,isconsistent)
 end
 
 function FESpaces.interpolate!(
-  u::DistributedCellField,free_values::AbstractVector,f::DistributedSingleFieldFESpace)
-  map(local_views(u),f.spaces,local_views(free_values)) do ui,V,vec
-    interpolate!(ui,vec,V)
+  u::GridapDistributed.DistributedCellField,
+  free_values::AbstractVector,
+  f::GridapDistributed.DistributedSingleFieldFESpace, 
+  isconsistent=false)
+  map(local_views(u),f.spaces,local_views(free_values)) do u, V,vec
+    interpolate!(u,vec,V)
   end
-  FEFunction(f,free_values)
+  FEFunction(f,free_values,isconsistent)
 end
 
-function FESpaces.interpolate_dirichlet(u, f::DistributedSingleFieldFESpace)
+function FESpaces.interpolate_dirichlet(u, f::DistributedSingleFieldFESpace, isconsistent=false)
   free_values = zero_free_values(f)
   dirichlet_values = get_dirichlet_dof_values(f)
-  interpolate_dirichlet!(u,free_values,dirichlet_values,f)
+  interpolate_dirichlet!(u,free_values,dirichlet_values,f,isconsistent)
 end
 
 function FESpaces.interpolate_dirichlet!(
   u, free_values::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},
-  f::DistributedSingleFieldFESpace)
+  f::DistributedSingleFieldFESpace, isconsistent=false)
   map(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
     interpolate_dirichlet!(u,fvec,dvec,V)
   end
-  FEFunction(f,free_values,dirichlet_values)
+  FEFunction(f,free_values,dirichlet_values,isconsistent)
 end
 
 function FESpaces.interpolate_dirichlet!(
   u::DistributedCellField, free_values::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},
-  f::DistributedSingleFieldFESpace)
+  f::DistributedSingleFieldFESpace, isconsistent=false)
   map(local_views(u), f.spaces,local_views(free_values),dirichlet_values) do u,V,fvec,dvec
     interpolate_dirichlet!(u,fvec,dvec,V)
   end
-  FEFunction(f,free_values,dirichlet_values)
+  FEFunction(f,free_values,dirichlet_values,isconsistent)
 end
 
-function FESpaces.interpolate_everywhere(u, f::DistributedSingleFieldFESpace)
+function FESpaces.interpolate_everywhere(u, f::DistributedSingleFieldFESpace, isconsistent=false)
   free_values = zero_free_values(f)
   dirichlet_values = get_dirichlet_dof_values(f)
-  interpolate_everywhere!(u,free_values,dirichlet_values,f)
+  interpolate_everywhere!(u,free_values,dirichlet_values,f,isconsistent)
 end
 
 function FESpaces.interpolate_everywhere!(
   u, free_values::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},
-  f::DistributedSingleFieldFESpace)
+  f::DistributedSingleFieldFESpace, isconsistent=false)
   map(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
     interpolate_everywhere!(u,fvec,dvec,V)
   end
-  FEFunction(f,free_values,dirichlet_values)
+  FEFunction(f,free_values,dirichlet_values,isconsistent)
 end
 
 function FESpaces.interpolate_everywhere!(
   u::DistributedCellField, free_values::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},
-  f::DistributedSingleFieldFESpace)
+  f::DistributedSingleFieldFESpace, isconsistent=false)
   map(local_views(u),f.spaces,local_views(free_values),dirichlet_values) do ui,V,fvec,dvec
     interpolate_everywhere!(ui,fvec,dvec,V)
   end
-  FEFunction(f,free_values,dirichlet_values)
+  FEFunction(f,free_values,dirichlet_values,isconsistent)
 end
 
 # Factories
