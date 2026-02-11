@@ -883,13 +883,15 @@ end
 # which does not properly interpolate the function provided. 
 # With this change, we are interpolating in the unconstrained space and then
 # substracting the mean.
-function FESpaces.interpolate!(u,free_values::AbstractVector,f::DistributedZeroMeanFESpace)
+function FESpaces.interpolate!(u,free_values::AbstractVector,
+                               f::DistributedZeroMeanFESpace, isconsistent=false)
   dirichlet_values = get_dirichlet_dof_values(f)
-  interpolate_everywhere!(u,free_values,dirichlet_values,f)
+  interpolate_everywhere!(u,free_values,dirichlet_values,f,isconsistent)
 end
-function FESpaces.interpolate!(u::DistributedCellField,free_values::AbstractVector,f::DistributedZeroMeanFESpace)
+function FESpaces.interpolate!(u::DistributedCellField,free_values::AbstractVector,
+                               f::DistributedZeroMeanFESpace, isconsistent=false)
   dirichlet_values = get_dirichlet_dof_values(f)
-  interpolate_everywhere!(u,free_values,dirichlet_values,f)
+  interpolate_everywhere!(u,free_values,dirichlet_values,f,isconsistent)
 end
 
 function _compute_new_distributed_fixedval(
