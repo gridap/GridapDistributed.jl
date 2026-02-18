@@ -75,11 +75,38 @@ function ODEs.TransientCellField(f::DistributedCellField,derivatives::Tuple)
   DistributedCellField(fields,get_triangulation(f),f.metadata)
 end
 
+function ODEs.TransientCellField(f::DistributedCellField,derivatives::AbstractArray)
+  fields = map(local_views(f),local_views(derivatives)) do f, derivatives
+    ODEs.TransientCellField(f,derivatives)
+  end
+  DistributedCellField(fields,get_triangulation(f),f.metadata)
+end
+
 function ODEs.time_derivative(f::DistributedTransientSingleFieldCellField)
   fields = map(local_views(f)) do field
     ODEs.time_derivative(field)
   end
   DistributedCellField(fields,get_triangulation(f))
+end
+
+function ODEs.get_cellfield(f::DistributedTransientSingleFieldCellField)
+  cellfields = map(local_views(f)) do field
+    ODEs.get_cellfield(field)
+  end
+  DistributedCellField(cellfields,get_triangulation(f))
+end
+
+function ODEs.get_derivative(f::DistributedTransientSingleFieldCellField, k::Int)
+  derivatives = map(local_views(f)) do field
+    ODEs.get_derivative(field, k)
+  end
+  DistributedCellField(derivatives,get_triangulation(f))
+end
+
+function ODEs.get_derivatives(f::DistributedTransientSingleFieldCellField)
+  derivatives = map(local_views(f)) do field
+    ODEs.get_derivatives(field)
+  end
 end
 
 # MultiField FESpace
@@ -160,4 +187,24 @@ function ODEs.time_derivative(f::DistributedTransientMultiFieldCellField)
   fields = to_parray_of_arrays(map(local_views,field_fe_fun))
   part_fe_fun = map(ODEs.TransientMultiFieldCellField,fields)
   DistributedMultiFieldCellField(field_fe_fun,part_fe_fun)
+end
+
+function ODEs.get_cellfield(f::DistributedTransientMultiFieldCellField)
+  field_cellfield = map(ODEs.get_cellfield,f.field_fe_fun)
+  cellfields = to_parray_of_arrays(map(local_views,field_cellfield))
+  part_cellfields = map(MultiFieldCellField,cellfields)
+  DistributedMultiFieldCellField(field_cellfield,part_cellfields)
+end
+
+function ODEs.get_derivative(f::DistributedTransientMultiFieldCellField, k::Int)
+  field_derivative = map(df -> ODEs.get_derivative(df, k), f.field_fe_fun)
+  derivatives = to_parray_of_arrays(map(local_views,field_derivative))
+  part_derivatives = map(MultiFieldCellField,derivatives)
+  DistributedMultiFieldCellField(field_derivative,part_derivatives)
+end
+
+function ODEs.get_derivatives(f::DistributedTransientMultiFieldCellField)
+  derivatives = map(local_views(f)) do field
+    ODEs.get_derivatives(field)
+  end
 end
