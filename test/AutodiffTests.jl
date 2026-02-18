@@ -249,12 +249,70 @@ function main_transient_sf(distribute,parts)
   @test reduce(&,map(≈,partition(A_t),partition(A_t_AD)))
 end
 
+
+
+function main_transient_mf(distribute,parts)
+  ranks = distribute(LinearIndices((prod(parts),)))
+
+  model = CartesianDiscreteModel(ranks,parts,(0,1,0,1),(4,4))
+
+  k = 2
+  reffe_u = ReferenceFE(lagrangian,VectorValue{2,Float64},k)
+  reffe_p = ReferenceFE(lagrangian,Float64,k-1;space=:P)
+
+  u(x,t) = VectorValue(x[2],-x[1])
+  u(t::Real) = x -> u(x,t)
+  V = TestFESpace(model,reffe_u,dirichlet_tags="boundary")
+  U = TransientTrialFESpace(V,u)
+  Q = TestFESpace(model,reffe_p;conformity=:L2,constraint=:zeromean)
+
+  X = TransientMultiFieldFESpace([U,Q])
+  Y = MultiFieldFESpace([V,Q])
+
+  Ω = Triangulation(model)
+  dΩ = Measure(Ω,2*(k+1))
+
+  ν = 1.0
+  f = VectorValue(0.0,0.0)
+
+  conv(u,∇u) = (∇u')⋅u
+  dconv(du,∇du,u,∇u) = conv(u,∇du)+conv(du,∇u)
+  c(u,v) = ∫(v⊙(conv∘(u,∇(u))))dΩ
+  dc(u,du,dv) = ∫(dv⊙(dconv∘(du,∇(du),u,∇(u))))dΩ
+
+  mass(t, ∂ₜu, v) = ∫(∂ₜu⋅v)dΩ
+  biform((du,dp),(dv,dq)) = ∫( ν*∇(dv)⊙∇(du) - (∇⋅dv)*dp - (∇⋅du)*dq)dΩ
+  liform((dv,dq)) = ∫(dv⋅f)dΩ
+
+  r(t,(u,p),(v,q)) = mass(t, ∂t(u), v) + biform((u,p),(v,q)) + c(u,v) - liform((v,q))
+  j_0(t,(u,p),(du,dp),(dv,dq)) = biform((du,dp),(dv,dq)) + dc(u,du,dv)
+  j_t(t,(u,p),(dut,dp),(dv,dq)) = mass(t, dut, dv)
+
+  op = TransientFEOperator(r,(j_0,j_t),X,Y)
+  op_AD = TransientFEOperator(r,X,Y)
+
+  xh = interpolate([VectorValue(1.0,1.0),1.0],X(0.0))
+  ∂txh = interpolate([VectorValue(0.0,0.0),0.0],X(0.0))
+  xhₜ = TransientCellField(xh,(∂txh,))
+
+  b = assemble_vector(y->r(1.0,xhₜ,y),Y)
+  A_0 = assemble_matrix((x,y)->j_0(1.0,xhₜ,x,y),X(1.0),Y)
+  A_t = assemble_matrix((x,y)->j_t(1.0,xhₜ,x,y),X(1.0),Y)
+  jac_0_AD = get_jacs(op_AD)[1]
+  jac_t_AD = get_jacs(op_AD)[2]
+  A_0_AD = assemble_matrix((x,y)->jac_0_AD(1.0,xhₜ,x,y),X(1.0),Y)
+  A_t_AD = assemble_matrix((x,y)->jac_t_AD(1.0,xhₜ,x,y),X(1.0),Y)
+  @test reduce(&,map(≈,partition(A_0),partition(A_0_AD)))
+  @test reduce(&,map(≈,partition(A_t),partition(A_t_AD)))
+end
+
 function main(distribute,parts)
-  main_sf(distribute,parts)
-  main_mf(distribute,parts)
-  mf_different_fespace_trians(distribute,parts)
-  skeleton_mf_different_fespace_trians(distribute,parts)
-  main_transient_sf(distribute,parts)
+  # main_sf(distribute,parts)
+  # main_mf(distribute,parts)
+  # mf_different_fespace_trians(distribute,parts)
+  # skeleton_mf_different_fespace_trians(distribute,parts)
+  # main_transient_sf(distribute,parts)
+  main_transient_mf(distribute,parts)
 end
 
 end

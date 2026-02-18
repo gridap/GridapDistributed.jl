@@ -174,6 +174,19 @@ function ODEs.TransientCellField(f::DistributedMultiFieldCellField,derivatives::
   DistributedMultiFieldCellField(field_fe_fun,part_fe_fun,f.metadata)
 end
 
+function ODEs.TransientCellField(f::DistributedMultiFieldCellField,derivatives::AbstractArray)
+  transient_fields = []
+  for i in 1:num_fields(f)
+    f_i = f[i]
+    df_i = map(local_views(derivatives)) do derivatives
+      Tuple(map(df -> df[i],derivatives))
+    end
+    println(typeof(ODEs.TransientCellField(f_i,df_i)))
+    push!(transient_fields, ODEs.TransientCellField(f_i,df_i))
+  end
+  TransientMultiFieldCellField(transient_fields)
+end
+
 function ODEs.TransientMultiFieldCellField(fields::AbstractVector{<:ODEs.TransientSingleFieldCellField})
   cellfield = MultiFieldCellField(map(f -> f.cellfield,fields))
   n_derivatives = length(first(fields).derivatives)
