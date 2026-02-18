@@ -46,4 +46,8 @@ end
   include("AdaptivityTests.jl")
 end
 
+@time @testset "AutodiffTests" begin
+  include("AutodiffTests.jl")
+end
+
 end # module
