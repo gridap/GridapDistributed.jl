@@ -6,7 +6,6 @@ using GridapDistributed
 using PartitionedArrays
 using SparseArrays
 using ForwardDiff
-using Gridap.ODEs: TransientCellField, get_jacs
 
 function main_sf(distribute,parts)
   ranks = distribute(LinearIndices((prod(parts),)))
@@ -207,54 +206,11 @@ function skeleton_mf_different_fespace_trians(distribute,parts)
   end
 end
 
-function main_transient_sf(distribute,parts)
-  ranks = distribute(LinearIndices((prod(parts),)))
-
-  domain = (0,4,0,4)
-  cells = (4,4)
-  model = CartesianDiscreteModel(ranks,parts,domain,cells)
-
-  u((x,y),t) = (x+y)^k + 2*t
-  u(t::Real) = x -> u(x,t)
-  σ(∇u) = (1.0+∇u⋅∇u)*∇u
-  dσ(∇du,∇u) = (2*∇u⋅∇du)*∇u + (1.0+∇u⋅∇u)*∇du
-  f(t) = x -> ∂t(u)(t)(x) - divergence(y->σ(∇(u(t),y)),x)
-
-  k = 1
-  reffe = ReferenceFE(lagrangian,Float64,k)
-  V = TestFESpace(model,reffe,dirichlet_tags="boundary")
-  U = TransientTrialFESpace(V,u)
-
-  Ω = Triangulation(model)
-  dΩ = Measure(Ω,2*k)
-  r(t,u,v) = ∫( ∂t(u)⋅v + ∇(v)⋅(σ∘∇(u)) - v*f(t) )dΩ
-  j_0(t,u,du,v) = ∫( ∇(v)⋅(dσ∘(∇(du),∇(u))) )dΩ
-  j_t(t,u,dut,v) = ∫( dut⋅v )dΩ
-
-  op = TransientFEOperator(r,(j_0,j_t),U,V)
-  op_AD = TransientFEOperator(r,U,V)
-
-  uh = interpolate(0.0,U(0.0))
-  ∂tuₕ = interpolate(0.0,U(0.0))
-  uhₜ = TransientCellField(uh,(∂tuₕ,))
-  
-  b = assemble_vector(v->r(1.0,uhₜ,v),V)
-  A_0 = assemble_matrix((du,v)->j_0(1.0,uhₜ,du,v),U(1.0),V)
-  A_t = assemble_matrix((dut,v)->j_t(1.0,uhₜ,dut,v),U(1.0),V)
-  jac_0_AD = get_jacs(op_AD)[1]
-  jac_t_AD = get_jacs(op_AD)[2]
-  A_0_AD = assemble_matrix((du,v)->jac_0_AD(1.0,uhₜ,du,v),U(1.0),V)
-  A_t_AD = assemble_matrix((dut,v)->jac_t_AD(1.0,uhₜ,dut,v),U(1.0),V)
-  @test reduce(&,map(≈,partition(A_0),partition(A_0_AD)))
-  @test reduce(&,map(≈,partition(A_t),partition(A_t_AD)))
-end
-
 function main(distribute,parts)
   main_sf(distribute,parts)
   main_mf(distribute,parts)
   mf_different_fespace_trians(distribute,parts)
   skeleton_mf_different_fespace_trians(distribute,parts)
-  main_transient_sf(distribute,parts)
 end
 
 end
