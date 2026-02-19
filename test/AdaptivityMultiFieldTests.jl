@@ -33,7 +33,7 @@ function DistributedAdaptivityGlue(serial_glue,parent,child)
     new_l2g = local_to_global(child_gids)
 
     n2o_cell_map  = lazy_map(Reindex(old_g2l),serial_glue.n2o_faces_map[3][new_l2g])
-    n2o_faces_map = [Int64[],Int64[],collect(n2o_cell_map)]
+    n2o_faces_map = [Int[],Int[],collect(n2o_cell_map)]
     n2o_cell_to_child_id = serial_glue.n2o_cell_to_child_id[new_l2g]
     rrules = serial_glue.refinement_rules[old_l2g]
     AdaptivityGlue(n2o_faces_map,n2o_cell_to_child_id,rrules)
