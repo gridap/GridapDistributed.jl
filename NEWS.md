@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.11] - 2026-02-20
+
+### Added
+
+- Added further support for polytopal methods and meshes. Since PR[#192](https://github.com/gridap/GridapDistributed.jl/pull/192).
+- Added new methods to ensure consistent orientation of faces across processors. Since PR[#192](https://github.com/gridap/GridapDistributed.jl/pull/192).
+- Added a new function `restrict_gids` to create a subsets of gids. Since PR[#192](https://github.com/gridap/GridapDistributed.jl/pull/192).
+
 ## [0.4.10] - 2025-09-29
 
 ### Added
