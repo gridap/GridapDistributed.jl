@@ -1,7 +1,23 @@
 name: CI
+
 on:
-  - push
-  - pull_request
+  push:
+    branches: [master]
+    paths-ignore:
+      - 'CONTRIBUTING.md'
+      - 'CODE_OF_CONDUCT.md'
+      - 'LICENSE'
+      - 'README.md'
+      - 'NEWS.md'
+  pull_request:
+    paths-ignore:
+      - 'CONTRIBUTING.md'
+      - 'CODE_OF_CONDUCT.md'
+      - 'LICENSE'
+      - 'README.md'
+      - 'NEWS.md'
+  workflow_dispatch: # Allow manual triggering of the workflow from the Actions tab
+
 jobs:
   SequentialTests:
     name: Serial Tests - Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
