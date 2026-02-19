@@ -414,6 +414,21 @@ function FESpaces.TrialFESpace!(f::DistributedSingleFieldFESpace,fun)
   DistributedSingleFieldFESpace(spaces,f.gids,f.trian,f.vector_type,f.metadata)
 end
 
+function FESpaces.TrialFESpace(f::DistributedSingleFieldFESpace,cf::DistributedCellField)
+  spaces = map(local_views(f),local_views(cf)) do s, field
+    TrialFESpace(s,field)
+  end
+  DistributedSingleFieldFESpace(spaces,f.gids,f.trian,f.vector_type,f.metadata)
+end
+
+function FESpaces.TrialFESpace(cf::DistributedCellField,f::DistributedSingleFieldFESpace)
+  spaces = map(local_views(f),local_views(cf)) do s, field
+    TrialFESpace(s,field)
+  end
+  DistributedSingleFieldFESpace(spaces,f.gids,f.trian,f.vector_type,f.metadata)
+end
+
+
 function FESpaces.HomogeneousTrialFESpace(f::DistributedSingleFieldFESpace)
   spaces = map(f.spaces) do s
     HomogeneousTrialFESpace(s)
@@ -441,67 +456,83 @@ function generate_gids(
   generate_gids(cell_gids,cell_to_ldofs,nldofs)
 end
 
-function FESpaces.interpolate(u,f::DistributedSingleFieldFESpace)
+function FESpaces.interpolate(u,f::DistributedSingleFieldFESpace, isconsistent=false)
   free_values = zero_free_values(f)
-  interpolate!(u,free_values,f)
+  interpolate!(u,free_values,f,isconsistent)
 end
 
 function FESpaces.interpolate!(
-  u,free_values::AbstractVector,f::DistributedSingleFieldFESpace)
+  u,
+  free_values::AbstractVector,
+  f::DistributedSingleFieldFESpace, 
+  isconsistent=false)
   map(f.spaces,local_views(free_values)) do V,vec
     interpolate!(u,vec,V)
   end
-  FEFunction(f,free_values)
+  FEFunction(f,free_values,isconsistent)
 end
 
 function FESpaces.interpolate!(
-  u::DistributedCellField,free_values::AbstractVector,f::DistributedSingleFieldFESpace)
-  map(local_views(u),f.spaces,local_views(free_values)) do ui,V,vec
-    interpolate!(ui,vec,V)
+  u::DistributedCellField,
+  free_values::AbstractVector,
+  f::DistributedSingleFieldFESpace, 
+  isconsistent=false)
+  map(local_views(u),f.spaces,local_views(free_values)) do u, V,vec
+    interpolate!(u,vec,V)
   end
-  FEFunction(f,free_values)
+  FEFunction(f,free_values,isconsistent)
 end
 
-function FESpaces.interpolate_dirichlet(u, f::DistributedSingleFieldFESpace)
+function FESpaces.interpolate_dirichlet(u, f::DistributedSingleFieldFESpace, isconsistent=false)
   free_values = zero_free_values(f)
   dirichlet_values = get_dirichlet_dof_values(f)
-  interpolate_dirichlet!(u,free_values,dirichlet_values,f)
+  interpolate_dirichlet!(u,free_values,dirichlet_values,f,isconsistent)
 end
 
 function FESpaces.interpolate_dirichlet!(
   u, free_values::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},
-  f::DistributedSingleFieldFESpace)
+  f::DistributedSingleFieldFESpace, isconsistent=false)
   map(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
     interpolate_dirichlet!(u,fvec,dvec,V)
   end
-  FEFunction(f,free_values,dirichlet_values)
+  FEFunction(f,free_values,dirichlet_values,isconsistent)
 end
 
-function FESpaces.interpolate_everywhere(u, f::DistributedSingleFieldFESpace)
+function FESpaces.interpolate_dirichlet!(
+  u::DistributedCellField, free_values::AbstractVector,
+  dirichlet_values::AbstractArray{<:AbstractVector},
+  f::DistributedSingleFieldFESpace, isconsistent=false)
+  map(local_views(u), f.spaces,local_views(free_values),dirichlet_values) do u,V,fvec,dvec
+    interpolate_dirichlet!(u,fvec,dvec,V)
+  end
+  FEFunction(f,free_values,dirichlet_values,isconsistent)
+end
+
+function FESpaces.interpolate_everywhere(u, f::DistributedSingleFieldFESpace, isconsistent=false)
   free_values = zero_free_values(f)
   dirichlet_values = get_dirichlet_dof_values(f)
-  interpolate_everywhere!(u,free_values,dirichlet_values,f)
+  interpolate_everywhere!(u,free_values,dirichlet_values,f,isconsistent)
 end
 
 function FESpaces.interpolate_everywhere!(
   u, free_values::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},
-  f::DistributedSingleFieldFESpace)
+  f::DistributedSingleFieldFESpace, isconsistent=false)
   map(f.spaces,local_views(free_values),dirichlet_values) do V,fvec,dvec
     interpolate_everywhere!(u,fvec,dvec,V)
   end
-  FEFunction(f,free_values,dirichlet_values)
+  FEFunction(f,free_values,dirichlet_values,isconsistent)
 end
 
 function FESpaces.interpolate_everywhere!(
   u::DistributedCellField, free_values::AbstractVector,
   dirichlet_values::AbstractArray{<:AbstractVector},
-  f::DistributedSingleFieldFESpace)
+  f::DistributedSingleFieldFESpace, isconsistent=false)
   map(local_views(u),f.spaces,local_views(free_values),dirichlet_values) do ui,V,fvec,dvec
     interpolate_everywhere!(ui,fvec,dvec,V)
   end
-  FEFunction(f,free_values,dirichlet_values)
+  FEFunction(f,free_values,dirichlet_values,isconsistent)
 end
 
 # Factories
@@ -852,13 +883,15 @@ end
 # which does not properly interpolate the function provided. 
 # With this change, we are interpolating in the unconstrained space and then
 # substracting the mean.
-function FESpaces.interpolate!(u,free_values::AbstractVector,f::DistributedZeroMeanFESpace)
+function FESpaces.interpolate!(u,free_values::AbstractVector,
+                               f::DistributedZeroMeanFESpace, isconsistent=false)
   dirichlet_values = get_dirichlet_dof_values(f)
-  interpolate_everywhere!(u,free_values,dirichlet_values,f)
+  interpolate_everywhere!(u,free_values,dirichlet_values,f,isconsistent)
 end
-function FESpaces.interpolate!(u::DistributedCellField,free_values::AbstractVector,f::DistributedZeroMeanFESpace)
+function FESpaces.interpolate!(u::DistributedCellField,free_values::AbstractVector,
+                               f::DistributedZeroMeanFESpace, isconsistent=false)
   dirichlet_values = get_dirichlet_dof_values(f)
-  interpolate_everywhere!(u,free_values,dirichlet_values,f)
+  interpolate_everywhere!(u,free_values,dirichlet_values,f,isconsistent)
 end
 
 function _compute_new_distributed_fixedval(
