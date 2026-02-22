@@ -458,7 +458,13 @@ function redistribute_array_by_cells(
 )
   if !isnothing(old_cell_to_old_lid) && !isnothing(old_lid_to_data)
     old_cell_to_old_data = map(old_cell_to_old_lid, old_lid_to_data) do old_cell_to_old_lid, old_lid_to_data
-      jagged_array(view(old_lid_to_data,old_cell_to_old_lid.data), old_cell_to_old_lid.ptrs)
+      data = zeros(eltype(old_lid_to_data),length(old_cell_to_old_lid.data))
+      for (k,lid) in enumerate(old_cell_to_old_lid.data)
+        if lid > 0 # Avoid Dirichlet dofs
+          data[k] = old_lid_to_data[lid]
+        end
+      end
+      jagged_array(data, old_cell_to_old_lid.ptrs)
     end
   else
     old_cell_to_old_data = nothing
@@ -469,8 +475,10 @@ function redistribute_array_by_cells(
   if !isnothing(new_cell_to_new_lid) && !isnothing(new_cell_to_old_data)
     new_lid_to_old_data = map(new_cell_to_new_lid, new_cell_to_old_data) do new_cell_to_new_lid, new_cell_to_old_data
       new_lid_to_old_data = zeros(T, maximum(new_cell_to_new_lid.data;init=0))
-      for (new_lid, old_data) in zip(new_cell_to_new_lid, new_cell_to_old_data)
-        new_lid_to_old_data[new_lid] .= old_data
+      for (new_lid, old_data) in zip(new_cell_to_new_lid.data, new_cell_to_old_data.data)
+        if new_lid > 0 # Avoid Dirichlet dofs
+          new_lid_to_old_data[new_lid] = old_data
+        end
       end
       return new_lid_to_old_data
     end
@@ -537,6 +545,34 @@ function redistribute_indices(
   old_ids_bis = map(LocalIndices,n_old,ranks,old_lid_to_old_gid,old_lid_to_old_owner)
   red_old_ids = map(LocalIndices,n_old,ranks,new_lid_to_old_gid,new_lid_to_old_owner)
   return old_ids_bis, red_old_ids
+end
+
+# Purpose of the following function:
+# If you have 
+#   - two partitions with the same local layout, but different global IDs (in this case indices and reindexed_indices), 
+#   - and two partitions with the same global IDs, but different local layouts (in this case indices and new_indices),
+# then this function returns the new partition with the same local layout as `new_indices`
+# and the same global IDs as `reindexed_indices`.
+# When is this useful? If we do not have a way of redistributing some partition through the mesh cells, 
+# for instance the matrix rows/columns, we can redistribute the dof ids and then reindex the partition
+# to have the matrix row/column layout. 
+# This allows us to redistribute algebraic arrays without the need to copy them in FE layout first.
+function reindex_partition(new_indices, indices, reindexed_indices)
+  l2g = PVector(map(collect∘local_to_global,reindexed_indices),indices)
+  new_l2g = pzeros(Int, new_indices)
+  t1 = consistent!(copy!(new_l2g, l2g))
+
+  l2o = PVector(map(collect∘local_to_owner,reindexed_indices),indices)
+  new_l2o = pzeros(Int32, new_indices)
+  t2 = consistent!(copy!(new_l2o, l2o))
+
+  wait(t1)
+  wait(t2)
+
+  reindexed_new_indices = map(reindexed_indices, partition(new_l2g), partition(new_l2o)) do reindexed_indices, new_l2g, new_l2o
+    LocalIndices(global_length(reindexed_indices), part_id(reindexed_indices), new_l2g, new_l2o)
+  end
+  return reindexed_new_indices
 end
 
 function redistribution_neighbors(indices, indices_red)
@@ -631,6 +667,16 @@ function redistribute(v::PVector,new_indices)
 end
 
 function redistribute!(w::PVector,v::PVector,cache)
+  values, indices = partition(v), partition(axes(v,1))
+  values_red, indices_red = partition(w), partition(axes(w,1))
+  t = redistribute!(values_red, values, indices_red, indices, cache)
+  @async begin
+    wait(t)
+    return w
+  end
+end
+
+function redistribute!(values_red, values, indices_red, indices, cache)
   function setup_snd(values, cache)
     cache.buffer_snd.data .= view(values,cache.local_indices_snd.data)
     return cache.buffer_rcv, cache.buffer_snd, cache.neighbors_rcv, cache.neighbors_snd
@@ -651,8 +697,6 @@ function redistribute!(w::PVector,v::PVector,cache)
     view(values_red, cache.local_indices_rcv.data) .= cache.buffer_rcv.data
   end
 
-  values, indices = partition(v), partition(axes(v,1))
-  values_red, indices_red = partition(w), partition(axes(w,1))
   buffer_rcv, buffer_snd, nbors_rcv, nbors_snd = map(setup_snd, values, cache) |> tuple_of_arrays
   graph = ExchangeGraph(nbors_snd, nbors_rcv)
   t = PartitionedArrays.exchange!(buffer_rcv, buffer_snd, graph)
@@ -660,6 +704,6 @@ function redistribute!(w::PVector,v::PVector,cache)
     map(copy_owned, values_red, values, indices_red, indices)
     wait(t)
     map(copy_rcv, values_red, cache)
-    return w
+    return values_red
   end
 end

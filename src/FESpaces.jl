@@ -913,6 +913,8 @@ function _compute_new_distributed_fixedval(
   return c
 end
 
+# Constant FESpace
+
 """
     ConstantFESpace(
       model::DistributedDiscreteModel; 
@@ -959,4 +961,25 @@ function FESpaces.ConstantFESpace(
   trian = DistributedTriangulation(map(get_triangulation,spaces),model)
   vector_type = _find_vector_type(spaces,gids)
   return DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
+end
+
+# Polytopal FESpaces
+
+function FESpaces.PolytopalFESpace(
+  _trian::DistributedTriangulation,args...;kwargs...
+)
+  trian = add_ghost_cells(_trian)
+  spaces = map(local_views(trian)) do t
+    FESpaces.PolytopalFESpace(t,args...;kwargs...)
+  end
+  gids = generate_gids(trian,spaces)
+  vector_type = _find_vector_type(spaces,gids)
+  return DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
+end
+
+function FESpaces.PolytopalFESpace(
+  model::DistributedDiscreteModel,args...;kwargs...
+)
+  trian = Triangulation(with_ghost,model)
+  FESpaces.PolytopalFESpace(trian,args...;kwargs...)
 end
