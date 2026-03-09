@@ -12,7 +12,7 @@ function FESpaces.FESpace(model::DistributedDiscreteModel,
   _common_fe_space_constructor(model,cell_reffes;conformity,split_own_and_ghost,kwargs...)
 end
 
-function FESpace(model::DistributedDiscreteModel,
+function FESpaces.FESpace(model::DistributedDiscreteModel,
                  reffe::GenericRefFE{RaviartThomas};
                  conformity=nothing,
                  split_own_and_ghost=false,
@@ -32,7 +32,7 @@ function _setup_dmodel_and_dtrian(_trian::DistributedTriangulation)
   GenericDistributedDiscreteModel(models, generate_cell_gids(trian)), trian
 end  
 
-function FESpace(
+function FESpaces.FESpace(
   _trian::DistributedTriangulation,
   reffe::Tuple{RaviartThomas,Any,Any};
   conformity=nothing,
@@ -47,7 +47,7 @@ function FESpace(
   _common_fe_space_constructor(dmodel,cell_reffes,dtrian;conformity,split_own_and_ghost,kwargs...)
 end
 
-function FESpace(_trian::DistributedTriangulation,
+function FESpaces.FESpace(_trian::DistributedTriangulation,
                  reffe::GenericRefFE{RaviartThomas};
                  conformity=nothing,
                  split_own_and_ghost=false,
