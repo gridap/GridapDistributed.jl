@@ -31,6 +31,7 @@ jobs:
           - ubuntu-latest
         arch:
           - x64
+          - x86
     steps:
       - uses: actions/checkout@v6
       - uses: julia-actions/setup-julia@v2
@@ -59,6 +60,7 @@ jobs:
           - ubuntu-latest
         arch:
           - x64
+          - x86
     steps:
       - uses: actions/checkout@v6
       - uses: julia-actions/cache@v2
