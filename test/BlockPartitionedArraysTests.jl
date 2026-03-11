@@ -66,6 +66,15 @@ function main(distribute, parts)
 
   maximum(abs, v)
   minimum(abs, v)
+
+  # BUG4 fix: mul!(y,A,x,α,β) must compute α*(A*x) + β*y, not α*β*(A*x)
+  # With A=0: y ← α*(0*x) + β*y_old = β*y_old
+  fill!(v, 1.0)
+  v4 = similar(v, block_range)
+  fill!(v4, 3.0)
+  LinearAlgebra.fillstored!(m, 0.0)
+  mul!(v4, m, v, 2.0, 2.0)   # y ← 2*(0*x) + 2*[3,...] = [6,...]
+  @test norm(v4) ≈ 6.0 * sqrt(2*n_global)
 end
 
 end # module
