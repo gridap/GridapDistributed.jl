@@ -94,7 +94,7 @@ function BlockPMatrix{V}(::UndefInitializer,rows::BlockPRange,cols::BlockPRange)
     c = block_cols[I[2]]
     PSparseMatrix{V}(undef,partition(r),partition(c))
   end
-  return BlockPMatrix(vals,rows)
+  return BlockPMatrix(vals,rows,cols)
 end
 
 # AbstractArray API

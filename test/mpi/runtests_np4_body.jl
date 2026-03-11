@@ -53,6 +53,7 @@ function all_tests(distribute,parts)
   end
 
   TestApp.BlockSparseMatrixAssemblersTests.main(distribute,parts)
+  TestApp.BlockPartitionedArraysTests.main(distribute,parts)
   PArrays.toc!(t,"BlockSparseMatrixAssemblers")
 
   if prod(parts) == 4
