@@ -18,6 +18,7 @@ module TestApp
   include("../../AdaptivityMultiFieldTests.jl")
   include("../../PolytopalCoarseningTests.jl")
   include("../../BlockSparseMatrixAssemblersTests.jl")
+  include("../../BlockPartitionedArraysTests.jl")
   include("../../VisualizationTests.jl")
   include("../../AutodiffTests.jl")
   include("../../ConstantFESpacesTests.jl")
