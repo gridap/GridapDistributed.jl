@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed `BlockPMatrix{V}(::UndefInitializer, rows, cols)` constructor dropping the `cols` argument, causing a `MethodError` at runtime.
+- Fixed `local_views(::BlockPMatrix, rows, cols)` indexing 1D block-range vectors with a 2D `CartesianIndex`, causing `BoundsError` for any multi-field problem with ≥2 fields.
+- Fixed `mul!(y::BlockPVector, A::BlockPMatrix, x::BlockPVector, α, β)` computing `α*β*(A*x)` instead of `α*(A*x) + β*y`; the 3-arg `mul!` was also updated to correctly zero `y` before accumulating.
+- Replaced fragile closure side-effect in `DistributedVisualizationData.filebase` with `getany(map(...))` for correct and idiomatic behaviour in both debug and MPI modes.
+
 ## [0.4.11] - 2026-02-20
 
 ### Added
