@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed `BlockPMatrix{V}(::UndefInitializer, rows, cols)` constructor dropping the `cols` argument, causing a `MethodError` at runtime. Since PR[#194](https://github.com/gridap/GridapDistributed.jl/pull/194).
+- Fixed `local_views(::BlockPMatrix, rows, cols)` indexing 1D block-range vectors with a 2D `CartesianIndex`, causing `BoundsError` for any multi-field problem with ≥2 fields. Since PR[#194](https://github.com/gridap/GridapDistributed.jl/pull/194).
+- Fixed `mul!(y::BlockPVector, A::BlockPMatrix, x::BlockPVector, α, β)` computing `α*β*(A*x)` instead of `α*(A*x) + β*y`; the 3-arg `mul!` was also updated to correctly zero `y` before accumulating. Since PR[#194](https://github.com/gridap/GridapDistributed.jl/pull/194).
+
 ## [0.4.11] - 2026-02-20
 
 ### Added
