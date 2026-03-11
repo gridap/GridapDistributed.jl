@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed `is_slave == false` (comparison instead of assignment) in `DivConformingFESpaces`, and simplified the boundary-facet branch by removing the now-redundant `if/else`.
 - Fixed `BlockPMatrix{V}(::UndefInitializer, rows, cols)` constructor dropping the `cols` argument, causing a `MethodError` at runtime.
 - Fixed `local_views(::BlockPMatrix, rows, cols)` indexing 1D block-range vectors with a 2D `CartesianIndex`, causing `BoundsError` for any multi-field problem with ≥2 fields.
 - Fixed `mul!(y::BlockPVector, A::BlockPMatrix, x::BlockPVector, α, β)` computing `α*β*(A*x)` instead of `α*(A*x) + β*y`; the 3-arg `mul!` was also updated to correctly zero `y` before accumulating.
