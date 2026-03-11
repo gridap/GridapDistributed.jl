@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed `is_slave == false` (comparison instead of assignment) in `DivConformingFESpaces`, and simplified the boundary-facet branch by removing the now-redundant `if/else`.
+
 ## [0.4.11] - 2026-02-20
 
 ### Added
