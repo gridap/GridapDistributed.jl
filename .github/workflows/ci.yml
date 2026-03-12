@@ -54,10 +54,12 @@ jobs:
           - seq-fespaces
           - seq-physics
           - seq-transient
+          - seq-adaptivity
           - seq-misc
           - mpi-geometry
           - mpi-fespaces
           - mpi-physics
+          - mpi-transient
           - mpi-adaptivity
           - mpi-misc
     steps:

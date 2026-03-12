@@ -26,6 +26,11 @@ function all_tests(distribute, parts)
 
     PeriodicBCsTests.main(distribute, parts)
     PArrays.toc!(t, "PeriodicBCs")
+
+    if prod(parts) == 4
+      ConstantFESpacesTests.main(distribute, parts)
+      PArrays.toc!(t, "ConstantFESpaces")
+    end
   end
 
   if TESTCASE ∈ ("all", "mpi-physics")
@@ -38,20 +43,25 @@ function all_tests(distribute, parts)
     SurfaceCouplingTests.main(distribute, parts)
     PArrays.toc!(t, "SurfaceCoupling")
 
-    HeatEquationTests.main(distribute, parts)
-    PArrays.toc!(t, "HeatEquation")
-
     StokesOpenBoundaryTests.main(distribute, parts)
     PArrays.toc!(t, "StokesOpenBoundary")
+
+    StokesHdivDGTests.main(distribute, parts)
+    PArrays.toc!(t, "StokesHdivDG")
   end
 
-  if TESTCASE ∈ ("all", "mpi-adaptivity")
+  if TESTCASE ∈ ("all", "mpi-transient")
     TransientDistributedCellFieldTests.main(distribute, parts)
     PArrays.toc!(t, "TransientDistributedCellField")
 
     TransientMultiFieldDistributedCellFieldTests.main(distribute, parts)
     PArrays.toc!(t, "TransientMultiFieldDistributedCellField")
 
+    HeatEquationTests.main(distribute, parts)
+    PArrays.toc!(t, "HeatEquation")
+  end
+
+  if TESTCASE ∈ ("all", "mpi-adaptivity")
     if prod(parts) == 4
       AdaptivityTests.main(distribute)
       AdaptivityCartesianTests.main(distribute)
@@ -66,11 +76,6 @@ function all_tests(distribute, parts)
     BlockSparseMatrixAssemblersTests.main(distribute, parts)
     BlockPartitionedArraysTests.main(distribute, parts)
     PArrays.toc!(t, "BlockSparseMatrixAssemblers")
-
-    if prod(parts) == 4
-      ConstantFESpacesTests.main(distribute, parts)
-      PArrays.toc!(t, "ConstantFESpaces")
-    end
 
     if prod(parts) == 4
       VisualizationTests.main(distribute, parts)
