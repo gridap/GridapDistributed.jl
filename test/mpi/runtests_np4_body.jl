@@ -91,5 +91,5 @@ function all_tests(distribute, parts)
     end
   end
 
-  display(t)
+  isempty(t.timings) || display(t)
 end
