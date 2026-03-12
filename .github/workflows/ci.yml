@@ -24,19 +24,31 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 
 jobs:
+  prime-cache:
+    name: Prime cache - ${{ matrix.version }} - ubuntu-latest - x64
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: ['lts', '1']
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+          arch: x64
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+
   test:
-    name: ${{ matrix.testcase }} - Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
-    runs-on: ${{ matrix.os }}
+    needs: [prime-cache]
+    name: ${{ matrix.testcase }} - ${{ matrix.version }} - ubuntu-latest - x64 - ${{ github.event_name }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         version:
           - 'lts'
           - '1'
-        os:
-          - ubuntu-latest
-        arch:
-          - x64
         testcase:
           - seq-geometry
           - seq-fespaces
@@ -53,7 +65,7 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
+          arch: x64
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
@@ -65,6 +77,7 @@ jobs:
           verbose: true
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: ${{ matrix.testcase }}
+
   docs:
     name: Documentation
     runs-on: ubuntu-latest
