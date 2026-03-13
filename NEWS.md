@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Split tests to reduce CI time, removed sysimage compilation. Since PR[#197](https://github.com/gridap/GridapDistributed.jl/pull/197).
+
 ### Fixed
 
 - Fixed `is_slave == false` (comparison instead of assignment) in `DivConformingFESpaces`, and simplified the boundary-facet branch by removing the now-redundant `if/else`. Since PR[#196](https://github.com/gridap/GridapDistributed.jl/pull/196/).
