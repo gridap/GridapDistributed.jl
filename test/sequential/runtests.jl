@@ -18,12 +18,12 @@ if TESTCASE ∈ ("all", "seq-fespaces")
 end
 
 if TESTCASE ∈ ("all", "seq-physics")
-  @time @testset "Poisson"              begin include("PoissonTests.jl") end
-  @time @testset "PLaplacian"           begin include("PLaplacianTests.jl") end
-  @time @testset "DivConformingTests"   begin include("DivConformingTests.jl") end
-  @time @testset "SurfaceCouplingTests" begin include("SurfaceCouplingTests.jl") end
-  @time @testset "StokesHdivDGTests"    begin include("StokesHdivDGTests.jl") end
-  @time @testset "StokesOpenBoundary"   begin include("StokesOpenBoundaryTests.jl") end
+  @time @testset "Poisson"                     begin include("PoissonTests.jl") end
+  @time @testset "PLaplacian"                  begin include("PLaplacianTests.jl") end
+  @time @testset "DivAndCurlConformingTests"   begin include("DivAndCurlConformingTests.jl") end
+  @time @testset "SurfaceCouplingTests"        begin include("SurfaceCouplingTests.jl") end
+  @time @testset "StokesHdivDGTests"           begin include("StokesHdivDGTests.jl") end
+  @time @testset "StokesOpenBoundary"          begin include("StokesOpenBoundaryTests.jl") end
 end
 
 if TESTCASE ∈ ("all", "seq-transient")
