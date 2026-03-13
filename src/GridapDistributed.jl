@@ -58,7 +58,7 @@ include("Visualization.jl")
 
 include("FESpaces.jl")
 
-include("DivAndCurlConformingFESpaces.jl")
+include("DivConformingFESpaces.jl")
 
 include("MultiField.jl")
 
