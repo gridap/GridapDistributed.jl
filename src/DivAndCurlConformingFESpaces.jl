@@ -1,5 +1,7 @@
+const RTorNedelec = Union{RaviartThomas,Nedelec}
+
 function FESpaces.FESpace(model::DistributedDiscreteModel,
-                          reffe::Tuple{RaviartThomas,Any,Any};
+                          reffe::Tuple{<:RTorNedelec,Any,Any};
                           conformity=nothing,
                           split_own_and_ghost=false,
                           constraint=nothing,
@@ -13,7 +15,7 @@ function FESpaces.FESpace(model::DistributedDiscreteModel,
 end
 
 function FESpaces.FESpace(model::DistributedDiscreteModel,
-                 reffe::GenericRefFE{RaviartThomas};
+                 reffe::GenericRefFE{<:RTorNedelec};
                  conformity=nothing,
                  split_own_and_ghost=false,
                  constraint=nothing,
@@ -34,7 +36,7 @@ end
 
 function FESpaces.FESpace(
   _trian::DistributedTriangulation,
-  reffe::Tuple{RaviartThomas,Any,Any};
+  reffe::Tuple{<:RTorNedelec,Any,Any};
   conformity=nothing,
   split_own_and_ghost=false,
   constraint=nothing,kwargs...
@@ -48,7 +50,7 @@ function FESpaces.FESpace(
 end
 
 function FESpaces.FESpace(_trian::DistributedTriangulation,
-                 reffe::GenericRefFE{RaviartThomas};
+                 reffe::GenericRefFE{<:RTorNedelec};
                  conformity=nothing,
                  split_own_and_ghost=false,
                  constraint=nothing,

@@ -1,4 +1,4 @@
-module DivConformingTests
+module DivAndCurlConformingTests
 using SparseMatricesCSR
 import Gridap: ∇, divergence, DIV
 using Gridap
@@ -60,7 +60,7 @@ function setup_p2_model()
 end
 
 function f(model,reffe,trian,das)
-    V = FESpace(model,reffe,conformity=:Hdiv)
+    V = FESpace(model,reffe)
     U = TrialFESpace(V)
 
     degree = 2
@@ -130,6 +130,16 @@ function main(distribute,nranks)
     f(Triangulation(model),reffe,trian,das)
     
     reffe=ReferenceFE(QUAD, raviart_thomas, 0)
+    f(model,reffe,trian,das)
+    f(trian,reffe,trian,das)
+    f(Triangulation(model),reffe,trian,das)
+
+    reffe=ReferenceFE(nedelec,Float64,0)
+    f(model,reffe,trian,das)
+    f(trian,reffe,trian,das)
+    f(Triangulation(model),reffe,trian,das)
+    
+    reffe=ReferenceFE(QUAD, nedelec, 0)
     f(model,reffe,trian,das)
     f(trian,reffe,trian,das)
     f(Triangulation(model),reffe,trian,das)
