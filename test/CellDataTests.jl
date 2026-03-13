@@ -30,7 +30,7 @@ function main(distribute,parts)
     pvd[0.1] = createvtk(Ω,joinpath(output,"Ω_1"),cellfields=["f"=>f])
     pvd[0.2] = createvtk(Ω,joinpath(output,"Ω_2"),cellfields=["f"=>f])
   end
-  @test isfile(joinpath(output,"Ω_pvd")*".pvd")
+  i_am_main(ranks) && @test isfile(joinpath(output,"Ω_pvd")*".pvd")
 
   x_Γ = get_cell_points(Γ)
   @test isa(f(x_Γ),AbstractArray)
