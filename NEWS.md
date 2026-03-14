@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.12] - 2026-03-14
+
 ### Changed
 
 - Split tests to reduce CI time, removed sysimage compilation. Since PR[#197](https://github.com/gridap/GridapDistributed.jl/pull/197).
