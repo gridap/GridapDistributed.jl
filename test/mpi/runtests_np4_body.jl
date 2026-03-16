@@ -60,6 +60,9 @@ function all_tests(distribute, parts)
 
     TransientMultiFieldDistributedCellFieldTests.main(distribute, parts)
     PArrays.toc!(t, "TransientMultiFieldDistributedCellField")
+
+    HeatEquationTests.main(distribute, parts)
+    PArrays.toc!(t, "HeatEquation")
   end
 
   if TESTCASE ∈ ("all", "mpi-adaptivity")
