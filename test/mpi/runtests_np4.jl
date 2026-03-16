@@ -1,5 +1,5 @@
 module NP4
-# All test running on 4 procs here
+# All tests running on either 1 or 4 procs here
 
 using GridapDistributed
 using PartitionedArrays
@@ -35,6 +35,7 @@ include("../VisualizationTests.jl")
 include("../AutodiffTests.jl")
 include("../ConstantFESpacesTests.jl")
 include("../MacroDiscreteModelsTests.jl")
+include("../HcurlProjectionTests.jl")
 
 include("runtests_np4_body.jl")
 

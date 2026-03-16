@@ -87,9 +87,8 @@ function _common_fe_space_constructor(model,cell_reffes;conformity,split_own_and
   DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
 end
 
-function _generate_sign_flips(model,cell_reffes)
-  cell_gids  = get_cell_gids(model)
-  sign_flips = map(local_views(model),partition(cell_gids),cell_reffes) do m, p, cell_reffe
+function _generate_sign_flips(model, cell_gids, cell_reffes)
+sign_flips = map(local_views(model),partition(cell_gids),cell_reffes) do m, p, cell_reffe
     D = num_cell_dims(model)
 
     gtopo = get_grid_topology(m)
@@ -145,4 +144,34 @@ function _generate_sign_flips(model,cell_reffes)
   cache = fetch_vector_ghost_values_cache(sign_flips,partition(cell_gids))
   fetch_vector_ghost_values!(sign_flips,cache) |> wait
   sign_flips
+end 
+
+
+function _generate_sign_flips(model::DistributedDiscreteModel,
+                             cell_reffes::AbstractVector{<:AbstractVector{<:GenericRefFE{<:RaviartThomas}}})
+  cell_gids  = get_cell_gids(model)
+  _generate_sign_flips(model,cell_gids,cell_reffes)
 end
+
+function _generate_sign_flips(model::DistributedDiscreteModel,
+                              cell_reffes::AbstractVector{<:AbstractVector{<:GenericRefFE{<:Nedelec}}})
+  Dc=num_cell_dims(model)
+  is_simp = false 
+  map(cell_reffes) do cell_reffes
+    cell_reffe = cell_reffes[1]
+    polytope = get_polytope(cell_reffe)
+    if (Gridap.Geometry.is_simplex(polytope))
+        is_simp=true
+    end 
+  end 
+  if (Dc==2 || is_simp)
+    map(local_views(model), cell_reffes) do model, cell_reffes
+        Gridap.FESpaces._no_sign_flip(model, cell_reffes)
+    end
+  else
+    @assert Dc==3
+    cell_gids  = get_cell_gids(model)
+    _generate_sign_flips(model,cell_gids,cell_reffes)
+  end
+end
+

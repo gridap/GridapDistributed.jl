@@ -48,6 +48,10 @@ function all_tests(distribute, parts)
 
     StokesHdivDGTests.main(distribute, parts)
     PArrays.toc!(t, "StokesHdivDG")
+
+    HcurlProjectionTests.main(distribute, parts)
+    PArrays.toc!(t, "HcurlProjection")
+    
   end
 
   if TESTCASE ∈ ("all", "mpi-transient")
@@ -56,9 +60,6 @@ function all_tests(distribute, parts)
 
     TransientMultiFieldDistributedCellFieldTests.main(distribute, parts)
     PArrays.toc!(t, "TransientMultiFieldDistributedCellField")
-
-    HeatEquationTests.main(distribute, parts)
-    PArrays.toc!(t, "HeatEquation")
   end
 
   if TESTCASE ∈ ("all", "mpi-adaptivity")
