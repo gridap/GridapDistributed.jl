@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- BUG fix in `_generate_sign_flips(...)` private helper function for Nedelec elements. Since PR[#199](https://github.com/gridap/GridapDistributed.jl/pull/199).
+
+### Added
+- An Hcurl projection test case. Since PR[#199](https://github.com/gridap/GridapDistributed.jl/pull/199).
+
 ## [0.4.12] - 2026-03-14
 
 ### Changed
