@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.13] - 2026-03-16
+
 ### Fixed
 - BUG fix in `_generate_sign_flips(...)` private helper function for Nedelec elements. Since PR[#199](https://github.com/gridap/GridapDistributed.jl/pull/199).
 
