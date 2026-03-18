@@ -11,6 +11,7 @@ end
 
 if TESTCASE ∈ ("all", "seq-fespaces")
   @time @testset "FESpaces"         begin include("FESpacesTests.jl") end
+  @time @testset "Pullbacks"        begin include("PullbackTests.jl") end
   @time @testset "MultiField"       begin include("MultiFieldTests.jl") end
   @time @testset "issue_142"        begin include("issue_142.jl") end
   @time @testset "ZeroMeanFESpaces" begin include("ZeroMeanFESpacesTests.jl") end
@@ -20,7 +21,6 @@ end
 if TESTCASE ∈ ("all", "seq-physics")
   @time @testset "Poisson"                     begin include("PoissonTests.jl") end
   @time @testset "PLaplacian"                  begin include("PLaplacianTests.jl") end
-  @time @testset "DivAndCurlConformingTests"   begin include("DivAndCurlConformingTests.jl") end
   @time @testset "SurfaceCouplingTests"        begin include("SurfaceCouplingTests.jl") end
   @time @testset "StokesHdivDGTests"           begin include("StokesHdivDGTests.jl") end
   @time @testset "StokesOpenBoundary"          begin include("StokesOpenBoundaryTests.jl") end
