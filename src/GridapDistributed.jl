@@ -58,7 +58,8 @@ include("Visualization.jl")
 
 include("FESpaces.jl")
 
-include("DivAndCurlConformingFESpaces.jl")
+#include("DivAndCurlConformingFESpaces.jl") # superseded by Pullbacks.jl
+include("Pullbacks.jl")
 
 include("MultiField.jl")
 

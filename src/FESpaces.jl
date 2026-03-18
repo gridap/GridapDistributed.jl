@@ -437,22 +437,26 @@ function FESpaces.HomogeneousTrialFESpace(f::DistributedSingleFieldFESpace)
 end
 
 function generate_gids(
-  model::DistributedDiscreteModel{Dc},
+  model::DistributedDiscreteModel,
   spaces::AbstractArray{<:SingleFieldFESpace}
-) where Dc
-  cell_to_ldofs = map(get_cell_dof_ids,spaces)
-  nldofs = map(num_free_dofs,spaces)
+)
   cell_gids = get_cell_gids(model)
-  generate_gids(cell_gids,cell_to_ldofs,nldofs)
+  generate_gids(cell_gids,spaces)
 end
 
 function generate_gids(
-  trian::DistributedTriangulation{Dc},
+  trian::DistributedTriangulation,
   spaces::AbstractArray{<:SingleFieldFESpace}
-) where Dc
+)
+  cell_gids = generate_cell_gids(trian)
+  generate_gids(cell_gids,spaces)
+end
+
+function generate_gids(
+  cell_gids::PRange, spaces::AbstractArray{<:SingleFieldFESpace}
+)
   cell_to_ldofs = map(get_cell_dof_ids,spaces)
   nldofs = map(num_free_dofs,spaces)
-  cell_gids = generate_cell_gids(trian)
   generate_gids(cell_gids,cell_to_ldofs,nldofs)
 end
 
@@ -537,30 +541,76 @@ end
 
 # Factories
 
+# function FESpaces.FESpace(
+#   model::DistributedDiscreteModel,reffe;split_own_and_ghost=false,constraint=nothing,kwargs...
+# )
+#   spaces = map(local_views(model)) do m
+#     FESpace(m,reffe;kwargs...)
+#   end
+#   gids =  generate_gids(model,spaces)
+#   trian = DistributedTriangulation(map(get_triangulation,spaces),model)
+#   vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
+#   space = DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
+#   return _add_distributed_constraint(space,reffe,constraint)
+# end
+# 
+# function FESpaces.FESpace(
+#   _trian::DistributedTriangulation,reffe;split_own_and_ghost=false,constraint=nothing,kwargs...
+# )
+#   trian = add_ghost_cells(_trian)
+#   spaces = map(local_views(trian)) do t
+#     FESpace(t,reffe;kwargs...)
+#   end
+#   gids = generate_gids(trian,spaces)
+#   vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
+#   space = DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
+#   return _add_distributed_constraint(space,reffe,constraint)
+# end
+
 function FESpaces.FESpace(
-  model::DistributedDiscreteModel,reffe;split_own_and_ghost=false,constraint=nothing,kwargs...
+  model::DistributedDiscreteModel,args...;kwargs...
 )
-  spaces = map(local_views(model)) do m
-    FESpace(m,reffe;kwargs...)
-  end
-  gids =  generate_gids(model,spaces)
-  trian = DistributedTriangulation(map(get_triangulation,spaces),model)
-  vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
-  space = DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
-  return _add_distributed_constraint(space,reffe,constraint)
+  trian = Triangulation(with_ghost,model)
+  cell_gids = get_cell_gids(model)
+  DistributedSingleFieldFESpace(model,trian,cell_gids,args...;kwargs...)
 end
 
 function FESpaces.FESpace(
-  _trian::DistributedTriangulation,reffe;split_own_and_ghost=false,constraint=nothing,kwargs...
+  _trian::DistributedTriangulation,args...;kwargs...
 )
   trian = add_ghost_cells(_trian)
-  spaces = map(local_views(trian)) do t
-    FESpace(t,reffe;kwargs...)
+  cell_gids = generate_cell_gids(trian)
+  model = DistributedDiscreteModel(map(get_active_model,local_views(trian)), cell_gids)
+  DistributedSingleFieldFESpace(model,trian,cell_gids,args...;kwargs...)
+end
+
+function DistributedSingleFieldFESpace(
+  model::DistributedDiscreteModel,
+  trian::DistributedTriangulation,
+  cell_gids::PRange, reffe; kwargs...
+)
+  cell_reffe = map(local_views(model)) do model
+    ReferenceFE(model,reffe)
   end
-  gids = generate_gids(trian,spaces)
-  vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
+  DistributedSingleFieldFESpace(model,trian,cell_gids,cell_reffe;kwargs...)
+end
+
+function DistributedSingleFieldFESpace(
+  model::DistributedDiscreteModel, # Active model, not bg model
+  trian::DistributedTriangulation,
+  cell_gids::PRange, 
+  cell_reffe::AbstractArray; 
+  split_own_and_ghost=false, 
+  constraint=nothing,
+  kwargs...
+)
+  spaces = map(local_views(model),local_views(trian),cell_reffe) do model, trian, cell_reffe
+    FESpace(model,cell_reffe;trian,kwargs...)
+  end
+  gids = generate_gids(cell_gids,spaces)
+  vector_type = _find_vector_type(spaces,gids;split_own_and_ghost)
   space = DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
-  return _add_distributed_constraint(space,reffe,constraint)
+  return _add_distributed_constraint(space,cell_reffe,constraint)
 end
 
 function _find_vector_type(spaces,gids;split_own_and_ghost=false)
@@ -593,6 +643,16 @@ function _add_distributed_constraint(
   args = reffe[2]
   order = maximum(args[2])
   _add_distributed_constraint(F,order,constraint)
+end
+
+function _add_distributed_constraint(
+  F::DistributedFESpace,cell_reffe::AbstractArray,constraint
+)
+  reffe = map(cell_reffe) do cell_reffe
+    reffes, ctypes = compress_cell_data(cell_reffe)
+    return only(reffes)
+  end |> getany
+  _add_distributed_constraint(F,reffe,constraint)
 end
 
 function _add_distributed_constraint(F::DistributedFESpace,order::Integer,constraint)
