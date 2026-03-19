@@ -88,7 +88,7 @@ function FESpaces.compute_cell_bases_changes(
   D = num_cell_dims(model)
   poly = only(getany(map(get_polytopes, model)))
   if (D==2) || is_simplex(poly)
-    # For these cases, we do not need to aply a sign flip
+    # For these cases, we do not need to apply a sign flip
     return nothing
   elseif (D==3) && is_n_cube(poly)
     change = FESpaces.get_sign_flip(model, cell_reffe)
