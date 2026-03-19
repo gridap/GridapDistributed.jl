@@ -86,7 +86,7 @@ function FESpaces.compute_cell_bases_changes(
   ::ReferenceFEName, ::CoVariantPiolaMap, model::DistributedDiscreteModel, cell_reffe, cell_Jt
 )
   D = num_cell_dims(model)
-  poly = only(getany(map(get_polytopes, model)))
+  poly = map(get_polytopes, local_views(model)) |> getany |> only
   if (D==2) || is_simplex(poly)
     # For these cases, we do not need to apply a sign flip
     return nothing
