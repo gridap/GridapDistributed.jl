@@ -20,78 +20,77 @@ function get_analytical_functions(Dc)
 end
 
 function solve_hcurl_projection(model::GridapDistributed.DistributedDiscreteModel{Dc},order) where {Dc}
-    u_ex, f_ex=get_analytical_functions(Dc)
+  u_ex, f_ex=get_analytical_functions(Dc)
 
-    V = FESpace(model,
-                ReferenceFE(nedelec,order),
-                conformity=:Hcurl,
-                dirichlet_tags="boundary")
-    
-    U = TrialFESpace(V,u_ex)
-    
-    trian = Triangulation(model)
-    degree = 2*(order+1)
-    dΩ = Measure(trian,degree)
-        
-    a(u,v) = ∫( (∇×u)⋅(∇×v) + u⋅v )dΩ
-    l(v) = ∫(f_ex⋅v)dΩ
+  V = FESpace(
+    model, ReferenceFE(nedelec,order), conformity=:Hcurl, dirichlet_tags="boundary"
+  )
+  
+  U = TrialFESpace(V,u_ex)
+  
+  trian = Triangulation(model)
+  degree = 2*(order+1)
+  dΩ = Measure(trian,degree)
+      
+  a(u,v) = ∫( (∇×u)⋅(∇×v) + u⋅v )dΩ
+  l(v) = ∫(f_ex⋅v)dΩ
 
-    op = AffineFEOperator(a,l,U,V)
-    if (num_free_dofs(U)==0)
-      # UMFPACK cannot handle empty linear systems
-      uh = zero(U)
-    else
-      uh = solve(op)
-    end
-    uh,U
-  end 
+  op = AffineFEOperator(a,l,U,V)
+  if (num_free_dofs(U)==0)
+    # UMFPACK cannot handle empty linear systems
+    uh = zero(U)
+  else
+    uh = solve(op)
+  end
+  uh,U
+end 
 
-  function check_error_hcurl_projection(model::GridapDistributed.DistributedDiscreteModel{Dc},order,uh) where {Dc}
-    trian = Triangulation(model)
-    degree = 2*(order+1)
-    dΩ = Measure(trian,degree)
+function check_error_hcurl_projection(model::GridapDistributed.DistributedDiscreteModel{Dc},order,uh) where {Dc}
+  trian = Triangulation(model)
+  degree = 2*(order+1)
+  dΩ = Measure(trian,degree)
 
-    u_ex, f_ex = get_analytical_functions(Dc)
-    
-    eu = u_ex - uh
+  u_ex, f_ex = get_analytical_functions(Dc)
+  
+  eu = u_ex - uh
 
-    l2(v) = sqrt(sum(∫(v⋅v)*dΩ))
-    hcurl(v) = sqrt(sum(∫(v⋅v + (∇×v)⋅(∇×v))*dΩ))
-    
-    eu_l2 = l2(eu)
-    eu_hcurl = hcurl(eu)
-    
-    tol = 1.0e-6
-    @test eu_l2 < tol
-    @test eu_hcurl < tol
+  l2(v) = sqrt(sum(∫(v⋅v)*dΩ))
+  hcurl(v) = sqrt(sum(∫(v⋅v + (∇×v)⋅(∇×v))*dΩ))
+  
+  eu_l2 = l2(eu)
+  eu_hcurl = hcurl(eu)
+  
+  tol = 1.0e-6
+  @test eu_l2 < tol
+  @test eu_hcurl < tol
 end
 
- function test_2d(ranks,parts,order)
-    domain = (0,1,0,1)
-    model = CartesianDiscreteModel(ranks,parts,domain,(4,4))
-    solve_hcurl_projection(model,order) |> x -> check_error_hcurl_projection(model,order,x[1])
- end 
+function test_2d(ranks,parts,order)
+  domain = (0,1,0,1)
+  model = CartesianDiscreteModel(ranks,parts,domain,(4,4))
+  solve_hcurl_projection(model,order) |> x -> check_error_hcurl_projection(model,order,x[1])
+end 
 
- function test_3d(ranks,parts,order)
-    domain = (0,1,0,1,0,1)
-    model = CartesianDiscreteModel(ranks,parts,domain,(4,4,4))
-    solve_hcurl_projection(model,order) |> x -> check_error_hcurl_projection(model,order,x[1])
- end 
+function test_3d(ranks,parts,order)
+  domain = (0,1,0,1,0,1)
+  model = CartesianDiscreteModel(ranks,parts,domain,(4,4,4))
+  solve_hcurl_projection(model,order) |> x -> check_error_hcurl_projection(model,order,x[1])
+end 
 
 function main(distribute,parts)
   ranks = distribute(LinearIndices((prod(parts),)))
   
   if length(parts)==2 
-      for order=0:2
-        test_2d(ranks,parts,order)
-      end
+    for order=0:2
+      test_2d(ranks,parts,order)
+    end
   elseif length(parts)==3
-      for order=0:2
-        test_3d(ranks,parts,order)
-      end
+    for order=0:2
+      test_3d(ranks,parts,order)
+    end
   else 
       @assert false 
   end 
 end
-  
+
 end #module
