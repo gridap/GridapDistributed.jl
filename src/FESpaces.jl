@@ -651,11 +651,11 @@ function _add_distributed_constraint(
   F::DistributedFESpace,cell_reffe::AbstractArray,constraint
 )
   isnothing(constraint) && return F
-  reffe = map(cell_reffe) do cell_reffe
+  order = map(cell_reffe) do cell_reffe
     reffes, ctypes = compress_cell_data(cell_reffe)
-    return only(reffes)
+    return maximum(get_order,reffes;init=0)
   end |> getany
-  _add_distributed_constraint(F,reffe,constraint)
+  _add_distributed_constraint(F,order,constraint)
 end
 
 function _add_distributed_constraint(F::DistributedFESpace,order::Integer,constraint)
