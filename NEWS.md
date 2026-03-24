@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.15] - 2026-03-23
+
+### Fixed
+
+- Fixed `_add_distributed_constraint` in the case where the underlying `FESpace` has multiple (different) reffes. Since PR[#201](https://github.com/gridap/GridapDistributed.jl/pull/201).
+
 ## [0.4.14] - 2026-03-20
 
 ### Changed 

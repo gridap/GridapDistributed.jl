@@ -633,6 +633,7 @@ end
 function _add_distributed_constraint(
   F::DistributedFESpace,reffe::ReferenceFE,constraint
 )
+  isnothing(constraint) && return F
   order = get_order(reffe)
   _add_distributed_constraint(F,order,constraint)
 end
@@ -640,6 +641,7 @@ end
 function _add_distributed_constraint(
   F::DistributedFESpace,reffe::Tuple{<:ReferenceFEName,Any,Any},constraint
 )
+  isnothing(constraint) && return F
   args = reffe[2]
   order = maximum(args[2])
   _add_distributed_constraint(F,order,constraint)
@@ -648,29 +650,28 @@ end
 function _add_distributed_constraint(
   F::DistributedFESpace,cell_reffe::AbstractArray,constraint
 )
-  reffe = map(cell_reffe) do cell_reffe
+  isnothing(constraint) && return F
+  order = map(cell_reffe) do cell_reffe
     reffes, ctypes = compress_cell_data(cell_reffe)
-    return only(reffes)
+    return maximum(get_order,reffes;init=0)
   end |> getany
-  _add_distributed_constraint(F,reffe,constraint)
+  _add_distributed_constraint(F,order,constraint)
 end
 
 function _add_distributed_constraint(F::DistributedFESpace,order::Integer,constraint)
-  if isnothing(constraint)
-    V = F
-  elseif constraint == :zeromean
+  isnothing(constraint) && return F
+  if constraint == :zeromean
     _trian = get_triangulation(F)
     model = get_background_model(_trian)
     trian = remove_ghost_cells(_trian,get_cell_gids(model))
     dΩ = Measure(trian,order)
-    V = ZeroMeanFESpace(F,dΩ)
+    return ZeroMeanFESpace(F,dΩ)
   else
     @unreachable """\n
     The passed option constraint=$constraint is not valid.
     Valid values for constraint: nothing, :zeromean
     """
   end
-  V
 end
 
 # Assembly
