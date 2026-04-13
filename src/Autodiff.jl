@@ -80,6 +80,34 @@ function FESpaces._change_argument(op,f,local_trians,uh::DistributedADTypes)
   g
 end
 
+# Distributed counterpart of: src/MultiField/MultiFieldAutodiff.jl
+
+for (op,_op) in ((:gradient,:_gradient),(:jacobian,:_jacobian))
+  @eval begin
+    function FESpaces.$(op)(f::Function,uh::DistributedMultiFieldFEFunction;ad_type=:split)
+      fuh = f(uh)
+      if ad_type == :split
+        MultiField.multifield_autodiff_split($op,f,uh,fuh)
+      elseif ad_type == :monolithic
+        FESpaces.$(_op)(f,uh,fuh)
+      else
+        @notimplemented """Unknown ad_type = $ad_type
+          Options:
+          - :split      -- compute the gradient for each field separately, then merge
+          - :monolithic -- compute the gradient for all fields together
+          """
+      end
+    end
+  end
+end
+
+function MultiField._combine_contributions(op::Function,terms,fuh::DistributedDomainContribution)
+  local_terms = map(local_views(fuh),local_views.(terms)...) do fuh,terms...
+    MultiField._combine_contributions(op,terms,fuh)
+  end
+  DistributedDomainContribution(local_terms)
+end
+
 # Distributed counterpart of: src/Arrays/Autodiff.jl
 # autodiff_array_xxx
 

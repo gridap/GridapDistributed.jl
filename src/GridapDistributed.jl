@@ -58,20 +58,20 @@ include("Visualization.jl")
 
 include("FESpaces.jl")
 
-include("DivConformingFESpaces.jl")
+include("DivAndCurlConformingFESpaces.jl")
 
 include("MultiField.jl")
 
 include("ODEs.jl")
-
-include("Redistribution.jl")
-
-include("Adaptivity.jl")
 
 include("Autodiff.jl")
 
 include("MacroDiscreteModels.jl")
 
 include("PatchAssemblers.jl")
+
+include("Redistribution.jl")
+
+include("Adaptivity.jl")
 
 end # module

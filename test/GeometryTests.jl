@@ -6,8 +6,75 @@ using PartitionedArrays
 using LinearAlgebra
 using Test
 
-function main(distribute,parts)
+using Gridap.Geometry
 
+function test_local_part_face_labelings_consistency(lmodel::CartesianDiscreteModel{D},gids,gmodel) where {D}
+  local_topology         = lmodel.grid_topology
+  global_topology        = gmodel.grid_topology
+  local_labelings        = lmodel.face_labeling
+  global_labelings       = gmodel.face_labeling
+  l_d_to_dface_to_entity = local_labelings.d_to_dface_to_entity
+  g_d_to_dface_to_entity = global_labelings.d_to_dface_to_entity
+  loc_to_glo             = local_to_global(gids)
+  #traverse local cells
+  for cell_lid=1:num_cells(lmodel)
+    cell_gid=loc_to_glo[cell_lid]
+    for d = 0:D-1
+      local_cell_to_faces = local_topology.n_m_to_nface_to_mfaces[D+1,d+1]
+      global_cell_to_faces = global_topology.n_m_to_nface_to_mfaces[D+1,d+1]
+      la = local_cell_to_faces.ptrs[cell_lid]
+      lb = local_cell_to_faces.ptrs[cell_lid+1]
+      ga = global_cell_to_faces.ptrs[cell_gid]
+      gb = global_cell_to_faces.ptrs[cell_gid+1]
+      @assert (lb-la)==(gb-ga)
+      for i = 0:lb-la-1
+        face_lid = local_cell_to_faces.data[la+i]
+        face_gid = global_cell_to_faces.data[ga+i]
+        local_entity = l_d_to_dface_to_entity[d+1][face_lid]
+        global_entity = g_d_to_dface_to_entity[d+1][face_gid]
+        if (local_entity != global_entity)
+          return false
+        end
+      end
+    end
+  end
+  return true
+end
+
+function test_model(model)
+  D = num_cell_dims(model)
+
+  grid = get_grid(model)
+  labels = get_grid(model)
+
+  topo = get_grid_topology(model)
+  GridapDistributed.isconsistent_faces(topo)
+
+  for d in 0:D
+    fgids = get_face_gids(model,d)
+    trian = Triangulation(no_ghost,ReferenceFE{d},model)
+    @test num_cells(trian) == length(fgids)
+    trian = Triangulation(with_ghost,ReferenceFE{d},model)
+    @test num_cells(trian) == length(fgids)
+  end
+
+  Ω = Triangulation(with_ghost,model)
+  @test num_cells(Ω) == num_cells(model)
+
+  Ω = Triangulation(no_ghost,model)
+  @test num_cells(Ω) == num_cells(model)
+
+  Γ = Boundary(with_ghost,model,tags="boundary")
+  nbfacets = num_cells(Γ)
+
+  Γ = Boundary(no_ghost,model,tags="boundary")
+  @test num_cells(Γ) == nbfacets
+
+  return true
+end
+
+function main_cartesian(distribute,parts)
+  ranks = distribute(LinearIndices((prod(parts),)))
   output = mkpath(joinpath(@__DIR__,"output"))
 
   if length(parts) == 2
@@ -18,14 +85,12 @@ function main(distribute,parts)
     cells = (4,4,4)
   end
 
-  ranks = distribute(LinearIndices((prod(parts),)))
-
-
   model = CartesianDiscreteModel(ranks,parts,domain,cells)
   writevtk(model,joinpath(output,"model"))
 
-  @test num_cells(model)==prod(cells)
-  @test num_vertices(model)==prod(cells .+ 1)
+  @test test_model(model)
+  @test num_cells(model) == prod(cells)
+  @test num_vertices(model) == prod(cells .+ 1)
   @test num_cell_dims(model) == length(cells)
   @test num_point_dims(model) == length(cells)
 
@@ -53,25 +118,6 @@ function main(distribute,parts)
   map(local_views(model),partition(cell_gids)) do lmodel,gids
     @test test_local_part_face_labelings_consistency(lmodel,gids,gmodel)
   end
-
-  grid = get_grid(model)
-  labels = get_grid(model)
-
-  Ω = Triangulation(with_ghost,model)
-  writevtk(Ω,joinpath(output,"Ω"))
-  @test num_cells(Ω) == num_cells(model)
-
-  Ω = Triangulation(no_ghost,model)
-  writevtk(Ω,joinpath(output,"Ω"))
-  @test num_cells(Ω) == num_cells(model)
-
-  Γ = Boundary(with_ghost,model,tags="boundary")
-  writevtk(Γ,joinpath(output,"Γ"))
-  nbfacets = num_cells(Γ)
-
-  Γ = Boundary(no_ghost,model,tags="boundary")
-  writevtk(Γ,joinpath(output,"Γ"))
-  @test num_cells(Γ) == nbfacets
 
   function is_in(coords)
     R = 1.6
@@ -111,40 +157,48 @@ function main(distribute,parts)
 
   # Multiple ghost layers
   model = CartesianDiscreteModel(ranks,parts,domain,cells;ghost=map(i->2,parts))
+  @test test_model(model)
+
+  # Unstructured conversion
+  model = Geometry.UnstructuredDiscreteModel(
+    CartesianDiscreteModel(ranks,parts,domain,cells)
+  )
+  @test test_model(model)
+
+  # Simplexify
+  model = simplexify(
+    CartesianDiscreteModel(ranks,parts,domain,cells)
+  )
+  @test test_model(model)
 
 end
 
-function test_local_part_face_labelings_consistency(lmodel::CartesianDiscreteModel{D},gids,gmodel) where {D}
-   local_topology         = lmodel.grid_topology
-   global_topology        = gmodel.grid_topology
-   local_labelings        = lmodel.face_labeling
-   global_labelings       = gmodel.face_labeling
-   l_d_to_dface_to_entity = local_labelings.d_to_dface_to_entity
-   g_d_to_dface_to_entity = global_labelings.d_to_dface_to_entity
-   loc_to_glo             = local_to_global(gids)
-   #traverse local cells
-   for cell_lid=1:num_cells(lmodel)
-        cell_gid=loc_to_glo[cell_lid]
-        for d=0:D-1
-             local_cell_to_faces = local_topology.n_m_to_nface_to_mfaces[D+1,d+1]
-             global_cell_to_faces = global_topology.n_m_to_nface_to_mfaces[D+1,d+1]
-             la = local_cell_to_faces.ptrs[cell_lid]
-             lb = local_cell_to_faces.ptrs[cell_lid+1]
-             ga = global_cell_to_faces.ptrs[cell_gid]
-             gb = global_cell_to_faces.ptrs[cell_gid+1]
-             @assert (lb-la)==(gb-ga)
-             for i=0:lb-la-1
-                 face_lid = local_cell_to_faces.data[la+i]
-                 face_gid = global_cell_to_faces.data[ga+i]
-                 local_entity = l_d_to_dface_to_entity[d+1][face_lid]
-                 global_entity = g_d_to_dface_to_entity[d+1][face_gid]
-                 if (local_entity != global_entity)
-                     return false
-                 end
-             end
-        end
-   end
-   return true
+function main_polytopal(distribute,parts)
+  ranks = distribute(LinearIndices((prod(parts),)))
+
+  if length(parts) == 2
+    domain = (0,4,0,4)
+    cells = (4,4)
+  elseif length(parts) == 3
+    domain = (0,4,0,4,0,4)
+    cells = (4,4,4)
+  end
+
+  model = Geometry.PolytopalDiscreteModel(
+    CartesianDiscreteModel(ranks,parts,domain,cells)
+  )
+  @test test_model(model)
+
+  model = Geometry.PolytopalDiscreteModel(
+    simplexify(CartesianDiscreteModel(ranks,parts,domain,cells))
+  )
+  @test test_model(model)
+
+end
+
+function main(distribute,parts)
+  main_cartesian(distribute,parts)
+  main_polytopal(distribute,parts)
 end
 
 end # module

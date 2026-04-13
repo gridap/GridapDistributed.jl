@@ -21,7 +21,7 @@ function is_same_vector(x::BlockPVector,y::PVector,Ub,U)
   res = map(1:num_fields(Ub)) do i
     xi = restrict_to_field(Ub,x_fespace,i)
     yi = restrict_to_field(U,y_fespace,i)
-    xi ≈ yi
+    norm(xi - yi) < 1.0e-10
   end
   return all(res)
 end

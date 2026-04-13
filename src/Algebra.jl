@@ -198,6 +198,9 @@ function change_parts(::Union{Nothing,MPIVoidVector}, new_parts, defaults)
   return defaults
 end
 
+change_parts(f::Function, x, args...; kwargs...) = change_parts(f(x), args...; kwargs...)
+change_parts(f::Function, x::Nothing, args...; kwargs...) = change_parts(nothing, args...; kwargs...)
+
 function generate_subparts(parts::MPIArray,new_comm_size)
   root_comm = parts.comm
   root_size = MPI.Comm_size(root_comm)
@@ -384,7 +387,7 @@ end
 
 function local_views(a::BlockPMatrix,new_rows::BlockPRange,new_cols::BlockPRange)
   vals = map(CartesianIndices(blocksize(a))) do I
-    local_views(blocks(a)[I],blocks(new_rows)[I],blocks(new_cols)[I])
+    local_views(blocks(a)[I],blocks(new_rows)[I[1]],blocks(new_cols)[I[2]])
   end |> to_parray_of_arrays
   return map(mortar,vals)
 end

@@ -44,7 +44,7 @@ function test_redistribution_new(redist_model, model, redist_space, space, glue)
     old_data_ids = partition(get_free_dof_ids(space))
     old_cell_to_old_lid = map(get_cell_dof_ids,local_views(space))
   else
-    old_data_ids, old_cell_to_old_lid = nothing, nothing, nothing
+    old_data_ids, old_cell_to_old_lid = nothing, nothing
   end
 
   old_ids, red_old_ids = GridapDistributed.redistribute_indices(
