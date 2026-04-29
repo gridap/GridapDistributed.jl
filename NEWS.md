@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
--  `get_facet_owners(::DistributeDiscreteModel)` now relies on the strengthened version of that function for serial discrete models in Gridap. Since PR[#XXX](https://github.com/gridap/GridapDistributed.jl/pull/XXX).
+-  `get_facet_owners(::DistributeDiscreteModel)` now relies on the strengthened version of that function for serial discrete models in Gridap. Since PR[#205](https://github.com/gridap/GridapDistributed.jl/pull/205).
 
 
 ## [0.4.15] - 2026-03-23
