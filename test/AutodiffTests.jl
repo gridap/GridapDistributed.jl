@@ -43,6 +43,18 @@ function main_sf(distribute,parts)
   b_AD = assemble_vector(gradient(g,uh),U)
   @test b ≈ b_AD
 
+  # Tags
+  dv = get_fe_basis(V)
+  dp = get_trial_fe_basis(U)
+  ph = interpolate(x->rand(),U)
+  ener(uh,ph) = ∫( 0.5*∇(uh)⋅∇(uh)*ph )*dΩ
+  res(uh,ph) = ∫( ∇(uh)⋅∇(dv)*ph )*dΩ
+  jac(uh,ph) = ∫( ∇(uh)⋅∇(dv)*dp )*dΩ
+
+  ∂2L∂u∂p_auto = assemble_matrix(jacobian(ph->gradient(uh->ener(uh,ph),uh),ph),U,U)
+  ∂2L∂u∂p = assemble_matrix(jac(uh,ph),U,U)
+  @test reduce(&,map(≈,partition(∂2L∂u∂p_auto),partition(∂2L∂u∂p)))
+
   # Skeleton AD
   # I would like to compare the results, but we cannot be using FD in parallel...
   Λ = SkeletonTriangulation(model)
@@ -211,6 +223,10 @@ function main(distribute,parts)
   main_mf(distribute,parts)
   mf_different_fespace_trians(distribute,parts)
   skeleton_mf_different_fespace_trians(distribute,parts)
+end
+
+with_mpi() do distribute
+  main(distribute, (2,2))
 end
 
 end
