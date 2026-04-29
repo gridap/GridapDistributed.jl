@@ -225,8 +225,4 @@ function main(distribute,parts)
   skeleton_mf_different_fespace_trians(distribute,parts)
 end
 
-with_mpi() do distribute
-  main(distribute, (2,2))
-end
-
 end
