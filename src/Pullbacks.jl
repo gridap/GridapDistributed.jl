@@ -109,11 +109,22 @@ function FESpaces.compute_facet_owners(model::DistributedDiscreteModel)
   Dc = num_cell_dims(model)
   cell_ids  = partition(get_cell_gids(model))
   facet_ids = partition(get_face_gids(model, Dc-1))
-  l2g = map(cell_ids) do cell_ids
-    l2g_local_array = local_to_global(cell_ids)
-    x -> l2g_local_array[x]
+  
+  function select_nbor_with_max_gid(nbor_lids, lid_to_gid)
+    max_lid, max_gid = -1, -1
+    for lid in nbor_lids
+      gid = lid_to_gid[lid]
+      if gid > max_gid
+        max_lid, max_gid = lid, gid
+      end
+    end
+    return nbor_lids[max_lid]
   end
-  facet_to_owner = map(FESpaces.compute_facet_owners, local_views(model), l2g)
+  facet_to_owner = map(local_views(model), cell_ids) do model, cell_ids
+    lid_to_gid = local_to_global(cell_ids)
+    select_nbor = Base.Fix2(select_nbor_with_max_gid, lid_to_gid)
+    return FESpaces.compute_facet_owners(model, select_nbor)
+  end
 
   # Map local owners to global ids
   map(facet_to_owner, cell_ids) do facet_to_owner, cell_ids
