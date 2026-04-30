@@ -2,7 +2,7 @@
 
 julia_version = "1.10.10"
 manifest_format = "2.0"
-project_hash = "e1e6a84e0dbc121d448c0d7832f755476d461953"
+project_hash = "bcf8ff86cd07045132f440a0c54a08b45d199304"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "bbc22a9a08a0ef6460041086d8a7b27940ed4ffd"
@@ -455,11 +455,11 @@ version = "1.14.0"
 
 [[deps.Gridap]]
 deps = ["AbstractTrees", "AutoHashEquals", "BSON", "BlockArrays", "Combinatorics", "DataStructures", "DocStringExtensions", "FastGaussQuadrature", "FileIO", "FillArrays", "ForwardDiff", "Graphs", "JLD2", "JSON", "LineSearches", "LinearAlgebra", "NLsolve", "NearestNeighbors", "PolynomialBases", "Preferences", "QuadGK", "Random", "SparseArrays", "SparseMatricesCSR", "StaticArrays", "Statistics", "Test", "WriteVTK"]
-git-tree-sha1 = "714af19ae82c16ce0242082dfe3c00d3aa12dd2d"
-repo-rev = "bug_fix_compute_facet_owners"
+git-tree-sha1 = "af29779db959e6f4f01574fd4afcbe9d000abd1d"
+repo-rev = "master"
 repo-url = "https://github.com/gridap/Gridap.jl/"
 uuid = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
-version = "0.20.6"
+version = "0.20.5"
 
     [deps.Gridap.extensions]
     TikzPicturesExt = "TikzPictures"
