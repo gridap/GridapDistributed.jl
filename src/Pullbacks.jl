@@ -118,7 +118,7 @@ function FESpaces.compute_facet_owners(model::DistributedDiscreteModel)
         max_lid, max_gid = lid, gid
       end
     end
-    return nbor_lids[max_lid]
+    return max_lid
   end
   facet_to_owner = map(local_views(model), cell_ids) do model, cell_ids
     lid_to_gid = local_to_global(cell_ids)
