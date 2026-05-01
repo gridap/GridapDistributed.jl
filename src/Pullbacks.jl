@@ -4,7 +4,7 @@
 # simply go through the local FESpace constructor.
 const PullbackReffes = Union{
   GenericRefFE{RaviartThomas},
-  GenericRefFE{Nedelec},
+  GenericRefFE{<:Nedelec},
 }
 
 function DistributedSingleFieldFESpace(
