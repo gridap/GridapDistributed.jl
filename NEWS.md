@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Added tag support for AD to align with Gridap[#1181](https://github.com/gridap/Gridap.jl/pull/1181). Since PR[#204](https://github.com/gridap/GridapDistributed.jl/pull/204).
+- Added tag support for AD to align with Gridap[#1181](https://github.com/gridap/Gridap.jl/pull/1181) and Gridap[#1297](https://github.com/gridap/Gridap.jl/pull/1297). Since PR[#204](https://github.com/gridap/GridapDistributed.jl/pull/204).
 
 ## [0.4.15] - 2026-03-23
 
