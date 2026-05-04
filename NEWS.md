@@ -5,12 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
 ## [0.4.16] - 2026-04-29
 
 ### Fixed
 
--  `get_facet_owners(::DistributeDiscreteModel)` now relies on the strengthened version of that function for serial discrete models in Gridap. Since PR[#205](https://github.com/gridap/GridapDistributed.jl/pull/205).
-
+- `get_facet_owners(::DistributeDiscreteModel)` now chooses the owner with maximum gid. Since PR[#205](https://github.com/gridap/GridapDistributed.jl/pull/205).
 
 ## [0.4.15] - 2026-03-23
 
