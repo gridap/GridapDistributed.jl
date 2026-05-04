@@ -55,6 +55,28 @@ function main_sf(distribute,parts)
   ∂2L∂u∂p = assemble_matrix(jac(uh,ph),U,U)
   @test reduce(&,map(≈,partition(∂2L∂u∂p_auto),partition(∂2L∂u∂p)))
 
+  Γ_reg = BoundaryTriangulation(model)
+  Λ_reg = SkeletonTriangulation(model)
+  dΓ_reg = Measure(Γ_reg, 2)
+  dΛ_reg = Measure(Λ_reg, 2)
+
+  reffe_l2 = ReferenceFE(lagrangian, Float64, 1)
+  V_reg = TestFESpace(model, reffe_l2, conformity=:L2)
+  U_reg = TrialFESpace(V_reg)
+  dv_reg = get_fe_basis(V_reg)
+  dp_reg = get_trial_fe_basis(U_reg)
+  uh_reg = FEFunction(U_reg, rand(num_free_dofs(U_reg)))
+  ph_reg = FEFunction(U_reg, rand(num_free_dofs(U_reg)))
+
+  ener_reg(u, p) = ∫(0.5*u*u*p)*dΩ + ∫(0.5*u*u*p)*dΓ_reg + ∫(0.5*mean(u)*mean(u)*mean(p))*dΛ_reg
+  nested_ad_contrib = jacobian(p -> gradient(u -> ener_reg(u, p), uh_reg), ph_reg)
+  mat_nested_ad = assemble_matrix(nested_ad_contrib, U_reg, V_reg)
+  analytic_contrib = ∫(uh_reg*dv_reg*dp_reg)*dΩ + ∫(uh_reg*dv_reg*dp_reg)*dΓ_reg +
+                      ∫(mean(uh_reg)*mean(dv_reg)*mean(dp_reg))*dΛ_reg
+  mat_analytic = assemble_matrix(analytic_contrib, U_reg, V_reg)
+
+  @test reduce(&,map(≈,partition(mat_nested_ad),partition(mat_analytic)))
+
   # Skeleton AD
   # I would like to compare the results, but we cannot be using FD in parallel...
   Λ = SkeletonTriangulation(model)
