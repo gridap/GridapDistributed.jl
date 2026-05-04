@@ -11,11 +11,12 @@ end
 function FESpaces._gradient(f,uh,fuh::DistributedDomainContribution)
   local_terms = map(r -> DomainContribution(), get_parts(fuh))
   local_domains = tuple_of_arrays(map(Tuple∘get_domains,local_views(fuh)))
+  tag = x->Fields.gradient(f, uh)
   for local_trians in local_domains
     g = FESpaces._change_argument(gradient,f,local_trians,uh)
     cell_u = map(FESpaces.get_cell_dof_values,local_views(uh))
     cell_id = map(FESpaces._compute_cell_ids,local_views(uh),local_trians)
-    cell_grad = distributed_autodiff_array_gradient(g,cell_u,cell_id)
+    cell_grad = distributed_autodiff_array_gradient(g,cell_u,cell_id,tag)
     map(add_contribution!,local_terms,local_trians,cell_grad)
   end
   DistributedDomainContribution(local_terms)
@@ -29,11 +30,12 @@ end
 function FESpaces._jacobian(f,uh,fuh::DistributedDomainContribution)
   local_terms = map(r -> DomainContribution(), get_parts(fuh))
   local_domains = tuple_of_arrays(map(Tuple∘get_domains,local_views(fuh)))
+  tag = x->Fields.jacobian(f, uh)
   for local_trians in local_domains
     g = FESpaces._change_argument(jacobian,f,local_trians,uh)
     cell_u = map(FESpaces.get_cell_dof_values,local_views(uh))
     cell_id = map(FESpaces._compute_cell_ids,local_views(uh),local_trians)
-    cell_grad = distributed_autodiff_array_jacobian(g,cell_u,cell_id)
+    cell_grad = distributed_autodiff_array_jacobian(g,cell_u,cell_id,tag)
     map(add_contribution!,local_terms,local_trians,cell_grad)
   end
   DistributedDomainContribution(local_terms)
@@ -112,9 +114,13 @@ end
 # autodiff_array_xxx
 
 function distributed_autodiff_array_gradient(a,i_to_x)
-  dummy_tag = ()->()
+  tag = x->ForwardDiff.gradient(a, x)
+  distributed_autodiff_array_gradient(a,i_to_x,tag)
+end
+
+function distributed_autodiff_array_gradient(a,i_to_x,tag::Function)
   i_to_cfg = map(i_to_x) do i_to_x
-    lazy_map(ConfigMap(ForwardDiff.gradient,dummy_tag),i_to_x)
+    lazy_map(ConfigMap(ForwardDiff.gradient,tag),i_to_x)
   end
   i_to_xdual = map(i_to_cfg,i_to_x) do i_to_cfg, i_to_x
     lazy_map(DualizeMap(),i_to_cfg,i_to_x)
@@ -127,9 +133,13 @@ function distributed_autodiff_array_gradient(a,i_to_x)
 end
 
 function distributed_autodiff_array_jacobian(a,i_to_x)
-  dummy_tag = ()->()
+  tag = x->ForwardDiff.jacobian(a, x)
+  distributed_autodiff_array_jacobian(a,i_to_x,tag)
+end
+
+function distributed_autodiff_array_jacobian(a,i_to_x,tag::Function)
   i_to_cfg = map(i_to_x) do i_to_x
-    lazy_map(ConfigMap(ForwardDiff.jacobian,dummy_tag),i_to_x)
+    lazy_map(ConfigMap(ForwardDiff.jacobian,tag),i_to_x)
   end
   i_to_xdual = map(i_to_cfg,i_to_x) do i_to_cfg, i_to_x
     lazy_map(DualizeMap(),i_to_cfg,i_to_x)
@@ -147,9 +157,13 @@ function distributed_autodiff_array_hessian(a,i_to_x)
 end
 
 function distributed_autodiff_array_gradient(a,i_to_x,j_to_i)
-  dummy_tag = ()->()
+  tag = x->ForwardDiff.gradient(a, x)
+  distributed_autodiff_array_gradient(a,i_to_x,j_to_i,tag)
+end
+
+function distributed_autodiff_array_gradient(a,i_to_x,j_to_i,tag::Function)
   i_to_cfg = map(i_to_x) do i_to_x
-    lazy_map(ConfigMap(ForwardDiff.gradient,dummy_tag),i_to_x)
+    lazy_map(ConfigMap(ForwardDiff.gradient,tag),i_to_x)
   end
   i_to_xdual = map(i_to_cfg,i_to_x) do i_to_cfg, i_to_x
     lazy_map(DualizeMap(),i_to_cfg,i_to_x)
@@ -163,9 +177,13 @@ function distributed_autodiff_array_gradient(a,i_to_x,j_to_i)
 end
 
 function distributed_autodiff_array_jacobian(a,i_to_x,j_to_i)
-  dummy_tag = ()->()
+  tag = x->ForwardDiff.jacobian(a, x)
+  distributed_autodiff_array_jacobian(a,i_to_x,j_to_i,tag)
+end
+
+function distributed_autodiff_array_jacobian(a,i_to_x,j_to_i,tag::Function)
   i_to_cfg = map(i_to_x) do i_to_x
-    lazy_map(ConfigMap(ForwardDiff.jacobian,dummy_tag),i_to_x)
+    lazy_map(ConfigMap(ForwardDiff.jacobian,tag),i_to_x)
   end
   i_to_xdual = map(i_to_cfg,i_to_x) do i_to_cfg, i_to_x
     lazy_map(DualizeMap(),i_to_cfg,i_to_x)
@@ -213,9 +231,13 @@ function FESpaces._change_argument(op,f,local_trians::AbstractArray{<:SkeletonTr
 end
 
 function distributed_autodiff_array_gradient(a, i_to_x, j_to_i::AbstractArray{<:SkeletonPair})
-  dummy_tag = ()->()
+  tag = x->ForwardDiff.gradient(a, x)
+  distributed_autodiff_array_gradient(a, i_to_x, j_to_i, tag)
+end
+
+function distributed_autodiff_array_gradient(a, i_to_x, j_to_i::AbstractArray{<:SkeletonPair}, tag::Function)
   i_to_cfg = map(i_to_x) do i_to_x
-    lazy_map(ConfigMap(ForwardDiff.gradient,dummy_tag),i_to_x)
+    lazy_map(ConfigMap(ForwardDiff.gradient,tag),i_to_x)
   end
   i_to_xdual = map(i_to_cfg,i_to_x) do i_to_cfg, i_to_x
     lazy_map(DualizeMap(),i_to_cfg,i_to_x)
@@ -245,9 +267,13 @@ function distributed_autodiff_array_gradient(a, i_to_x, j_to_i::AbstractArray{<:
 end
 
 function distributed_autodiff_array_jacobian(a, i_to_x, j_to_i::AbstractArray{<:SkeletonPair})
-  dummy_tag = ()->()
+  tag = x->ForwardDiff.jacobian(a, x)
+  distributed_autodiff_array_jacobian(a, i_to_x, j_to_i, tag)
+end
+
+function distributed_autodiff_array_jacobian(a, i_to_x, j_to_i::AbstractArray{<:SkeletonPair}, tag::Function)
   i_to_cfg = map(i_to_x) do i_to_x
-    lazy_map(ConfigMap(ForwardDiff.jacobian,dummy_tag),i_to_x)
+    lazy_map(ConfigMap(ForwardDiff.jacobian,tag),i_to_x)
   end
   i_to_xdual = map(i_to_cfg,i_to_x) do i_to_cfg, i_to_x
     lazy_map(DualizeMap(),i_to_cfg,i_to_x)
