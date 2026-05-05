@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.16] - 2026-04-29
+
+### Fixed
+
+- `get_facet_owners(::DistributeDiscreteModel)` now chooses the owner with maximum gid. Since PR[#205](https://github.com/gridap/GridapDistributed.jl/pull/205).
+
 ## [0.4.15] - 2026-03-23
 
 ### Fixed
