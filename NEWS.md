@@ -7,12 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.16] - 2026-04-29
+
+### Fixed
+
+- `get_facet_owners(::DistributeDiscreteModel)` now chooses the owner with maximum gid. Since PR[#205](https://github.com/gridap/GridapDistributed.jl/pull/205).
+
+## [0.4.15] - 2026-03-23
+
+### Fixed
+
+- Fixed `_add_distributed_constraint` in the case where the underlying `FESpace` has multiple (different) reffes. Since PR[#201](https://github.com/gridap/GridapDistributed.jl/pull/201).
+
+## [0.4.14] - 2026-03-20
+
+### Changed 
+
+- Added support for Gridap 0.20.0. Since PR[#200](https://github.com/gridap/GridapDistributed.jl/pull/200).
+
 ## [0.4.13] - 2026-03-16
 
 ### Fixed
+
 - BUG fix in `_generate_sign_flips(...)` private helper function for Nedelec elements. Since PR[#199](https://github.com/gridap/GridapDistributed.jl/pull/199).
 
 ### Added
+
 - An Hcurl projection test case. Since PR[#199](https://github.com/gridap/GridapDistributed.jl/pull/199).
 
 ## [0.4.12] - 2026-03-14
