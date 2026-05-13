@@ -9,6 +9,44 @@ using Test
 
 u((x,y)) = x+y
 
+function gid_generation_tests(distribute,parts)
+  ranks = distribute(LinearIndices((prod(parts),)))
+
+  model = CartesianDiscreteModel(ranks,parts,(0,1,0,1),(8,4))
+  reffe = ReferenceFE(lagrangian,Float64,1)
+  cgids = GridapDistributed.get_cell_gids(model)
+
+  V0 = FESpace(model,reffe)
+  I0 = partition(get_free_dof_ids(V0))
+
+  V1 = FESpace(model,reffe;dirichlet_tags=["tag_1","tag_2","tag_3","tag_4","tag_5","tag_6"])
+  I1 = partition(get_free_dof_ids(V1))
+
+  fgids_1, dgids_1 = GridapDistributed.generate_posneg_gids(
+    cgids,get_cell_dof_ids(V1),map(num_free_dofs,local_views(V1)),map(num_dirichlet_dofs,local_views(V1))
+  )
+
+  # 1 -> free, 2 -> dirichlet
+  lid_to_color = map(local_views(V0),local_views(V1)) do V0, V1
+    lid_to_color = zeros(Int16,num_free_dofs(V0))
+    for (I,J) in zip(get_cell_dof_ids(V0),get_cell_dof_ids(V1))
+      lid_to_color[I] .= map(j -> ifelse(j > 0, 1, 2), J)
+    end
+    return lid_to_color
+  end
+
+  fgids_2, dgids_2 = GridapDistributed.split_gids_by_color(
+    get_free_dof_ids(V0), lid_to_color
+  )
+
+  (fgids_3, dgids_3), _, _ = GridapDistributed.generate_gids_by_color(
+    cgids, get_cell_dof_ids(V0), lid_to_color
+  )
+
+  @test fgids_1 == fgids_2 == fgids_3
+  @test dgids_1 == dgids_2 == dgids_3
+end
+
 function assemble_tests(das,dΩ,dΩass,U,V)
   # Assembly
   dv = get_fe_basis(V)
