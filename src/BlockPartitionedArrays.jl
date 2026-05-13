@@ -215,6 +215,13 @@ function Base.all(f::Function,x::BlockPVector)
   all(map(xi->all(f,xi),blocks(x)))
 end
 
+function LinearAlgebra.axpy!(α,x::BlockPVector,y::BlockPVector)
+  map(blocks(x),blocks(y)) do x,y
+    LinearAlgebra.axpy!(α,x,y)
+  end
+  return y
+end
+
 function LinearAlgebra.rmul!(a::BlockPVector,v::Number)
   map(ai->rmul!(ai,v),blocks(a))
   return a
@@ -369,6 +376,16 @@ function LinearAlgebra.fillstored!(a::BlockPMatrix,v)
     LinearAlgebra.fillstored!(a,v)
   end
   return a
+end
+
+function Algebra.axpy_entries!(
+  α::Number, A::BlockPMatrix, B::BlockPMatrix;
+  check::Bool=true
+)
+  map(blocks(A),blocks(B)) do A, B
+    Algebra.axpy_entries!(α,A,B;check)
+  end
+  return B
 end
 
 # Broadcasting

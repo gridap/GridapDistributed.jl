@@ -207,12 +207,6 @@ function LinearAlgebra.axpy!(α,x::PVector,y::PVector)
   return y
 end
 
-function LinearAlgebra.axpy!(α,x::BlockPVector,y::BlockPVector)
-  map(blocks(x),blocks(y)) do x,y
-    LinearAlgebra.axpy!(α,x,y)
-  end
-  return y
-end
 
 function Algebra.axpy_entries!(
   α::Number, A::PSparseMatrix, B::PSparseMatrix;
@@ -229,15 +223,6 @@ function Algebra.axpy_entries!(
   return B
 end
 
-function Algebra.axpy_entries!(
-  α::Number, A::BlockPMatrix, B::BlockPMatrix;
-  check::Bool=true
-)
-  map(blocks(A),blocks(B)) do A, B
-    Algebra.axpy_entries!(α,A,B;check)
-  end
-  return B
-end
 
 # Array of PArrays -> PArray of Arrays 
 # TODO: I think this is now implemented in PartitionedArrays.jl (check)
