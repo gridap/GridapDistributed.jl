@@ -214,6 +214,18 @@ function Arrays.nz_allocation(a::PVectorCounter{<:Assembled})
   return DistributedAllocation(allocs,a.axes,a.strategy)
 end
 
+function rhs_callback(b::PVectorAllocation{<:Union{LocallyAssembled,SubAssembled}}, rows)
+  b_fespace = PVector(local_views(b), partition(axes(b,1)))
+  locally_repartition(b_fespace, rows)
+end
+
+function rhs_callback(b::PVectorAllocation{<:Assembled}, rows)
+  new_indices = collect_touched_ids(b)
+  values = map(ai -> ai.values, local_views(b))
+  b_fespace = PVector(values, partition(axes(b,1)))
+  locally_repartition(b_fespace, new_indices)
+end
+
 function Algebra.create_from_nz(a::PVector)
   assemble!(a) |> wait
   return a
@@ -226,20 +238,15 @@ function Algebra.create_from_nz(a::PVectorAllocation{<:Assembled,<:AbstractVecto
 end
 
 function Algebra.create_from_nz(a::PVectorAllocation{<:Union{LocallyAssembled,SubAssembled}})
-  rows = remove_ghost(unpermute(axes(a,1)))
-  values = local_views(a)
-  b = rhs_callback(values,rows)
-  return b
+  rows = map(remove_ghost, map(unpermute, partition(axes(a,1))))
+  return rhs_callback(a, rows)
 end
 
 function Algebra.create_from_nz(a::PVectorAllocation{<:Assembled})
   rows = collect_touched_ids(a)
-  values = map(ai -> ai.values, local_views(a))
-  b  = rhs_callback(values,rows)
+  b = rhs_callback(a, rows)
   t2 = assemble!(b)
-  if t2 !== nothing
-    wait(t2)
-  end
+  t2 !== nothing && wait(t2)
   return b
 end
 
@@ -261,12 +268,7 @@ function Algebra.create_from_nz(
   a::PSparseMatrixAllocation{<:LocallyAssembled},
   b::PVectorAllocation{<:LocallyAssembled}
 )
-  function callback(rows)
-    values = local_views(b)
-    b_fespace = PVector(values,partition(axes(b,1)))
-    locally_repartition(b_fespace,rows)
-  end
-  A, B = create_from_nz_locally_assembled(a,callback)
+  A, B = create_from_nz_locally_assembled(a, Base.Fix1(rhs_callback,b))
   return A, B
 end
 
@@ -274,16 +276,7 @@ function Algebra.create_from_nz(
   a::PSparseMatrixAllocation{<:Assembled},
   b::PVectorAllocation{<:Assembled}
 )
-  function callback(rows)
-    new_indices = collect_touched_ids(b)
-    values = map(ai -> ai.values, local_views(b))
-    b_fespace = PVector(values,partition(axes(b,1)))
-    locally_repartition(b_fespace,new_indices)
-  end
-  function async_callback(b)
-    assemble!(b)
-  end
-  A, B = create_from_nz_assembled(a,callback,async_callback)
+  A, B = create_from_nz_assembled(a, Base.Fix1(rhs_callback,b), assemble!)
   return A, B
 end
 
@@ -291,12 +284,7 @@ function Algebra.create_from_nz(
   a::PSparseMatrixAllocation{<:SubAssembled},
   b::PVectorAllocation{<:SubAssembled}
 )
-  function callback(rows)
-    @check PArrays.matching_local_indices(PRange(rows),axes(b,1))
-    values = local_views(b)
-    PVector(values,partition(axes(b,1)))
-  end
-  A, B = create_from_nz_subassembled(a,callback)
+  A, B = create_from_nz_subassembled(a, Base.Fix1(rhs_callback,b))
   return A, B
 end
 
