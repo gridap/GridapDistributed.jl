@@ -64,7 +64,7 @@ function unpermute(indices::LocalIndices)
   rank = part_id(indices)
   own = OwnIndices(nglobal,rank,own_to_global(indices))
   ghost = GhostIndices(nglobal,ghost_to_global(indices),ghost_to_owner(indices))
-  OwnAndGhostIndices(own,ghost,global_to_owner(indices))
+  OwnAndGhostIndices(own,ghost)
 end
 
 """
@@ -98,14 +98,15 @@ function locally_repartition!(w::PVector,v::PVector)
   return w
 end
 
+
 """
     filter_and_replace_ghost(indices,gids)
 
 Replace ghost ids in `indices` with the ghost ids within `gids`.
 
-NOTE: The issue is that `replace_ghost` does not check if all gids are ghosts or whether 
-they are repeated. It also shifts ownership of the ghosts. Its all quite messy and not what we 
-would need. TODO: Make me better. 
+NOTE: The issue is that `replace_ghost` does not check if all gids are ghosts or whether
+they are repeated. It also shifts ownership of the ghosts. Its all quite messy and not what we
+would need. TODO: Make me better.
 """
 function filter_and_replace_ghost(indices,gids)
   owners = find_owner(indices,gids)
