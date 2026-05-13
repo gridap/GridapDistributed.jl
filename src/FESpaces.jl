@@ -474,32 +474,6 @@ end
 
 # Factories
 
-# function FESpaces.FESpace(
-#   model::DistributedDiscreteModel,reffe;split_own_and_ghost=false,constraint=nothing,kwargs...
-# )
-#   spaces = map(local_views(model)) do m
-#     FESpace(m,reffe;kwargs...)
-#   end
-#   gids =  generate_gids(model,spaces)
-#   trian = DistributedTriangulation(map(get_triangulation,spaces),model)
-#   vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
-#   space = DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
-#   return _add_distributed_constraint(space,reffe,constraint)
-# end
-# 
-# function FESpaces.FESpace(
-#   _trian::DistributedTriangulation,reffe;split_own_and_ghost=false,constraint=nothing,kwargs...
-# )
-#   trian = add_ghost_cells(_trian)
-#   spaces = map(local_views(trian)) do t
-#     FESpace(t,reffe;kwargs...)
-#   end
-#   gids = generate_gids(trian,spaces)
-#   vector_type = _find_vector_type(spaces,gids;split_own_and_ghost=split_own_and_ghost)
-#   space = DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
-#   return _add_distributed_constraint(space,reffe,constraint)
-# end
-
 function FESpaces.FESpace(
   model::DistributedDiscreteModel,args...;kwargs...
 )
