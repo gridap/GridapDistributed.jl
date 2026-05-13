@@ -1,7 +1,13 @@
 module GridapDistributedTests
 
-include("sequential/runtests.jl")
+TESTCASE = get(ENV, "TESTCASE", "all")
 
-include("mpi/runtests.jl")
+if startswith(TESTCASE, "seq") || TESTCASE == "all"
+  include("sequential/runtests.jl")
+end
+
+if startswith(TESTCASE, "mpi") || TESTCASE == "all"
+  include("mpi/runtests.jl")
+end
 
 end # module

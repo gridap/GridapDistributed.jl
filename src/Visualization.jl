@@ -10,11 +10,7 @@ function Base.getproperty(x::DistributedVisualizationData, sym::Symbol)
   if sym == :grid
     map(i->i.grid,x.visdata)
   elseif sym == :filebase
-    r=nothing
-    map(x.visdata) do visdata
-      r = visdata.filebase
-    end
-    r
+    getany(map(i->i.filebase,x.visdata))
   elseif sym == :celldata
     map(i->i.celldata,x.visdata)
   elseif sym == :nodaldata

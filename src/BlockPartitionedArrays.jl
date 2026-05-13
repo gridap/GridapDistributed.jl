@@ -94,7 +94,7 @@ function BlockPMatrix{V}(::UndefInitializer,rows::BlockPRange,cols::BlockPRange)
     c = block_cols[I[2]]
     PSparseMatrix{V}(undef,partition(r),partition(c))
   end
-  return BlockPMatrix(vals,rows)
+  return BlockPMatrix(vals,rows,cols)
 end
 
 # AbstractArray API
@@ -329,19 +329,23 @@ end
 
 function LinearAlgebra.mul!(y::BlockPVector,A::BlockPMatrix,x::BlockPVector)
   o = one(eltype(A))
-  mul!(y,A,x,o,o)
+  z = zero(eltype(A))
+  mul!(y,A,x,o,z)
 end
 
 function LinearAlgebra.mul!(y::BlockPVector,A::BlockPMatrix,x::BlockPVector,α::Number,β::Number)
   yb, Ab, xb = blocks(y), blocks(A), blocks(x)
-  z = zero(eltype(y))
   o = one(eltype(A))
+  z = zero(eltype(y))
   for i in 1:blocksize(A,1)
-    fill!(yb[i],z)
+    if iszero(β)
+      fill!(yb[i],z)
+    else
+      rmul!(yb[i],β)
+    end
     for j in 1:blocksize(A,2)
       mul!(yb[i],Ab[i,j],xb[j],α,o)
     end
-    rmul!(yb[i],β)
   end
   return y
 end

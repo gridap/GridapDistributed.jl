@@ -2,5 +2,5 @@
 
 ```@autodocs
 Modules = [GridapDistributed]
-Pages   = ["Adaptivity.jl"]
+Pages   = ["Adaptivity.jl","Redistribution.jl"]
 ```
