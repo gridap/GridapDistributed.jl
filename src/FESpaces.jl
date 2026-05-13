@@ -166,7 +166,7 @@ end
 
 Given a set of cell global ids, a distributed array of local tables mapping cells to local dof ids,
 and a distributed array with the number of local dofs in each partition, this function 
-generates the global dof ids and returns them as a `PRange` of `LocalIndices`.
+generates the global dof ids and returns them as a `PRange` of `PermutedLocalIndices`.
 
 Ignores negative local dof ids (usually used for Dirichlet dofs).
 """
@@ -251,8 +251,9 @@ function generate_gids(
   cell_wise_to_dof_wise!(ldof_to_gdof,cell_to_gdofs,cell_to_ldofs,ghost_to_local(cell_range))
 
   # Setup DoFs LocalIndices
-  ngdofs = reduction(+,nodofs,destination=:all,init=zero(eltype(nodofs)))
-  local_indices = map(LocalIndices,ngdofs,ranks,ldof_to_gdof,ldof_to_owner)
+  local_indices = permuted_variable_partition(
+    nodofs,ldof_to_gdof,ldof_to_owner;start=first_gdof
+  )
 
   return PRange(local_indices)
 end
@@ -368,10 +369,8 @@ function generate_posneg_gids(
   cell_wise_to_posneg_wise!(lpos_to_gpos,lneg_to_gneg,cell_to_gposneg,cell_to_lposneg,ghost_to_local(cell_range))
 
   # Setup DoFs LocalIndices
-  ngpos = reduction(+,nopos,destination=:all,init=0)
-  ngneg = reduction(+,noneg,destination=:all,init=0)
-  local_indices_pos = map(LocalIndices,ngpos,ranks,lpos_to_gpos,lpos_to_owner)
-  local_indices_neg = map(LocalIndices,ngneg,ranks,lneg_to_gneg,lneg_to_owner)
+  local_indices_pos = permuted_variable_partition(nopos,lpos_to_gpos,lpos_to_owner;start=first_gpos)
+  local_indices_neg = permuted_variable_partition(noneg,lneg_to_gneg,lneg_to_owner;start=first_gneg)
 
   return PRange(local_indices_pos), PRange(local_indices_neg)
 end
@@ -382,7 +381,7 @@ end
 Similar to `generate_gids`, but uses a global partition given by `lid_to_color` to generate
 a different set of global ids per color. Returns:
 
-- a tuple with a `PRange` of `LocalIndices` per color.
+- a tuple with a `PRange` of `PermutedLocalIndices` per color.
 - a mapping `lid_to_clid` that maps local ids to local color ids
 - a mapping `color_to_clid_to_lid` that maps, for each color, local color ids to local ids.
 """
@@ -467,11 +466,6 @@ function generate_gids_by_color(
   )
   t2 = fetch_vector_ghost_values!(cell_to_gids,cache_fetch)
 
-  # Find the global range of owned dofs
-  color_to_ngids = map(1:ncolors) do c
-    reduction(+,map(Base.Fix2(getindex,c), color_to_noids); destination=:all, init=0)
-  end |> to_parray_of_arrays
-
   # Finish exchanging the gids.
   wait(t2)
   map(
@@ -495,25 +489,16 @@ function generate_gids_by_color(
   fetch_vector_ghost_values!(cell_to_gids,cache_fetch) |> wait
   cell_wise_to_dof_wise!(lid_to_gid,cell_to_gids,cell_to_lids,ghost_to_local(cell_range))
 
-  # Setup DoFs LocalIndices per color
-  color_to_indices = map(
-    partition(cell_range), lid_to_color, lid_to_gid, lid_to_owner, color_to_clid_to_lid, color_to_ngids
-  ) do indices, lid_to_color, lid_to_gid, lid_to_owner, color_to_clid_to_lid, color_to_ngids
-    rank = part_id(indices)
+  # Setup DoFs indices per color
+  color_to_indices = ntuple(ncolors) do c
+    c_noids  = map(Base.Fix2(getindex,c), color_to_noids)
+    c_fgid   = color_to_fgid[c]
+    c_gids   = map(getindex, lid_to_gid,   color_to_clid_to_lid[c])
+    c_owners = map(getindex, lid_to_owner, color_to_clid_to_lid[c])
+    PRange(permuted_variable_partition(c_noids, c_gids, c_owners; start=c_fgid))
+  end
 
-    color_to_indices = ()
-    for c in 1:ncolors
-      cids = LocalIndices(
-        color_to_ngids[c], rank, 
-        lid_to_gid[color_to_clid_to_lid[c]], 
-        lid_to_owner[color_to_clid_to_lid[c]]
-      )
-      color_to_indices = (color_to_indices..., cids)
-    end
-    return color_to_indices
-  end |> tuple_of_arrays
-
-  return map(PRange,color_to_indices), lid_to_clid, color_to_clid_to_lid
+  return color_to_indices, lid_to_clid, color_to_clid_to_lid
 end
 
 """
@@ -521,7 +506,7 @@ end
 
 Given a set of global ids and a mapping from local ids to colors, this function splits
 the global ids into different sets of global ids per color. Returns a tuple with a `PRange`
-of `LocalIndices` per color.
+of `PermutedLocalIndices` per color.
 """
 function split_gids_by_color(
   gids::PRange, lid_to_color::AbstractArray, 
@@ -543,9 +528,6 @@ function split_gids_by_color(
   color_to_fgid = map(1:ncolors) do c
     scan(+,map(Base.Fix2(getindex,c), color_to_noids); type=:exclusive, init=1)
   end |> to_parray_of_arrays
-  color_to_ngids = map(1:ncolors) do c
-    reduction(+,map(Base.Fix2(getindex,c), color_to_noids); destination=:all, init=0)
-  end |> to_parray_of_arrays
 
   lid_to_cgid = map(partition(gids), lid_to_color, color_to_fgid) do ids, lid_to_color, color_to_fgid
     rank = part_id(ids)
@@ -561,31 +543,29 @@ function split_gids_by_color(
   end
   consistent!(PVector(lid_to_cgid,partition(gids))) |> wait
 
-  color_to_gids = map(
-    partition(gids), lid_to_color, lid_to_cgid, color_to_nlids, color_to_ngids
-  ) do ids, lid_to_color, lid_to_cgid, color_to_nlids, color_to_ngids
-    color_to_lid_to_gid = [zeros(Int, n) for n in color_to_nlids]
-    color_to_lid_to_owner = [zeros(Int32, n) for n in color_to_nlids]
+  # Pack per-color gid/owner arrays in a single pass over local dofs
+  all_c_gids, all_c_owners = map(
+    lid_to_color, lid_to_cgid, partition(gids), color_to_nlids
+  ) do lid_to_color, lid_to_cgid, ids, color_to_nlids
+    c_gids   = [zeros(Int,   n) for n in color_to_nlids]
+    c_owners = [zeros(Int32, n) for n in color_to_nlids]
     offsets = zeros(Int, ncolors)
     for (color, cgid, owner) in zip(lid_to_color, lid_to_cgid, local_to_owner(ids))
       offsets[color] += 1
       lid = offsets[color]
-      color_to_lid_to_gid[color][lid] = cgid
-      color_to_lid_to_owner[color][lid] = owner
+      c_gids[color][lid]   = cgid
+      c_owners[color][lid] = owner
     end
-
-    color_to_ids = ()
-    for color in 1:ncolors
-      cids = LocalIndices(
-        color_to_ngids[color], part_id(ids), 
-        color_to_lid_to_gid[color], color_to_lid_to_owner[color]
-      )
-      color_to_ids = (color_to_ids..., cids)
-    end
-    return color_to_ids
+    return c_gids, c_owners
   end |> tuple_of_arrays
 
-  return map(PRange,color_to_gids)
+  return ntuple(ncolors) do c
+    c_noids  = map(Base.Fix2(getindex,c), color_to_noids)
+    c_fgid   = color_to_fgid[c]
+    c_gids   = map(Base.Fix2(getindex,c), all_c_gids)
+    c_owners = map(Base.Fix2(getindex,c), all_c_owners)
+    PRange(permuted_variable_partition(c_noids, c_gids, c_owners; start=c_fgid))
+  end
 end
 
 # FEFunction related

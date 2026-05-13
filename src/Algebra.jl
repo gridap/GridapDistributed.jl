@@ -68,11 +68,9 @@ end
 # change_ghost
 
 function change_ghost(a::PVector{T},ids::PRange;is_consistent=false,make_consistent=false) where T
-  if (a.index_partition === partition(ids))
-    return a
-  end
-  a_new = change_ghost(T,a,ids)
-  if make_consistent && !is_consistent
+  same_partition = (a.index_partition === partition(ids))
+  a_new = same_partition ? a : change_ghost(T,a,ids)
+  if make_consistent && (!same_partition || !is_consistent)
     consistent!(a_new) |> wait
   end
   return a_new
