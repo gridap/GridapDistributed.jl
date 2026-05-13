@@ -297,8 +297,8 @@ function get_cartesian_redistribute_glue(
       # If I'm in the old subprocessor,
       #   - I send all owned old cells that I don't own in the new model.
       #   - I receive all owned new cells that I don't own in the old model.
-      old2new = replace(find_local_to_local_map(old_ids,new_ids), -1 => 0)
-      new2old = replace(find_local_to_local_map(new_ids,old_ids), -1 => 0)
+      old2new = replace(local_to_local_map(old_ids,new_ids), -1 => 0)
+      new2old = replace(local_to_local_map(new_ids,old_ids), -1 => 0)
 
       new_l2o = local_to_own(new_ids)
       old_l2o = local_to_own(old_ids)

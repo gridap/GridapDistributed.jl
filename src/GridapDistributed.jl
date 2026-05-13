@@ -34,6 +34,7 @@ import Gridap.Fields: grad2curl
 import Gridap.CellData: Interpolable
 
 export LocallyAssembled
+export SubAssembled
 export Assembled
 
 export get_cell_gids
@@ -49,7 +50,6 @@ include("PArraysExtras.jl")
 include("BlockPartitionedArrays.jl")
 
 include("GridapExtras.jl")
-include("PArraysExtras.jl")
 
 include("Algebra.jl")
 
