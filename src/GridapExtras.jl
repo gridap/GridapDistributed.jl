@@ -1,13 +1,4 @@
 
-# Extensions to Gridap/Arrays/Tables.jl
-
-function generate_ptrs(vv::AbstractArray{<:AbstractArray{T}}) where T
-  ptrs = Vector{Int32}(undef,length(vv)+1)
-  Arrays._generate_data_and_ptrs_fill_ptrs!(ptrs,vv)
-  Arrays.length_to_ptrs!(ptrs)
-  return ptrs
-end
-
 # New type of Vector allocation
 
 """

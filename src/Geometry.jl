@@ -957,12 +957,12 @@ function generate_cell_gids(dtrian::DistributedTriangulation)
   generate_cell_gids(dmodel,dtrian)
 end
 
-function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
-                            dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
-
+function generate_cell_gids(
+  dmodel::DistributedDiscreteModel{Dm},
+  dtrian::DistributedTriangulation{Dt}
+) where {Dm,Dt}
   mgids = get_face_gids(dmodel,Dt)
-  covers_all_faces = _covers_all_faces(dmodel,dtrian)
-  if (covers_all_faces)
+  if _covers_all_faces(dmodel,dtrian)
     tgids = mgids
   else
     tcell_to_mcell = map(local_views(dtrian)) do trian
@@ -973,45 +973,4 @@ function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
     tgids = restrict_gids(mgids,tcell_to_mcell)
   end
   return tgids
-end
-
-function restrict_gids(gids::PRange, new_to_old_lid::AbstractArray)
-
-  n_own = map(partition(gids), new_to_old_lid) do ids, n2o_lid
-    rank = part_id(ids)
-    return count(isequal(rank), view(local_to_owner(ids), n2o_lid)) 
-  end
-
-  # Assign global ids to owned lids
-  first_gid = scan(+,n_own,type=:exclusive,init=one(eltype(n_own)))
-  
-  old_lid_to_new_gid = map(first_gid,new_to_old_lid,partition(gids)) do first_gid, n2o_lid, ids
-    old_lid_to_new_gid = zeros(Int,local_length(ids))
-    old_lid_to_owner = local_to_owner(ids)
-    rank = part_id(ids)
-    gid = first_gid
-    for old in n2o_lid
-      if old_lid_to_owner[old] == rank
-        old_lid_to_new_gid[old] = gid
-        gid += 1
-      end
-    end
-    return old_lid_to_new_gid
-  end
-
-  consistent!(PVector(old_lid_to_new_gid,partition(gids))) |> wait
-
-  # Prepare new partition
-  n_gids = reduction(+,n_own,destination=:all,init=zero(eltype(n_own)))
-
-  new_indices = map(
-    n_gids, old_lid_to_new_gid, new_to_old_lid, partition(gids)
-  ) do n_gids, old_lid_to_new_gid, new_to_old_lid, ids
-    lid_to_gid = old_lid_to_new_gid[new_to_old_lid]
-    lid_to_owner  = local_to_owner(ids)[new_to_old_lid]
-    return LocalIndices(n_gids,part_id(ids),lid_to_gid,lid_to_owner)
-  end
-  _find_neighbours!(new_indices, partition(gids))
-
-  return PRange(new_indices)
 end

@@ -334,7 +334,7 @@ function generate_multi_field_gids(
     push!(f_p_flid_lid,p_flid_lid)
   end
   f_frange = map(get_free_dof_ids,f_dspace)
-  gids = generate_multi_field_gids(f_p_flid_lid,f_frange)
+  gids = vcat_gids(f_p_flid_lid,f_frange)
   return gids
 end
 
@@ -349,80 +349,6 @@ function generate_multi_field_gids(
     get_free_dof_ids(space)
   end
   return BlockPRange(block_gids)
-end
-
-function generate_multi_field_gids(
-  f_p_flid_lid::AbstractVector{<:AbstractArray{<:AbstractVector}},
-  f_frange::AbstractVector{<:PRange})
-
-  f_p_fiset = map(local_views,f_frange)
-
-  v(x...) = collect(x)
-  p_f_fiset = map(v,f_p_fiset...)
-  p_f_flid_lid = map(v,f_p_flid_lid...)
-
-  # Find the first gid of the multifield space in each part
-  p_noids = map(f_fiset->sum(map(own_length,f_fiset)),p_f_fiset)
-  p_firstgid = scan(+,p_noids,type=:exclusive,init=one(eltype(p_noids)))
-
-  # Distributed gids to owned dofs
-  p_lid_gid, p_lid_part = map(p_f_flid_lid, p_f_fiset, p_firstgid) do f_flid_lid, f_fiset, firstgid
-    nlids    = sum(length, f_flid_lid)
-    lid_gid  = zeros(Int,   nlids)
-    lid_part = zeros(Int32, nlids)
-    gid = firstgid
-    for (flid_lid, fiset) in zip(f_flid_lid, f_fiset)
-      part = part_id(fiset)
-      for flid in own_to_local(fiset)
-        lid_gid[flid_lid[flid]]  = gid
-        lid_part[flid_lid[flid]] = part
-        gid += 1
-      end
-    end
-    return lid_gid, lid_part
-  end |> tuple_of_arrays
-
-  # Now we need to propagate to ghost. To this end we use the already available
-  # communicators in each of the single fields.
-  # We cannot use the cell wise communication since each field can be defined on an independent mesh.
-  f_aux_gids = map(frange->PVector{Vector{eltype(eltype(p_lid_gid))}}(undef,partition(frange)),f_frange)
-  f_aux_part = map(frange->PVector{Vector{eltype(eltype(p_lid_part))}}(undef,partition(frange)),f_frange)
-  propagate_to_ghost_multifield!(p_lid_gid,f_aux_gids,f_p_flid_lid,f_p_fiset)
-  propagate_to_ghost_multifield!(p_lid_part,f_aux_part,f_p_flid_lid,f_p_fiset)
-
-  p_iset = map(p_lid_gid,p_lid_part,p_noids,p_firstgid) do lid_to_gid, lid_to_owner, nodofs, firstgid
-    permuted_variable_partition(nodofs,lid_to_gid,lid_to_owner;start=firstgid)
-  end
-
-  f_p_parts_snd, f_p_parts_rcv = map(assembly_neighbors ∘ partition, f_frange) |> tuple_of_arrays
-  merge_neigs(f_neigs...) = sort(unique(vcat(f_neigs...)))
-  p_neigs_snd = map(merge_neigs,f_p_parts_snd...)
-  p_neigs_rcv = map(merge_neigs,f_p_parts_rcv...)
-
-  exchange_graph = ExchangeGraph(p_neigs_snd,p_neigs_rcv)
-  assembly_neighbors(p_iset; neighbors = exchange_graph)
-
-  return PRange(p_iset)
-end
-
-function propagate_to_ghost_multifield!(
-  p_lid_gid, f_gids, f_p_flid_lid, f_p_fiset
-)
-  for (gids, p_flid_lid, p_fiset) in zip(f_gids, f_p_flid_lid, f_p_fiset)
-    p_flid_gid = local_views(gids)
-    map(p_flid_gid, p_flid_lid, p_lid_gid, p_fiset) do flid_gid, flid_lid, lid_gid, fiset
-      for flid in own_to_local(fiset)
-        flid_gid[flid] = lid_gid[flid_lid[flid]]
-      end
-    end
-    cache = fetch_vector_ghost_values_cache(partition(gids), p_fiset)
-    fetch_vector_ghost_values!(partition(gids), cache) |> wait
-    map(p_flid_gid, p_flid_lid, p_lid_gid, p_fiset) do flid_gid, flid_lid, lid_gid, fiset
-      for flid in ghost_to_local(fiset)
-        lid_gid[flid_lid[flid]] = flid_gid[flid]
-      end
-    end
-  end
 end
 
 # BlockSparseMatrixAssemblers

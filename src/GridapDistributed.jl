@@ -55,6 +55,8 @@ include("Algebra.jl")
 
 include("Assembly.jl")
 
+include("Partitions.jl")
+
 include("Geometry.jl")
 
 include("CellData.jl")
