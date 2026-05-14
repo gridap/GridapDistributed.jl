@@ -234,7 +234,7 @@ end
 function Algebra.create_from_nz(a::PVectorAllocation{<:Assembled,<:AbstractVector})
   # This point MUST NEVER be reached. If reached there is an inconsistency
   # in the parallel code in charge of vector assembly
-  @assert false
+  @unreachable
 end
 
 function Algebra.create_from_nz(a::PVectorAllocation{<:Union{LocallyAssembled,SubAssembled}})
@@ -246,7 +246,7 @@ function Algebra.create_from_nz(a::PVectorAllocation{<:Assembled})
   rows = collect_touched_ids(a)
   b = rhs_callback(a, rows)
   t2 = assemble!(b)
-  t2 !== nothing && wait(t2)
+  !isnothing(t2) && wait(t2)
   return b
 end
 
@@ -304,7 +304,7 @@ function create_from_nz_locally_assembled(
   map(map_local_to_global!,I,test_ids)
   map(map_local_to_global!,J,trial_ids)
 
-  cols = filter_and_replace_ghost(map(unpermute,trial_ids),J)
+  cols = map(unpermute,trial_ids)
 
   map(map_global_to_local!,I,rows)
   map(map_global_to_local!,J,cols)
@@ -332,7 +332,7 @@ function create_from_nz_assembled(
 
   # Overlapped COO communication and vector assembly
   rows = filter_and_replace_ghost(map(unpermute,test_ids),I)
-  t = PartitionedArrays.assemble_coo!(I,J,V,rows)
+  t = PArrays.assemble_coo!(I,J,V,rows)
   b = callback(rows)
   wait(t)
 
@@ -366,4 +366,86 @@ function create_from_nz_subassembled(
   A = PSparseMatrix(values,rows,cols,assembled)
 
   return A, b
+end
+
+# Block matrix assembly (Assembled strategy)
+#
+# Gridap's generic create_from_nz(a::ArrayBlock) calls create_from_nz per block
+# independently, producing different row/col PRanges per block → mortar check fails.
+# These dispatches intercept the block case and compute SHARED PRanges by unioning
+# the nonzero indices across all blocks in each block-row and block-col.
+
+function rhs_callback(b::VectorBlock{<:PVectorAllocation{<:Assembled}}, rows_da)
+  b_vecs = [rhs_callback(b.array[i], rows_da[i]) for i in 1:length(rows_da)]
+  mortar(b_vecs)
+end
+
+function Algebra.create_from_nz(a::MatrixBlock{<:PSparseMatrixAllocation{<:Assembled}})
+  A, = create_from_nz_block_assembled(a)
+  return A
+end
+
+function Algebra.create_from_nz(
+  a::MatrixBlock{<:PSparseMatrixAllocation{<:Assembled}},
+  b::VectorBlock{<:PVectorAllocation{<:Assembled}}
+)
+  callback = Base.Fix1(rhs_callback,b)
+  async_callback = assemble!
+  A, B = create_from_nz_block_assembled(a, callback, async_callback)
+  return A, B
+end
+
+function create_from_nz_block_assembled(
+  a              :: MatrixBlock{<:PSparseMatrixAllocation{<:Assembled}},
+  callback       :: Function = rows_da -> nothing,
+  async_callback :: Function = b_vecs  -> [empty_async_task]
+)
+  NBr, NBc  = size(a.array)
+  block_ids = CartesianIndices(a.array)
+
+  I, J, V = map(get_allocations,a.array) |> tuple_of_arrays
+
+  test_ids  = [partition(axes(a.array[i,i],1)) for i in 1:NBr]
+  trial_ids = [partition(axes(a.array[j,j],2)) for j in 1:NBc]
+
+  for i in 1:NBr, j in 1:NBc
+    map(map_local_to_global!,I[i,j],test_ids[i])
+    map(map_local_to_global!,J[i,j],trial_ids[j])
+  end
+
+  # Shared row partition per block-row: union I[i,:] across all columns
+  rows_da = [filter_and_replace_ghost(I[i,:],test_ids[i]) for i in 1:NBr]
+
+  # COO communication overlapped with callback (e.g. RHS local repartition)
+  ts = [
+    PArrays.assemble_coo!(I[i,j],J[i,j],V[i,j],rows_da[i]) for i in 1:NBr, j in 1:NBc
+  ]
+  b = callback(rows_da)
+  foreach(wait,ts)
+
+  # Kick off async RHS communication, overlapped with column partition computation
+  t2s = async_callback(b)
+
+  # Shared col partition per block-col: union J[:,j] across all rows
+  cols_da = [filter_and_replace_ghost(J[:,j],trial_ids[j]) for j in 1:NBc]
+
+  foreach(wait,t2s)
+
+  for i in 1:NBr, j in 1:NBc
+    map(map_global_to_local!,I[i,j],rows_da[i])
+    map(map_global_to_local!,J[i,j],cols_da[j])
+  end
+
+  # Build each block's PSparseMatrix using the shared row/col partitions.
+  # All blocks in block-row i store the same rows_da[i] object, so
+  # partition(axes(A,1)) === rows_da[i] for all j → mortar === check passes.
+  assembled = true
+  block_mats = map(block_ids) do idx
+    i,j = idx[1],idx[2]
+    a_sys  = change_axes(a.array[idx],(PRange(rows_da[i]),PRange(cols_da[j])))
+    values = map(create_from_nz,local_views(a_sys))
+    PSparseMatrix(values,rows_da[i],cols_da[j],assembled)
+  end
+
+  return mortar(block_mats), b
 end

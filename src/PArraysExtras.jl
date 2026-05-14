@@ -117,6 +117,15 @@ function filter_and_replace_ghost(indices,gids)
   return new_indices
 end
 
+# Block variant: union a slice of distributed gid arrays (e.g. I[i,:] or J[:,j])
+# before calling the standard filter_and_replace_ghost.
+function filter_and_replace_ghost(gids_block::Vector{<:AbstractArray}, ids)
+  union_gids = map(to_parray_of_arrays(gids_block)) do chunks
+    vcat(chunks...)
+  end
+  filter_and_replace_ghost(map(unpermute,ids), union_gids)
+end
+
 # Same as PartitionedArrays.filter_ghost, but we do not exclude ghost indices that 
 # belong to `indices`. This could eventually be a flag in the original function.
 function _filter_ghost(indices,gids,owners)
