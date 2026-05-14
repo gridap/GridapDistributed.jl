@@ -154,11 +154,16 @@ function _filter_ghost(indices,gids,owners)
   return new_ghost_to_global, new_ghost_to_owner
 end
 
+# function PArrays.remove_ghost(indices::PermutedLocalIndices)
+#   n_global = global_length(indices) 
+#   own = OwnIndices(n_global,part_id(indices),own_to_global(indices))
+#   ghost = GhostIndices(n_global,Int[],Int32[])
+#   OwnAndGhostIndices(own,ghost)
+# end
+
 function PArrays.remove_ghost(indices::PermutedLocalIndices)
-  n_global = global_length(indices) 
-  own = OwnIndices(n_global,part_id(indices),own_to_global(indices))
-  ghost = GhostIndices(n_global,Int[],Int32[])
-  OwnAndGhostIndices(own,ghost)
+  @check indices.perm[own_to_local(indices)] == 1:own_length(indices)
+  return remove_ghost(unpermute(indices))
 end
 
 # This function computes a mapping among the local identifiers of a and b

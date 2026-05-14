@@ -361,7 +361,7 @@ function FESpaces.SparseMatrixAssembler(
   local_vec_type,
   trial::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
   test::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
-  par_strategy=Assembled()
+  par_strategy::FESpaces.AssemblyStrategy=Assembled()
 )
   NBr, SBr, Pr = MultiField.get_block_parameters(MultiFieldStyle(test))
   NBc, SBc, Pc = MultiField.get_block_parameters(MultiFieldStyle(trial))
