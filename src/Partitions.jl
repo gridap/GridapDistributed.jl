@@ -597,9 +597,7 @@ function vcat_gids(
   _vcat_propagate_ghost!(p_lid_part,f_aux_part,f_p_flid_lid,f_p_fiset)
 
   # Build permuted partition
-  p_iset = map(p_lid_gid,p_lid_part,p_noids,p_firstgid) do lid_to_gid, lid_to_owner, nodofs, firstgid
-    permuted_variable_partition(nodofs,lid_to_gid,lid_to_owner;start=firstgid)
-  end
+  p_iset = permuted_variable_partition(p_noids,p_lid_gid,p_lid_part;start=p_firstgid)
 
   # Merge assembly neighbors from all fields
   f_p_parts_snd, f_p_parts_rcv = map(assembly_neighbors ∘ partition, f_frange) |> tuple_of_arrays
