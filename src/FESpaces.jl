@@ -408,10 +408,10 @@ function FESpaces.TrialFESpace(fun,f::DistributedSingleFieldFESpace)
 end
 
 function FESpaces.TrialFESpace!(f::DistributedSingleFieldFESpace,fun)
-  spaces = map(f.spaces) do s
+  map(f.spaces) do s
     TrialFESpace!(s,fun)
   end
-  DistributedSingleFieldFESpace(spaces,f.gids,f.trian,f.vector_type,f.metadata)
+  return f
 end
 
 function FESpaces.TrialFESpace(f::DistributedSingleFieldFESpace,cf::DistributedCellField)
