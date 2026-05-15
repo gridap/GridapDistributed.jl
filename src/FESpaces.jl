@@ -572,10 +572,26 @@ end
 
 # Constant FESpace
 
+# Creates a partition with 1 global DOF, owned by `owner`, ghost on all other ranks.
+function constant_partition(ranks, owner)
+  indices = map(ranks) do rank
+    if rank == owner
+      own   = OwnIndices(1, rank, Int[1])
+      ghost = GhostIndices(1, Int[], Int32[])
+    else
+      own   = OwnIndices(1, rank, Int[])
+      ghost = GhostIndices(1, Int[1], Int32[owner])
+    end
+    global_to_owner = [rank]
+    return OwnAndGhostIndices(own, ghost, global_to_owner)
+  end
+  return indices
+end
+
 """
     ConstantFESpace(
-      model::DistributedDiscreteModel; 
-      constraint_type=:global, 
+      model::DistributedDiscreteModel;
+      constraint_type=:global,
       kwargs...
     )
 
@@ -604,16 +620,12 @@ function FESpaces.ConstantFESpace(
 
   # Single dof, owned by processor 1 (ghost for all other processors)
   nranks = length(spaces)
-  cell_gids = get_cell_gids(model)
-  indices = map(partition(cell_gids)) do cell_indices
-    me = part_id(cell_indices)
-    if constraint_type == :global
-      LocalIndices(1,me,Int[1],Int32[1])
-    else
-      LocalIndices(nranks,me,Int[me],Int32[me])
-    end
+  ranks = linear_indices(partition(get_cell_gids(model)))
+  gids = if constraint_type == :global
+    PRange(constant_partition(ranks, 1))
+  else
+    PRange(uniform_partition(ranks, nranks))
   end
-  gids = PRange(indices)
 
   trian = DistributedTriangulation(map(get_triangulation,spaces),model)
   vector_type = _find_vector_type(spaces,gids)
