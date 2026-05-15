@@ -760,7 +760,7 @@ function Adaptivity.coarsen(fmodel::DistributedDiscreteModel, ptopo::Distributed
 
   # First, some preliminary checks
   fgids = partition(get_cell_gids(fmodel))
-  map(local_views(ptopo), fgids) do ptopo, fids
+  foreach(local_views(ptopo), fgids) do ptopo, fids
     patch_cells = Geometry.get_patch_cells(ptopo)
     lcell_to_ocell = local_to_own(fids)
     ocell_to_lcell = own_to_local(fids)

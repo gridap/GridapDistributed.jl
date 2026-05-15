@@ -502,9 +502,11 @@ function DiracDelta{0}(model::DistributedDiscreteModel;tags)
   degree = 0
   DiracDelta{0}(model,degree;tags=tags)
 end
+
 function (d::DistributedDiracDelta)(f)
- evaluate(d,f)
+  evaluate(d,f)
 end
+
 function Gridap.Arrays.evaluate!(cache,d::DistributedDiracDelta,f)
- ∫(f)*d.dΓ
+  ∫(f)*d.dΓ
 end

@@ -179,7 +179,7 @@ function Base.copyto!(y::BlockPMatrix,x::BlockPMatrix)
 end
 
 function Base.fill!(a::BlockPVector,v)
-  map(blocks(a)) do a
+  foreach(blocks(a)) do a
     fill!(a,v)
   end
   return a
@@ -216,14 +216,14 @@ function Base.all(f::Function,x::BlockPVector)
 end
 
 function LinearAlgebra.axpy!(α,x::BlockPVector,y::BlockPVector)
-  map(blocks(x),blocks(y)) do x,y
+  foreach(blocks(x),blocks(y)) do x,y
     LinearAlgebra.axpy!(α,x,y)
   end
   return y
 end
 
 function LinearAlgebra.rmul!(a::BlockPVector,v::Number)
-  map(ai->rmul!(ai,v),blocks(a))
+  foreach(ai->rmul!(ai,v),blocks(a))
   return a
 end
 
@@ -372,7 +372,7 @@ function LinearAlgebra.norm(v::BlockPVector,p::Real=2)
 end
 
 function LinearAlgebra.fillstored!(a::BlockPMatrix,v)
-  map(blocks(a)) do a
+  foreach(blocks(a)) do a
     LinearAlgebra.fillstored!(a,v)
   end
   return a
@@ -382,7 +382,7 @@ function Algebra.axpy_entries!(
   α::Number, A::BlockPMatrix, B::BlockPMatrix;
   check::Bool=true
 )
-  map(blocks(A),blocks(B)) do A, B
+  foreach(blocks(A),blocks(B)) do A, B
     Algebra.axpy_entries!(α,A,B;check)
   end
   return B
@@ -440,6 +440,6 @@ function Base.materialize(b::BlockPBroadcasted)
 end
 
 function Base.materialize!(a::BlockPArray,b::BlockPBroadcasted)
-  map(Base.materialize!,blocks(a),blocks(b))
+  foreach(Base.materialize!,blocks(a),blocks(b))
   return a
 end

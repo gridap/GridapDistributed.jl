@@ -122,7 +122,7 @@ function _setup_consistent_faces!(topo::DistributedGridTopology, dimfrom::Intege
     JaggedArray(lfrom_to_lto.data, lfrom_to_lto.ptrs)
   end
   wait(consistent!(PVector(lfrom_to_gto, gids_from)))
-  map(lfrom_to_gto, gids_to) do lfrom_to_gto, gids_to
+  foreach(lfrom_to_gto, gids_to) do lfrom_to_gto, gids_to
     to_local!(lfrom_to_gto.data, gids_to)
   end
   return nothing

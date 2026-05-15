@@ -215,7 +215,7 @@ const empty_async_task = PartitionedArrays.FakeTask(() -> nothing)
 
 function LinearAlgebra.axpy!(α,x::PVector,y::PVector)
   @check matching_local_indices(partition(axes(x,1)),partition(axes(y,1)))
-  map(partition(x),partition(y)) do x,y
+  foreach(partition(x),partition(y)) do x,y
     LinearAlgebra.axpy!(α,x,y)
   end
   consistent!(y) |> wait
@@ -232,7 +232,7 @@ function Algebra.axpy_entries!(
 # same (i.e can't use ===). Checking the index partitions would then be costly...
   @assert reduce(&,map(PArrays.matching_local_indices,partition(axes(A,1)),partition(axes(B,1))))
   @assert reduce(&,map(PArrays.matching_local_indices,partition(axes(A,2)),partition(axes(B,2))))
-  map(partition(A),partition(B)) do A, B
+  foreach(partition(A),partition(B)) do A, B
     Algebra.axpy_entries!(α,A,B;check)
   end
   return B
@@ -262,31 +262,13 @@ end
 # To local/to global for blocks 
 
 function to_local_indices!(I,ids::PRange;kwargs...)
-  map(to_local!,I,partition(ids))
+  foreach(to_local!,I,partition(ids))
+  return I
 end
 
 function to_global_indices!(I,ids::PRange;kwargs...)
-  map(to_global!,I,partition(ids))
-end
-for f in [:to_local_indices!, :to_global_indices!, :get_gid_owners]
-  @eval begin
-    function $f(I::Vector,ids::AbstractVector{<:PRange};kwargs...)
-      map($f,I,ids)
-    end
-
-    function $f(I::Matrix,ids::AbstractVector{<:PRange};ax=:rows)
-      @check ax ∈ [:rows,:cols]
-      block_ids = CartesianIndices(I)
-      map(block_ids) do id
-        i = id[1]; j = id[2];
-        if ax == :rows
-          $f(I[i,j],ids[i])
-        else
-          $f(I[i,j],ids[j])
-        end
-      end
-    end
-  end
+  foreach(to_global!,I,partition(ids))
+  return I
 end
 
 # This type is required because MPIArray from PArrays 

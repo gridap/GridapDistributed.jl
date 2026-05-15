@@ -301,13 +301,13 @@ function create_from_nz_locally_assembled(
   rows = map(remove_ghost,map(unpermute,test_ids))
   b = callback(rows)
 
-  map(map_local_to_global!,I,test_ids)
-  map(map_local_to_global!,J,trial_ids)
+  foreach(map_local_to_global!,I,test_ids)
+  foreach(map_local_to_global!,J,trial_ids)
 
   cols = map(unpermute,trial_ids)
 
-  map(map_global_to_local!,I,rows)
-  map(map_global_to_local!,J,cols)
+  foreach(map_global_to_local!,I,rows)
+  foreach(map_global_to_local!,J,cols)
 
   assembled = true
   a_sys = change_axes(a,(PRange(rows),PRange(cols)))
@@ -327,8 +327,8 @@ function create_from_nz_assembled(
   trial_ids = partition(axes(a,2))
 
   # convert I and J to global dof ids
-  map(map_local_to_global!,I,test_ids)
-  map(map_local_to_global!,J,trial_ids)
+  foreach(map_local_to_global!,I,test_ids)
+  foreach(map_local_to_global!,J,trial_ids)
 
   # Overlapped COO communication and vector assembly
   rows = filter_and_replace_ghost(map(unpermute,test_ids),I)
@@ -340,8 +340,8 @@ function create_from_nz_assembled(
   t2 = async_callback(b)
   cols = filter_and_replace_ghost(map(unpermute,trial_ids),J)
 
-  map(map_global_to_local!,I,rows)
-  map(map_global_to_local!,J,cols)
+  foreach(map_global_to_local!,I,rows)
+  foreach(map_global_to_local!,J,cols)
 
   assembled = true
   a_sys = change_axes(a,(PRange(rows),PRange(cols)))
@@ -409,8 +409,8 @@ function create_from_nz_block_assembled(
   trial_ids = [partition(axes(a.array[j,j],2)) for j in 1:NBc]
 
   for i in 1:NBr, j in 1:NBc
-    map(map_local_to_global!,I[i,j],test_ids[i])
-    map(map_local_to_global!,J[i,j],trial_ids[j])
+    foreach(map_local_to_global!,I[i,j],test_ids[i])
+    foreach(map_local_to_global!,J[i,j],trial_ids[j])
   end
 
   # Shared row partition per block-row: union I[i,:] across all columns
@@ -432,8 +432,8 @@ function create_from_nz_block_assembled(
   foreach(wait,t2s)
 
   for i in 1:NBr, j in 1:NBc
-    map(map_global_to_local!,I[i,j],rows_da[i])
-    map(map_global_to_local!,J[i,j],cols_da[j])
+    foreach(map_global_to_local!,I[i,j],rows_da[i])
+    foreach(map_global_to_local!,J[i,j],cols_da[j])
   end
 
   # Build each block's PSparseMatrix using the shared row/col partitions.

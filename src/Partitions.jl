@@ -2,7 +2,7 @@
 # Cell-wise communication helpers
 
 function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_ids)
-  map(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_ids) do cwv,dwv,cell_to_ldofs,cell_ids
+  foreach(cell_wise_vector,dof_wise_vector,cell_to_ldofs,cell_ids) do cwv,dwv,cell_to_ldofs,cell_ids
     cache  = array_cache(cell_to_ldofs)
     for cell in cell_ids
       ldofs = getindex!(cache,cell_to_ldofs,cell)
@@ -18,7 +18,7 @@ function dof_wise_to_cell_wise!(cell_wise_vector,dof_wise_vector,cell_to_ldofs,c
 end
 
 function posneg_wise_to_cell_wise!(cell_wise_vector,pos_wise_vector,neg_wise_vector,cell_to_posneg,cell_ids)
-  map(cell_wise_vector,pos_wise_vector,neg_wise_vector,cell_to_posneg,cell_ids) do cwv,pwv,nwv,cell_to_posneg,cell_ids
+  foreach(cell_wise_vector,pos_wise_vector,neg_wise_vector,cell_to_posneg,cell_ids) do cwv,pwv,nwv,cell_to_posneg,cell_ids
     cache  = array_cache(cell_to_posneg)
     for cell in cell_ids
       lids = getindex!(cache,cell_to_posneg,cell)
@@ -36,7 +36,7 @@ function posneg_wise_to_cell_wise!(cell_wise_vector,pos_wise_vector,neg_wise_vec
 end
 
 function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_ids)
-  map(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_ids) do dwv,cwv,cell_to_ldofs,cell_ids
+  foreach(dof_wise_vector,cell_wise_vector,cell_to_ldofs,cell_ids) do dwv,cwv,cell_to_ldofs,cell_ids
     cache = array_cache(cell_to_ldofs)
     for cell in cell_ids
       ldofs = getindex!(cache,cell_to_ldofs,cell)
@@ -52,7 +52,7 @@ function cell_wise_to_dof_wise!(dof_wise_vector,cell_wise_vector,cell_to_ldofs,c
 end
 
 function cell_wise_to_posneg_wise!(pos_wise_vector,neg_wise_vector,cell_wise_vector,cell_to_posneg,cell_ids)
-  map(pos_wise_vector,neg_wise_vector,cell_wise_vector,cell_to_posneg,cell_ids) do pwv,nwv,cwv,cell_to_posneg,cell_ids
+  foreach(pos_wise_vector,neg_wise_vector,cell_wise_vector,cell_to_posneg,cell_ids) do pwv,nwv,cwv,cell_to_posneg,cell_ids
     cache = array_cache(cell_to_posneg)
     for cell in cell_ids
       lids = getindex!(cache,cell_to_posneg,cell)
@@ -165,7 +165,7 @@ function generate_gids(
   fetch_vector_ghost_values!(cell_to_gdofs,cache_fetch) |> wait
 
   # Fill ghost gids with exchanged information
-  map(
+  foreach(
     cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_owner,partition(cell_range)
   ) do cell_to_ldofs,cell_to_gdofs,ldof_to_gdof,ldof_to_owner,indices
     cache = array_cache(cell_to_ldofs)
@@ -281,7 +281,7 @@ function generate_posneg_gids(
   fetch_vector_ghost_values!(cell_to_gposneg,cache_fetch) |> wait
 
   # Fill ghost gids with exchanged information
-  map(
+  foreach(
     cell_to_lposneg,cell_to_gposneg,lpos_to_gpos,lneg_to_gneg,lpos_to_owner,lneg_to_owner,partition(cell_range)
   ) do cell_to_lposneg,cell_to_gposneg,lpos_to_gpos,lneg_to_gneg,lpos_to_owner,lneg_to_owner,indices
     cache = array_cache(cell_to_lposneg)
@@ -616,14 +616,14 @@ function _vcat_propagate_ghost!(
 )
   for (gids, p_flid_lid, p_fiset) in zip(f_gids, f_p_flid_lid, f_p_fiset)
     p_flid_gid = local_views(gids)
-    map(p_flid_gid, p_flid_lid, p_lid_gid, p_fiset) do flid_gid, flid_lid, lid_gid, fiset
+    foreach(p_flid_gid, p_flid_lid, p_lid_gid, p_fiset) do flid_gid, flid_lid, lid_gid, fiset
       for flid in own_to_local(fiset)
         flid_gid[flid] = lid_gid[flid_lid[flid]]
       end
     end
     cache = fetch_vector_ghost_values_cache(partition(gids), p_fiset)
     fetch_vector_ghost_values!(partition(gids), cache) |> wait
-    map(p_flid_gid, p_flid_lid, p_lid_gid, p_fiset) do flid_gid, flid_lid, lid_gid, fiset
+    foreach(p_flid_gid, p_flid_lid, p_lid_gid, p_fiset) do flid_gid, flid_lid, lid_gid, fiset
       for flid in ghost_to_local(fiset)
         lid_gid[flid_lid[flid]] = flid_gid[flid]
       end
