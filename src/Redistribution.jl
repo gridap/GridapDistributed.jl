@@ -651,7 +651,9 @@ function p_vector_redistribution_cache(values, indices, indices_red)
   ) |> tuple_of_arrays
   graph = ExchangeGraph(nbors_snd, nbors_rcv)
   exchange_setup = PartitionedArrays.setup_exchange(buffers_rcv, buffers_snd, graph)
-  caches = map(PartitionedArrays.VectorAssemblyCache,nbors_snd, nbors_rcv,lids_snd, lids_rcv,buffers_snd,buffers_rcv,exchange_setup)
+  caches = map(nbors_snd, nbors_rcv, lids_snd, lids_rcv, buffers_snd, buffers_rcv) do ns, nr, ls, lr, bs, br
+    PartitionedArrays.VectorAssemblyCache(ns, nr, ls, lr, bs, br, exchange_setup)
+  end
   return caches
 end
 

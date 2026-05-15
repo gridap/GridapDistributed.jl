@@ -604,12 +604,12 @@ function refine_cell_gids(
   ranks = linear_indices(cgids)
 
   # Create own numbering (without ghosts)
-  num_f_owned_cells = map(length,f_own_to_local)
-  num_f_gids = reduce(+,num_f_owned_cells)
-  first_f_gid = scan(+,num_f_owned_cells,type=:exclusive,init=1)
+  num_f_oids  = map(length,f_own_to_local)
+  num_f_gids  = reduction(+,num_f_oids,destination=:all,init=0)
+  first_f_gid = scan(+,num_f_oids,type=:exclusive,init=1)
   
-  own_fgids = map(ranks,first_f_gid,num_f_owned_cells) do rank,first_f_gid,num_f_owned_cells
-    f_o2g = collect(first_f_gid:first_f_gid+num_f_owned_cells-1)
+  own_fgids = map(ranks,num_f_gids,first_f_gid,num_f_oids) do rank,num_f_gids,first_f_gid,num_f_oids
+    f_o2g = collect(first_f_gid:first_f_gid+num_f_oids-1)
     own   = OwnIndices(num_f_gids,rank,f_o2g)
     ghost = GhostIndices(num_f_gids) # No ghosts
     return OwnAndGhostIndices(own,ghost)
@@ -628,7 +628,9 @@ function refine_cell_gids(
   # collect two keys: 
   #   1. The global id of the coarse parent
   #   2. The child id of the fine cell
-  parent_gids_snd, child_ids_snd = map(cgids,cmodels,fmodels,lids_snd) do cgids,cmodel,fmodel,lids_snd
+  parent_gids_snd, child_ids_snd = map(
+    cgids,cmodels,fmodels,lids_snd
+  ) do cgids,cmodel,fmodel,lids_snd
     glue = get_adaptivity_glue(fmodel)
     f2c_map = glue.n2o_faces_map[Dc+1]
     child_map = glue.n2o_cell_to_child_id
@@ -656,8 +658,8 @@ function refine_cell_gids(
   # We process the received keys, and collect the global ids of the fine cells
   # that have been requested by our neighbors.
   child_gids_rcv = map(
-    cgids,own_fgids,f_own_to_local,cmodels,fmodels,parent_gids_rcv,child_ids_rcv
-  ) do cgids,own_fgids,f_own_to_local,cmodel,fmodel,parent_gids_rcv,child_ids_rcv
+    cgids,own_fgids,f_own_to_local,fmodels,parent_gids_rcv,child_ids_rcv
+  ) do cgids,own_fgids,f_own_to_local,fmodel,parent_gids_rcv,child_ids_rcv
     glue = get_adaptivity_glue(fmodel)
     c2f_map = glue.o2n_faces_map
     child_map = glue.n2o_cell_to_child_id
@@ -716,7 +718,7 @@ function refine_cell_gids(
   end |> tuple_of_arrays
 
   fgids = permuted_variable_partition(
-    num_f_owned_cells, local2global, local2owner;
+    num_f_oids, local2global, local2owner;
     n_global=num_f_gids, start=first_f_gid
   )
   return PRange(fgids)
