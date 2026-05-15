@@ -92,7 +92,9 @@ function BlockPMatrix{V}(::UndefInitializer,rows::BlockPRange,cols::BlockPRange)
   vals = map(block_ids) do I
     r = block_rows[I[1]]
     c = block_cols[I[2]]
-    PSparseMatrix{V}(undef,partition(r),partition(c))
+    psparse(partition(r),partition(c);assembled=true) do row_indices,col_indices
+      PartitionedArrays.allocate_local_values(V,row_indices,col_indices)
+    end
   end
   return BlockPMatrix(vals,rows,cols)
 end
@@ -124,7 +126,12 @@ function Base.similar(a::BlockPMatrix,::Type{T},inds::Tuple{<:BlockPRange,<:Bloc
   vals = map(CartesianIndices(blocksize(a))) do I
     rows = inds[1].ranges[I[1]]
     cols = inds[2].ranges[I[2]]
-    similar(a.blocks[I],T,(rows,cols))
+    new_partition = map(
+      PartitionedArrays.partition(a.blocks[I]),partition(rows),partition(cols)
+    ) do local_mat,row_inds,col_inds
+      PartitionedArrays.allocate_local_values(local_mat,T,row_inds,col_inds)
+    end
+    PSparseMatrix(new_partition,partition(rows),partition(cols),false)
   end
   return BlockPArray(vals,inds)
 end
@@ -134,7 +141,9 @@ function Base.similar(::Type{<:BlockPMatrix{V,T,A}},inds::Tuple{<:BlockPRange,<:
   cols = blocks(inds[2])
   values = map(CartesianIndices((length(rows),length(cols)))) do I
     i,j = I[1],I[2]
-    return similar(A,(rows[i],cols[j]))
+    psparse(partition(rows[i]),partition(cols[j]);assembled=true) do row_inds,col_inds
+      PartitionedArrays.allocate_local_values(V,row_inds,col_inds)
+    end
   end
   return BlockPArray(values,inds)
 end
