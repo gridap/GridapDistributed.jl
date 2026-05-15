@@ -683,15 +683,15 @@ function refine_cell_gids(
   t = exchange(child_gids_rcv,graph)
   child_gids_snd = fetch(t)
   
-  # We finally can create the global numeration of the fine cells by piecing together: 
+  # We finally can create the global numeration of the fine cells by piecing together:
   #   1. The (local ids,global ids) of the owned fine cells
   #   2. The (owners,local ids,global ids) of the ghost fine cells
-  fgids = map(
+  local2global, local2owner = map(
     ranks,f_own_to_local,own_fgids,parts_snd,lids_snd,child_gids_snd
   ) do rank,own_lids,own_gids,nbors,ghost_lids,ghost_gids
 
     own2global = own_to_global(own_gids)
-  
+
     n_own   = length(own_lids)
     n_ghost = length(ghost_lids.data)
     local2global = fill(0,n_own+n_ghost)
@@ -702,7 +702,7 @@ function refine_cell_gids(
       local2global[lid] = own2global[oid]
       local2owner[lid]  = rank
     end
-    
+
     # Ghost cells
     for (n,nbor) in enumerate(nbors)
       for i in ghost_lids.ptrs[n]:ghost_lids.ptrs[n+1]-1
@@ -712,9 +712,13 @@ function refine_cell_gids(
         local2owner[lid]  = nbor
       end
     end
-    return LocalIndices(num_f_gids,rank,local2global,local2owner)
-  end
+    return local2global, local2owner
+  end |> tuple_of_arrays
 
+  fgids = permuted_variable_partition(
+    num_f_owned_cells, local2global, local2owner;
+    n_global=num_f_gids, start=first_f_gid
+  )
   return PRange(fgids)
 end
 
