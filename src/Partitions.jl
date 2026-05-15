@@ -533,15 +533,13 @@ function restrict_gids(gids::PRange, new_to_old_lid::AbstractArray)
   consistent!(PVector(old_lid_to_new_gid,partition(gids))) |> wait
 
   # Prepare new partition
-  n_gids = reduction(+,n_own,destination=:all,init=zero(eltype(n_own)))
+  n_gids     = reduction(+,n_own,destination=:all,init=zero(eltype(n_own)))
+  new_gids   = map(getindex, old_lid_to_new_gid, new_to_old_lid)
+  new_owners = map(getindex, local_to_owner(gids), new_to_old_lid)
 
-  new_indices = map(
-    n_gids, old_lid_to_new_gid, new_to_old_lid, partition(gids)
-  ) do n_gids, old_lid_to_new_gid, new_to_old_lid, ids
-    lid_to_gid   = old_lid_to_new_gid[new_to_old_lid]
-    lid_to_owner = local_to_owner(ids)[new_to_old_lid]
-    return LocalIndices(n_gids,part_id(ids),lid_to_gid,lid_to_owner)
-  end
+  new_indices = permuted_variable_partition(
+    n_own, new_gids, new_owners; n_global=n_gids, start=first_gid
+  )
 
   p_snd, p_rcv = assembly_neighbors(partition(gids))
   assembly_neighbors(new_indices; neighbors=ExchangeGraph(p_snd, p_rcv))
