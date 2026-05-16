@@ -211,6 +211,8 @@ end
 
 const empty_async_task = PartitionedArrays.FakeTask(() -> nothing)
 
+Base.copy(a::MPIArray) = map(copy, a)
+
 # Linear algebra
 
 function LinearAlgebra.axpy!(α,x::PVector,y::PVector)
