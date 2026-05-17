@@ -2,12 +2,33 @@
 struct WithGhost end
 struct NoGhost end
 
+"""
+    with_ghost
+
+Sentinel value passed to triangulation and FE-function accessors to request that
+ghost (off-processor) entries be included in the returned local array.
+
+See also [`no_ghost`](@ref).
+"""
 const with_ghost = WithGhost()
+
+"""
+    no_ghost
+
+Sentinel value passed to triangulation and FE-function accessors to request that
+only owned (on-processor) entries be included in the returned local array.
+
+See also [`with_ghost`](@ref).
+"""
 const no_ghost = NoGhost()
 
 # We do not inherit from Grid on purpose.
 # This object cannot implement the Grid interface in a strict sense
 """
+    DistributedGrid{Dc,Dp,A} <: GridapType
+
+Distributed counterpart of Gridap's `Grid`. Wraps a distributed array of local
+`Grid` objects.
 """
 struct DistributedGrid{Dc,Dp,A} <: GridapType
   grids::A
@@ -37,6 +58,11 @@ Geometry.num_point_dims(::Type{<:DistributedGrid{Dc,Dp}}) where {Dc,Dp} = Dp
 # We do not inherit from GridTopology on purpose.
 # This object cannot implement the GridTopology interface in a strict sense
 """
+    DistributedGridTopology{Dc,Dp,A,B} <: GridapType
+
+Distributed counterpart of Gridap's `GridTopology`. Stores a distributed array of
+local topologies together with distributed index ranges for each
+face dimension.
 """
 struct DistributedGridTopology{Dc,Dp,A,B} <: GridapType
   topos::A
@@ -169,6 +195,11 @@ function Geometry.get_isboundary_face(topo::DistributedGridTopology, d::Integer)
 end
 
 """
+    DistributedFaceLabeling{A} <: GridapType
+
+Distributed counterpart of Gridap's `FaceLabeling`. Wraps a distributed array of
+local `FaceLabeling` objects. Tags are applied locally on each rank and do NOT need to be 
+consistent; consistency across must be ensured explicitly by the user.
 """
 struct DistributedFaceLabeling{A<:AbstractArray{<:FaceLabeling}}
   labels::A
@@ -215,13 +246,27 @@ end
 # This object cannot implement the DiscreteModel interface in a strict sense
 
 """
+    DistributedDiscreteModel{Dc,Dp} <: GridapType
+
+Abstract type for distributed mesh models. Each MPI rank holds a local portion of the
+mesh (owned cells + ghost cells).
 """
 abstract type DistributedDiscreteModel{Dc,Dp} <: GridapType end
 
+"""
+    get_cell_gids(model::DistributedDiscreteModel) -> PRange
+
+Return the `PRange` of global cell indices for the distributed model.
+"""
 function get_cell_gids(model::DistributedDiscreteModel{Dc}) where Dc
   @abstractmethod
 end
 
+"""
+    get_face_gids(model::DistributedDiscreteModel, dim::Integer) -> PRange
+
+Return the `PRange` of global `dim`-face indices for the distributed model.
+"""
 function get_face_gids(model::DistributedDiscreteModel,dim::Integer)
   @abstractmethod
 end
@@ -268,6 +313,11 @@ function Geometry.get_face_labeling(model::DistributedDiscreteModel)
 end
 
 """
+    GenericDistributedDiscreteModel{Dc,Dp,A,B,C} <: DistributedDiscreteModel{Dc,Dp}
+
+Standard concrete implementation of [`DistributedDiscreteModel`](@ref). Stores a
+distributed array of local `DiscreteModel` objects (`models`) and a vector of
+`PRange` objects for each face dimension (`face_gids`).
 """
 struct GenericDistributedDiscreteModel{Dc,Dp,A,B,C} <: DistributedDiscreteModel{Dc,Dp}
   models::A
@@ -609,6 +659,13 @@ end
 # We do not inherit from Triangulation on purpose.
 # This object cannot implement the Triangulation interface in a strict sense
 """
+    DistributedTriangulation{Dc,Dp,A,B,C} <: GridapType
+
+Distributed counterpart of Gridap's `Triangulation`. Wraps a distributed array of
+local triangulations (one per rank).
+
+Constructed from a `DistributedDiscreteModel` using the standard Gridap constructors:
+`Triangulation(model)`, `Boundary(model, tags=...)`, etc.
 """
 struct DistributedTriangulation{Dc,Dp,A,B,C} <: GridapType
   trians  ::A

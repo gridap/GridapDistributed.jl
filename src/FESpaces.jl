@@ -1,6 +1,16 @@
 #
 # Generic FE space related methods
 
+"""
+    DistributedFESpace <: FESpace
+
+Abstract supertype for all distributed finite element spaces. Subtypes wrap a
+distributed array of local `FESpace` objects (one per rank) and a `PRange` of global
+DOF indices.
+
+The standard concrete implementations are [`DistributedSingleFieldFESpace`](@ref) and
+[`DistributedMultiFieldFESpace`](@ref).
+"""
 abstract type DistributedFESpace <: FESpace end
 
 function FESpaces.get_vector_type(fs::DistributedFESpace)
@@ -86,6 +96,10 @@ end
 
 # Single field related
 """
+    DistributedSingleFieldFESpace{A,B,C,D,E} <: DistributedFESpace
+
+Distributed single-field FE space. Stores a distributed array of local
+`SingleFieldFESpace` objects (`spaces`) and the global DOF `PRange` (`gids`).
 """
 struct DistributedSingleFieldFESpace{A,B,C,D,E} <: DistributedFESpace
   spaces::A

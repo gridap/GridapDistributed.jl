@@ -320,10 +320,19 @@ end
 @inline get_part_id(comm::MPIVoidVector) = get_part_id(comm.comm)
 
 """
-    i_am_in(comm::MPIArray)
-    i_am_in(comm::DebugArray)
-  
-  Returns `true` if the processor is part of the subcommunicator `comm`.
+    i_am_in(comm) -> Bool
+
+Return `true` if the current MPI rank belongs to the (sub-)communicator `comm`.
+In `DebugArray` mode always returns `true`.
+
+Use this to guard code that should only run on a subset of ranks:
+
+```julia
+coarse_ranks = generate_subparts(ranks, 2)
+if i_am_in(coarse_ranks)
+  # only executed on ranks 1–2
+end
+```
 """
 function i_am_in(comm::MPI.Comm)
   get_part_id(comm) >=0
@@ -345,6 +354,16 @@ function change_parts(x::Union{MPIArray,DebugArray,Nothing,MPIVoidVector}, new_p
   return x_new
 end
 
+"""
+    generate_subparts(parts, new_comm_size) -> AbstractArray
+
+Return a new distributed array of rank indices with `new_comm_size` entries,
+formed from the first `new_comm_size` ranks of `parts`. Ranks outside the new
+sub-communicator receive an `MPIVoidVector` (a null communicator placeholder).
+
+Use [`i_am_in`](@ref) to check whether the current rank belongs to the returned
+sub-communicator before executing sub-communicator-specific code.
+"""
 function generate_subparts(parts::MPIArray,new_comm_size)
   root_comm = parts.comm
   root_size = MPI.Comm_size(root_comm)

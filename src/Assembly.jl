@@ -1,8 +1,37 @@
 
 # Parallel assembly strategies
 
+"""
+    Assembled <: AssemblyStrategy
+
+Standard parallel assembly strategy. Local contributions from ghost cells are
+communicated to their owning ranks and summed. The result is a fully consistent
+global `PSparseMatrix` / `PVector` with each row owned by exactly one rank.
+
+This is the DEFAULT strategy for all standard FE problems.
+"""
 struct Assembled <: FESpaces.AssemblyStrategy end
+
+"""
+    SubAssembled <: AssemblyStrategy
+
+Sub-assembled strategy. Each rank assembles only over its owned cells; no
+communication of ghost-cell contributions is performed. Ghost-DOF rows are left
+incomplete. Intended for subdomain-based methods (e.g. domain decomposition) that
+handle the interface coupling themselves.
+"""
 struct SubAssembled <: FESpaces.AssemblyStrategy end
+
+"""
+    LocallyAssembled <: AssemblyStrategy
+
+Local-only assembly strategy. Each rank assembles over both owned and ghost cells,
+but only owned-DOF rows are kept; ghost-DOF contributions are discarded. This ASSUMES
+that all local contributions for owned rows can be computed locally, without communication.
+
+WARNING: This is NOT true in general and might yield incorrect assembled systems. 
+Use with caution and only if you know what you are doing.
+"""
 struct LocallyAssembled <: FESpaces.AssemblyStrategy end
 
 function local_assembly_strategy(::Union{Assembled,SubAssembled},rows,cols)
@@ -22,6 +51,16 @@ end
 
 # PSparseMatrix and PVector builders
 
+"""
+    DistributedArrayBuilder{T,N,B}
+
+Builder object used by Gridap's assembly machinery to allocate distributed arrays
+(`PVector` or `PSparseMatrix`). `T` is the local array type, `N` its dimensionality
+(1 for vectors, 2 for matrices), and `B` the assembly strategy.
+
+Constructed automatically by `SparseMatrixAssembler` — users rarely need to build
+this directly.
+"""
 struct DistributedArrayBuilder{T,N,B}
   local_array_type::Type{T}
   strategy::B

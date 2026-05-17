@@ -16,6 +16,10 @@ end
 
 # DistributedCellField
 """
+    DistributedCellField{A,B,C} <: CellField
+
+Distributed cell field. Wraps a distributed array of local `CellField` objects
+together with the underlying [`DistributedTriangulation`](@ref). 
 """
 struct DistributedCellField{A,B,C} <: CellField
   fields::A
@@ -189,6 +193,10 @@ end
 
 # Integration related
 """
+    DistributedMeasure{A,B} <: GridapType
+
+Distributed integration measure. Wraps a distributed array of local `Measure`
+objects and the underlying [`DistributedTriangulation`](@ref).
 """
 struct DistributedMeasure{A<:AbstractArray{<:Measure},B<:DistributedTriangulation} <: GridapType
   measures::A
@@ -216,6 +224,10 @@ function CellData.get_cell_points(a::DistributedMeasure)
 end
 
 """
+    DistributedDomainContribution{A} <: GridapType
+
+The result of a distributed integral `∫(f)dΩ`. Wraps a distributed array of local
+`DomainContribution` objects.
 """
 struct DistributedDomainContribution{A<:AbstractArray{<:DomainContribution}} <: GridapType
   contribs::A

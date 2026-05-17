@@ -1,6 +1,16 @@
 
 # DistributedAdaptedDiscreteModels
 
+"""
+    DistributedAdaptedDiscreteModel{Dc,Dp}
+
+Type alias for a [`GenericDistributedDiscreteModel`](@ref) whose local models are
+`AdaptedDiscreteModel` objects from Gridap. Represents a distributed mesh obtained by
+refining a coarser mesh, together with the parent-child cell relationship (adaptivity glue).
+
+Constructed by `DistributedAdaptedDiscreteModel(fine_model, coarse_model, glue_array)`.
+Use `get_model`, `get_parent`, and `get_adaptivity_glue` to retrieve components.
+"""
 const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:AdaptedDiscreteModel{Dc,Dp}}}
 
 struct DistributedAdaptedDiscreteModelCache{A,B,C}

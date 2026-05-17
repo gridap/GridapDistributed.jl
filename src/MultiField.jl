@@ -62,6 +62,14 @@ end
 # DistributedMultiFieldFESpace
 
 """
+    DistributedMultiFieldFESpace{MS,A,B,C,D} <: DistributedFESpace
+
+Distributed multi-field FE space coupling several [`DistributedSingleFieldFESpace`](@ref)
+objects into a block system. The global DOF indices are stored as either a `PRange`
+(monolithic) or a `BlockPRange` (block-structured, for block preconditioners).
+
+Constructed via `MultiFieldFESpace([V, Q, ...])` from a vector of distributed
+single-field spaces.
 """
 struct DistributedMultiFieldFESpace{MS,A,B,C,D} <: DistributedFESpace
   multi_field_style::MS

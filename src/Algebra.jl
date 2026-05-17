@@ -31,10 +31,30 @@ end
 
 # local_views
 
+"""
+    local_views(a)
+
+Return the distributed array of local (per-rank) objects wrapped by `a`.
+
+This is the central accessor for all distributed objects in `GridapDistributed.jl`.
+Use it together with `map` to operate on each rank's local data independently:
+
+```julia
+map(local_views(model)) do local_model
+  println(num_cells(local_model))
+end
+```
+"""
 function local_views(a)
   @abstractmethod
 end
 
+"""
+    get_parts(a)
+
+Return a distributed array of rank indices for the partition of `a`.
+Equivalent to `linear_indices(local_views(a))`.
+"""
 function get_parts(a)
   return linear_indices(local_views(a))
 end
@@ -99,9 +119,6 @@ function change_ghost(a::BlockPVector,ids::BlockPRange;is_consistent=false,make_
   return BlockPVector(vals,ids)
 end
 
-# This type is required in order to be able to access the local portion 
-# of distributed sparse matrices and vectors using local indices from the 
-# distributed test and trial spaces
 struct LocalView{T,N,A} <:AbstractArray{T,N}
   plids_to_value::A
   d_to_lid_to_plid::NTuple{N,Vector{Int32}}
