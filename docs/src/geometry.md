@@ -122,3 +122,14 @@ GridapDistributed.DistributedGrid
 GridapDistributed.DistributedGridTopology
 GridapDistributed.DistributedFaceLabeling
 ```
+
+### Macro-element models
+
+```@docs
+GridapDistributed.MacroDiscreteModel
+GridapDistributed.classify_interfaces
+GridapDistributed.generate_nbors_and_keys
+GridapDistributed.generate_interface_gids
+GridapDistributed.get_local_face_labeling
+GridapDistributed.get_global_face_labeling
+```

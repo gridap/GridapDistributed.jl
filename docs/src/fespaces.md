@@ -78,4 +78,28 @@ GridapDistributed.DistributedMultiFieldFESpace
 GridapDistributed.DistributedCellField
 GridapDistributed.DistributedMeasure
 GridapDistributed.DistributedDomainContribution
+GridapDistributed.DistributedCellPoint
+```
+
+### FE functions
+
+```@docs
+GridapDistributed.DistributedFEFunctionData
+GridapDistributed.DistributedSingleFieldFEFunction
+```
+
+### Constant FE space
+
+```@docs
+Gridap.FESpaces.ConstantFESpace(::GridapDistributed.DistributedDiscreteModel; constraint_type, kwargs...)
+```
+
+### DOF numbering utilities
+
+```@docs
+GridapDistributed.generate_gids
+GridapDistributed.generate_posneg_gids
+GridapDistributed.generate_gids_by_color
+GridapDistributed.split_gids_by_color
+GridapDistributed.vcat_gids
 ```

@@ -62,4 +62,14 @@ A `PSparseMatrix` is a distributed sparse matrix stored in compressed form. Each
 
 ```@docs
 GridapDistributed.permuted_variable_partition
+GridapDistributed.unpermute
+GridapDistributed.locally_repartition
+GridapDistributed.filter_and_replace_ghost
+```
+
+### Block arrays
+
+```@docs
+GridapDistributed.BlockPRange
+GridapDistributed.BlockPArray
 ```

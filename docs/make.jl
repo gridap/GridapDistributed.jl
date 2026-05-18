@@ -1,4 +1,4 @@
-using Documenter, GridapDistributed
+using Documenter, GridapDistributed, Gridap
 
 pages = [
   "Home"          => "index.md",

@@ -20,7 +20,8 @@ Standard parallel assembly:
 assem = SparseMatrixAssembler(U, V, Assembled())
 ```
 
-Unless you know what you are doing, this is the assembly strategy you should use.
+!!! note
+    Unless you know what you are doing, this is the assembly strategy you should use.
 
 ## `SubAssembled`
 
@@ -71,10 +72,17 @@ SubAssembled
 LocallyAssembled
 ```
 
+### Assembler type
+
+```@docs
+GridapDistributed.DistributedSparseMatrixAssembler
+```
+
 ### Builder types
 
 ```@docs
 GridapDistributed.DistributedArrayBuilder
 GridapDistributed.DistributedCounter
 GridapDistributed.DistributedAllocation
+GridapDistributed.TrackedArrayAllocation
 ```

@@ -36,4 +36,5 @@ savepvd(pvd)
 
 ```@docs
 GridapDistributed.DistributedPvd
+GridapDistributed.DistributedVisualizationData
 ```
