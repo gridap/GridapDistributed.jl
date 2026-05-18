@@ -127,7 +127,7 @@ function FESpaces.compute_facet_owners(model::DistributedDiscreteModel)
   end
 
   # Map local owners to global ids
-  map(facet_to_owner, cell_ids) do facet_to_owner, cell_ids
+  foreach(facet_to_owner, cell_ids) do facet_to_owner, cell_ids
     lid_to_gid = local_to_global(cell_ids)
     for f in eachindex(facet_to_owner)
       lid = facet_to_owner[f]
@@ -138,9 +138,9 @@ function FESpaces.compute_facet_owners(model::DistributedDiscreteModel)
   # Communicate true owners across processes
   wait(consistent!(PVector(facet_to_owner, facet_ids)))
 
-  # Non-local owners will be set to zero, which 
+  # Non-local owners will be set to zero, which
   # will trigger a sign flip (which is the correct behaviour)
-  map(facet_to_owner, cell_ids) do facet_to_owner, cell_ids
+  foreach(facet_to_owner, cell_ids) do facet_to_owner, cell_ids
     gid_to_lid = global_to_local(cell_ids)
     for f in eachindex(facet_to_owner)
       gid = facet_to_owner[f]

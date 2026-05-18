@@ -35,4 +35,6 @@ function main(distribute,parts)
 
 end
 
+main(DebugArray,(2,2))
+
 end # module

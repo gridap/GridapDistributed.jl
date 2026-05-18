@@ -3,6 +3,7 @@ module SequentialTests
 using Test
 
 TESTCASE = get(ENV, "TESTCASE", "all")
+@info "Running SEQUENTIAL tests with TESTCASE=$TESTCASE"
 
 if TESTCASE ∈ ("all", "seq-geometry")
   @time @testset "Geometry" begin include("GeometryTests.jl") end
@@ -19,11 +20,11 @@ if TESTCASE ∈ ("all", "seq-fespaces")
 end
 
 if TESTCASE ∈ ("all", "seq-physics")
-  @time @testset "Poisson"                     begin include("PoissonTests.jl") end
-  @time @testset "PLaplacian"                  begin include("PLaplacianTests.jl") end
-  @time @testset "SurfaceCouplingTests"        begin include("SurfaceCouplingTests.jl") end
-  @time @testset "StokesHdivDGTests"           begin include("StokesHdivDGTests.jl") end
-  @time @testset "StokesOpenBoundary"          begin include("StokesOpenBoundaryTests.jl") end
+  @time @testset "Poisson"              begin include("PoissonTests.jl") end
+  @time @testset "PLaplacian"           begin include("PLaplacianTests.jl") end
+  @time @testset "SurfaceCouplingTests" begin include("SurfaceCouplingTests.jl") end
+  @time @testset "StokesHdivDGTests"    begin include("StokesHdivDGTests.jl") end
+  @time @testset "StokesOpenBoundary"   begin include("StokesOpenBoundaryTests.jl") end
 end
 
 if TESTCASE ∈ ("all", "seq-transient")

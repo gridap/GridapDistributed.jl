@@ -216,6 +216,14 @@ function Visualization.createvtk(
   )
 end
 
+"""
+    DistributedPvd{T<:AbstractArray}
+
+Handle for a distributed ParaView Data (PVD) collection used to write time-series
+VTK output from a parallel simulation. The actual file is only written by rank 0.
+
+Created by `createpvd(parts, filename)` and closed by `savepvd(pvd)`.
+"""
 struct DistributedPvd{T<:AbstractArray}
   pvds::T
 end
