@@ -65,8 +65,8 @@ function main_sf(distribute,parts)
   U_reg = TrialFESpace(V_reg)
   dv_reg = get_fe_basis(V_reg)
   dp_reg = get_trial_fe_basis(U_reg)
-  uh_reg = FEFunction(U_reg, rand(num_free_dofs(U_reg)))
-  ph_reg = FEFunction(U_reg, rand(num_free_dofs(U_reg)))
+  uh_reg = interpolate(x->rand(),U_reg)
+  ph_reg = interpolate(x->rand(),U_reg)
 
   ener_reg(u, p) = ∫(0.5*u*u*p)*dΩ + ∫(0.5*u*u*p)*dΓ_reg + ∫(0.5*mean(u)*mean(u)*mean(p))*dΛ_reg
   nested_ad_contrib = jacobian(p -> gradient(u -> ener_reg(u, p), uh_reg), ph_reg)
