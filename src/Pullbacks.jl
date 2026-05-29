@@ -4,7 +4,7 @@
 # simply go through the local FESpace constructor.
 const PullbackReffes = Union{
   GenericRefFE{RaviartThomas},
-  GenericRefFE{Nedelec},
+  GenericRefFE{<:Nedelec},
 }
 
 function DistributedSingleFieldFESpace(
@@ -89,7 +89,7 @@ function FESpaces.compute_cell_bases_changes(
   poly = map(get_polytopes, local_views(model)) |> getany |> only
   if (D==2) || is_simplex(poly)
     # For these cases, we do not need to apply a sign flip
-    return nothing
+    return map(_->nothing,cell_reffe)
   elseif (D==3) && is_n_cube(poly)
     change = FESpaces.get_sign_flip(model, cell_reffe)
     return map(c -> (c, c), change)
@@ -109,7 +109,22 @@ function FESpaces.compute_facet_owners(model::DistributedDiscreteModel)
   Dc = num_cell_dims(model)
   cell_ids  = partition(get_cell_gids(model))
   facet_ids = partition(get_face_gids(model, Dc-1))
-  facet_to_owner = map(FESpaces.compute_facet_owners, local_views(model))
+  
+  function select_nbor_with_max_gid(nbor_lids, lid_to_gid)
+    max_lid, max_gid = -1, -1
+    for lid in nbor_lids
+      gid = lid_to_gid[lid]
+      if gid > max_gid
+        max_lid, max_gid = lid, gid
+      end
+    end
+    return max_lid
+  end
+  facet_to_owner = map(local_views(model), cell_ids) do model, cell_ids
+    lid_to_gid = local_to_global(cell_ids)
+    select_nbor = Base.Fix2(select_nbor_with_max_gid, lid_to_gid)
+    return FESpaces.compute_facet_owners(model, select_nbor)
+  end
 
   # Map local owners to global ids
   map(facet_to_owner, cell_ids) do facet_to_owner, cell_ids
