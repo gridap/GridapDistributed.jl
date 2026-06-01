@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added tag support for AD to align with Gridap[#1181](https://github.com/gridap/Gridap.jl/pull/1181) and Gridap[#1297](https://github.com/gridap/Gridap.jl/pull/1297). Since PR[#204](https://github.com/gridap/GridapDistributed.jl/pull/204).
+
 ### Fixed
 
 - Fixed bug in `TrialFESpace!`. Since PR[#208](https://github.com/gridap/GridapDistributed.jl/pull/208).
@@ -25,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.14] - 2026-03-20
 
-### Changed 
+### Changed
 
 - Added support for Gridap 0.20.0. Since PR[#200](https://github.com/gridap/GridapDistributed.jl/pull/200).
 

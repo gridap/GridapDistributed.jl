@@ -10,7 +10,7 @@ end
 local_views(a::DistributedCellPoint) = a.points
 CellData.get_triangulation(a::DistributedCellPoint) = a.trian
 
-function CellData.DomainStyle(::Type{<:DistributedCellPoint{A}}) where A 
+function CellData.DomainStyle(::Type{<:DistributedCellPoint{A}}) where A
   DomainStyle(eltype(A))
 end
 
@@ -36,7 +36,7 @@ end
 local_views(a::DistributedCellField) = a.fields
 CellData.get_triangulation(a::DistributedCellField) = a.trian
 
-function CellData.DomainStyle(::Type{<:DistributedCellField{A}}) where A 
+function CellData.DomainStyle(::Type{<:DistributedCellField{A}}) where A
   DomainStyle(eltype(A))
 end
 
@@ -76,8 +76,8 @@ function Arrays.evaluate!(cache,f::DistributedCellField,x::DistributedCellPoint)
   end
 end
 
-# Given local CellFields and a set of original DistributedTriangulations, 
-# returns the DistributedTriangulation where the local CellFields are defined. 
+# Given local CellFields and a set of original DistributedTriangulations,
+# returns the DistributedTriangulation where the local CellFields are defined.
 function _select_triangulation(fields,parents::DistributedCellField...)
   trian_candidates = unique(objectid,map(get_triangulation,parents))
   _select_triangulation(fields,trian_candidates...)
@@ -98,7 +98,7 @@ function _select_triangulation(fields,trian_candidates::DistributedTriangulation
     return trian_candidates[t_id]
   end
 
-  # If not, check if we can build a new DistributedTriangulation based on one of the original models. 
+  # If not, check if we can build a new DistributedTriangulation based on one of the original models.
   m_id = map(fields,trians...) do f, trians...
     f_id = objectid(get_background_model(get_triangulation(f)))
     return findfirst(tt -> objectid(get_background_model(tt)) == f_id, trians)
@@ -223,6 +223,8 @@ end
 
 CellData.num_domains(a::DistributedDomainContribution) = CellData.num_domains(getany(local_views(a)))
 
+CellData.get_ad_level(a::DistributedDomainContribution) = get_ad_level(getany(local_views(a))) # Assuming all local contributions have the same tag level
+
 local_views(a::DistributedDomainContribution) = a.contribs
 
 function Base.getindex(c::DistributedDomainContribution,t::DistributedTriangulation)
@@ -279,9 +281,9 @@ end
 
 (*)(a::DistributedDomainContribution,b::Number) = b*a
 
-# Jordi: This is ugly, but it is useful to re-use code from Gridap: 
+# Jordi: This is ugly, but it is useful to re-use code from Gridap:
 # A lot of the time, we create an empty DomainContribution and then add to it.
-# By dispatching here, this kind of code works verbatim for GridapDistributed. 
+# By dispatching here, this kind of code works verbatim for GridapDistributed.
 # We could eventually replace this with an EmptyDomainContribution type.
 function (+)(a::CellData.DomainContribution,b::DistributedDomainContribution)
   @assert iszero(CellData.num_domains(a))
@@ -333,7 +335,7 @@ end
 local_views(s::DistributedCellDof) = s.dofs
 CellData.get_triangulation(s::DistributedCellDof) = s.trian
 
-function CellData.DomainStyle(::Type{<:DistributedCellDof{A}}) where A 
+function CellData.DomainStyle(::Type{<:DistributedCellDof{A}}) where A
   DomainStyle(eltype(A))
 end
 
@@ -375,7 +377,7 @@ end
 
 local_views(a::DistributedInterpolable) = a.interps
 
-function Interpolable(f::DistributedCellField;kwargs...) 
+function Interpolable(f::DistributedCellField;kwargs...)
   interps = map(local_views(f)) do f
     Interpolable(f,kwargs...)
   end
