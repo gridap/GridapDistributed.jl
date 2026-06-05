@@ -11,7 +11,7 @@ using GridapDistributed
 using PartitionedArrays
 
 using GridapDistributed: i_am_in, generate_subparts
-using GridapDistributed: find_local_to_local_map
+using GridapDistributed: local_to_local_map
 using GridapDistributed: DistributedAdaptedDiscreteModel
 using GridapDistributed: RedistributeGlue, redistribute_cell_dofs, redistribute_fe_function, redistribute_free_values
 
@@ -58,8 +58,8 @@ function get_redistribute_glue(old_parts,new_parts::DebugArray,old_cell_to_part,
       old_partition = partition(get_cell_gids(model)).items[p]
       lids_rcv = map(gids -> lazy_map(Reindex(global_to_local(new_partition)),gids),gids_rcv_by_part)
       lids_snd = map(gids -> lazy_map(Reindex(global_to_local(old_partition)),gids),gids_snd_by_part)
-      old2new = replace(find_local_to_local_map(old_partition,new_partition), -1 => 0)
-      new2old = replace(find_local_to_local_map(new_partition,old_partition), -1 => 0)
+      old2new = replace(local_to_local_map(old_partition,new_partition), -1 => 0)
+      new2old = replace(local_to_local_map(new_partition,old_partition), -1 => 0)
     else
       lids_rcv = map(gids -> lazy_map(Reindex(global_to_local(new_partition)),gids),gids_rcv_by_part)
       lids_snd = map(gids -> fill(Int32(0),length(gids)),gids_snd_by_part)
@@ -90,8 +90,8 @@ function get_redistribute_glue(old_parts,new_parts::MPIArray,old_cell_to_part,ne
       old_partition = PartitionedArrays.getany(partition(get_cell_gids(model)))
       lids_rcv = map(gids -> lazy_map(Reindex(global_to_local(new_partition)),gids),gids_rcv_by_part)
       lids_snd = map(gids -> lazy_map(Reindex(global_to_local(old_partition)),gids),gids_snd_by_part)
-      old2new = replace(find_local_to_local_map(old_partition,new_partition), -1 => 0)
-      new2old = replace(find_local_to_local_map(new_partition,old_partition), -1 => 0)
+      old2new = replace(local_to_local_map(old_partition,new_partition), -1 => 0)
+      new2old = replace(local_to_local_map(new_partition,old_partition), -1 => 0)
     else
       lids_rcv = map(gids -> lazy_map(Reindex(global_to_local(new_partition)),gids),gids_rcv_by_part)
       lids_snd = map(gids -> fill(Int32(0),length(gids)),gids_snd_by_part)

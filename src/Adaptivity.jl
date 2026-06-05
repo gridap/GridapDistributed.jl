@@ -1,6 +1,16 @@
 
 # DistributedAdaptedDiscreteModels
 
+"""
+    DistributedAdaptedDiscreteModel{Dc,Dp}
+
+Type alias for a [`GenericDistributedDiscreteModel`](@ref) whose local models are
+`AdaptedDiscreteModel` objects from Gridap. Represents a distributed mesh obtained by
+refining a coarser mesh, together with the parent-child cell relationship (adaptivity glue).
+
+Constructed by `DistributedAdaptedDiscreteModel(fine_model, coarse_model, glue_array)`.
+Use `get_model`, `get_parent`, and `get_adaptivity_glue` to retrieve components.
+"""
 const DistributedAdaptedDiscreteModel{Dc,Dp} = GenericDistributedDiscreteModel{Dc,Dp,<:AbstractArray{<:AdaptedDiscreteModel{Dc,Dp}}}
 
 struct DistributedAdaptedDiscreteModelCache{A,B,C}
@@ -297,8 +307,8 @@ function get_cartesian_redistribute_glue(
       # If I'm in the old subprocessor,
       #   - I send all owned old cells that I don't own in the new model.
       #   - I receive all owned new cells that I don't own in the old model.
-      old2new = replace(find_local_to_local_map(old_ids,new_ids), -1 => 0)
-      new2old = replace(find_local_to_local_map(new_ids,old_ids), -1 => 0)
+      old2new = replace(local_to_local_map(old_ids,new_ids), -1 => 0)
+      new2old = replace(local_to_local_map(new_ids,old_ids), -1 => 0)
 
       new_l2o = local_to_own(new_ids)
       old_l2o = local_to_own(old_ids)
@@ -604,12 +614,12 @@ function refine_cell_gids(
   ranks = linear_indices(cgids)
 
   # Create own numbering (without ghosts)
-  num_f_owned_cells = map(length,f_own_to_local)
-  num_f_gids = reduce(+,num_f_owned_cells)
-  first_f_gid = scan(+,num_f_owned_cells,type=:exclusive,init=1)
+  num_f_oids  = map(length,f_own_to_local)
+  num_f_gids  = reduction(+,num_f_oids,destination=:all,init=0)
+  first_f_gid = scan(+,num_f_oids,type=:exclusive,init=1)
   
-  own_fgids = map(ranks,first_f_gid,num_f_owned_cells) do rank,first_f_gid,num_f_owned_cells
-    f_o2g = collect(first_f_gid:first_f_gid+num_f_owned_cells-1)
+  own_fgids = map(ranks,num_f_gids,first_f_gid,num_f_oids) do rank,num_f_gids,first_f_gid,num_f_oids
+    f_o2g = collect(first_f_gid:first_f_gid+num_f_oids-1)
     own   = OwnIndices(num_f_gids,rank,f_o2g)
     ghost = GhostIndices(num_f_gids) # No ghosts
     return OwnAndGhostIndices(own,ghost)
@@ -628,7 +638,9 @@ function refine_cell_gids(
   # collect two keys: 
   #   1. The global id of the coarse parent
   #   2. The child id of the fine cell
-  parent_gids_snd, child_ids_snd = map(cgids,cmodels,fmodels,lids_snd) do cgids,cmodel,fmodel,lids_snd
+  parent_gids_snd, child_ids_snd = map(
+    cgids,cmodels,fmodels,lids_snd
+  ) do cgids,cmodel,fmodel,lids_snd
     glue = get_adaptivity_glue(fmodel)
     f2c_map = glue.n2o_faces_map[Dc+1]
     child_map = glue.n2o_cell_to_child_id
@@ -656,8 +668,8 @@ function refine_cell_gids(
   # We process the received keys, and collect the global ids of the fine cells
   # that have been requested by our neighbors.
   child_gids_rcv = map(
-    cgids,own_fgids,f_own_to_local,cmodels,fmodels,parent_gids_rcv,child_ids_rcv
-  ) do cgids,own_fgids,f_own_to_local,cmodel,fmodel,parent_gids_rcv,child_ids_rcv
+    cgids,own_fgids,f_own_to_local,fmodels,parent_gids_rcv,child_ids_rcv
+  ) do cgids,own_fgids,f_own_to_local,fmodel,parent_gids_rcv,child_ids_rcv
     glue = get_adaptivity_glue(fmodel)
     c2f_map = glue.o2n_faces_map
     child_map = glue.n2o_cell_to_child_id
@@ -683,15 +695,15 @@ function refine_cell_gids(
   t = exchange(child_gids_rcv,graph)
   child_gids_snd = fetch(t)
   
-  # We finally can create the global numeration of the fine cells by piecing together: 
+  # We finally can create the global numeration of the fine cells by piecing together:
   #   1. The (local ids,global ids) of the owned fine cells
   #   2. The (owners,local ids,global ids) of the ghost fine cells
-  fgids = map(
+  local2global, local2owner = map(
     ranks,f_own_to_local,own_fgids,parts_snd,lids_snd,child_gids_snd
   ) do rank,own_lids,own_gids,nbors,ghost_lids,ghost_gids
 
     own2global = own_to_global(own_gids)
-  
+
     n_own   = length(own_lids)
     n_ghost = length(ghost_lids.data)
     local2global = fill(0,n_own+n_ghost)
@@ -702,7 +714,7 @@ function refine_cell_gids(
       local2global[lid] = own2global[oid]
       local2owner[lid]  = rank
     end
-    
+
     # Ghost cells
     for (n,nbor) in enumerate(nbors)
       for i in ghost_lids.ptrs[n]:ghost_lids.ptrs[n+1]-1
@@ -712,9 +724,13 @@ function refine_cell_gids(
         local2owner[lid]  = nbor
       end
     end
-    return LocalIndices(num_f_gids,rank,local2global,local2owner)
-  end
+    return local2global, local2owner
+  end |> tuple_of_arrays
 
+  fgids = permuted_variable_partition(
+    num_f_oids, local2global, local2owner;
+    n_global=num_f_gids, start=first_f_gid
+  )
   return PRange(fgids)
 end
 
@@ -760,7 +776,7 @@ function Adaptivity.coarsen(fmodel::DistributedDiscreteModel, ptopo::Distributed
 
   # First, some preliminary checks
   fgids = partition(get_cell_gids(fmodel))
-  map(local_views(ptopo), fgids) do ptopo, fids
+  foreach(local_views(ptopo), fgids) do ptopo, fids
     patch_cells = Geometry.get_patch_cells(ptopo)
     lcell_to_ocell = local_to_own(fids)
     ocell_to_lcell = own_to_local(fids)

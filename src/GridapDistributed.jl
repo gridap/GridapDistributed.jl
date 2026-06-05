@@ -33,8 +33,9 @@ import Base: inv, abs, abs2, *, +, -, /, adjoint, transpose, real, imag, conj, g
 import Gridap.Fields: grad2curl
 import Gridap.CellData: Interpolable
 
-export FullyAssembledRows
-export SubAssembledRows
+export LocallyAssembled
+export SubAssembled
+export Assembled
 
 export get_cell_gids
 export get_face_gids
@@ -48,7 +49,13 @@ include("PArraysExtras.jl")
 
 include("BlockPartitionedArrays.jl")
 
+include("GridapExtras.jl")
+
 include("Algebra.jl")
+
+include("Assembly.jl")
+
+include("Partitions.jl")
 
 include("Geometry.jl")
 

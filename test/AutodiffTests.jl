@@ -7,6 +7,32 @@ using PartitionedArrays
 using SparseArrays
 using ForwardDiff
 
+function same_matrix(A,B;debug=false)
+  same_own = map(≈, own_own_values(A), own_own_values(B))
+  same_ghost = map(≈, own_ghost_values(A), own_ghost_values(B))
+
+  if debug
+    so = reduce(&, same_own)
+    println("Same own values: ", so)
+    if !so 
+      display(same_own)
+      map(own_own_values(A),own_own_values(B)) do a, b
+        display(a - b)
+      end
+    end
+    sg = reduce(&, same_ghost)
+    println("Same ghost values: ", sg)
+    if !sg
+      display(same_ghost)
+      map(own_ghost_values(A),own_ghost_values(B)) do a, b
+        display(a - b)
+      end
+    end
+  end
+
+  return reduce(&, same_own) && reduce(&, same_ghost)
+end
+
 function main_sf(distribute,parts)
   ranks = distribute(LinearIndices((prod(parts),)))
 
@@ -35,7 +61,7 @@ function main_sf(distribute,parts)
   uh = interpolate(1.0,U)
   A = jacobian(op,uh)
   A_AD = jacobian(op_AD,uh)
-  @test reduce(&,map(≈,partition(A),partition(A_AD)))
+  @test same_matrix(A,A_AD)
 
   g(v) = ∫(0.5*v⋅v)dΩ
   dg(v) = ∫(uh⋅v)dΩ
@@ -129,7 +155,7 @@ function main_mf(distribute,parts)
   uh, ph = xh
   A = jacobian(op,xh)
   A_AD = jacobian(op_AD,xh)
-  @test reduce(&,map(≈,partition(A),partition(A_AD)))
+  @test same_matrix(A,A_AD)
 
   g((v,q)) = ∫(0.5*v⋅v + 0.5*q*q)dΩ
   dg((v,q)) = ∫(uh⋅v + ph*q)dΩ
@@ -200,7 +226,7 @@ function mf_different_fespace_trians(distribute,parts)
     op = FEOperator(f2,f2_jac,X,X)
     J_fwd = jacobian(op,uh)
 
-    @test reduce(&,map(≈,partition(J),partition(J_fwd)))
+    @test same_matrix(J,J_fwd)
   end
 end
 
@@ -236,7 +262,7 @@ function skeleton_mf_different_fespace_trians(distribute,parts)
     op = FEOperator(f2,f2_jac,X,X)
     J_fwd = jacobian(op,uh)
 
-    @test reduce(&,map(≈,partition(J),partition(J_fwd)))
+    @test same_matrix(J,J_fwd)
   end
 end
 

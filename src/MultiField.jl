@@ -62,6 +62,14 @@ end
 # DistributedMultiFieldFESpace
 
 """
+    DistributedMultiFieldFESpace{MS,A,B,C,D} <: DistributedFESpace
+
+Distributed multi-field FE space coupling several [`DistributedSingleFieldFESpace`](@ref)
+objects into a block system. The global DOF indices are stored as either a `PRange`
+(monolithic) or a `BlockPRange` (block-structured, for block preconditioners).
+
+Constructed via `MultiFieldFESpace([V, Q, ...])` from a vector of distributed
+single-field spaces.
 """
 struct DistributedMultiFieldFESpace{MS,A,B,C,D} <: DistributedFESpace
   multi_field_style::MS
@@ -334,7 +342,7 @@ function generate_multi_field_gids(
     push!(f_p_flid_lid,p_flid_lid)
   end
   f_frange = map(get_free_dof_ids,f_dspace)
-  gids = generate_multi_field_gids(f_p_flid_lid,f_frange)
+  gids = vcat_gids(f_p_flid_lid,f_frange)
   return gids
 end
 
@@ -351,120 +359,6 @@ function generate_multi_field_gids(
   return BlockPRange(block_gids)
 end
 
-function generate_multi_field_gids(
-  f_p_flid_lid::AbstractVector{<:AbstractArray{<:AbstractVector}},
-  f_frange::AbstractVector{<:PRange})
-
-  f_p_fiset = map(local_views,f_frange)
-
-  v(x...) = collect(x)
-  p_f_fiset = map(v,f_p_fiset...)
-  p_f_flid_lid = map(v,f_p_flid_lid...)
-
-  # Find the first gid of the multifield space in each part
-  ngids = sum(map(length,f_frange))
-  p_noids = map(f_fiset->sum(map(own_length,f_fiset)),p_f_fiset)
-  p_firstgid = scan(+,p_noids,type=:exclusive,init=one(eltype(p_noids)))
-
-  # Distributed gids to owned dofs
-  p_lid_gid, p_lid_part = map(
-    p_f_flid_lid, p_f_fiset, p_firstgid) do f_flid_lid, f_fiset, firstgid
-    nlids = sum(map(length,f_flid_lid))
-    lid_gid = zeros(Int,nlids)
-    lid_part = zeros(Int32,nlids)
-    nf = length(f_fiset)
-    gid = firstgid
-    for f in 1:nf
-      fiset = f_fiset[f]
-      fiset_owner_to_local = own_to_local(fiset)
-      flid_lid = f_flid_lid[f]
-      part = part_id(fiset)
-      for foid in 1:own_length(fiset)
-        flid = fiset_owner_to_local[foid]
-        lid = flid_lid[flid]
-        lid_part[lid] = part
-        lid_gid[lid] = gid
-        gid += 1
-      end
-    end
-    lid_gid,lid_part
-  end |> tuple_of_arrays
-
-  # Now we need to propagate to ghost
-  # to this end we use the already available
-  # communicators in each of the single fields
-  # We cannot use the cell wise dof like in the old version
-  # since each field can be defined on an independent mesh.
-  f_aux_gids = map(frange->PVector{Vector{eltype(eltype(p_lid_gid))}}(undef,partition(frange)),f_frange)
-  f_aux_part = map(frange->PVector{Vector{eltype(eltype(p_lid_part))}}(undef,partition(frange)),f_frange)
-  propagate_to_ghost_multifield!(p_lid_gid,f_aux_gids,f_p_flid_lid,f_p_fiset)
-  propagate_to_ghost_multifield!(p_lid_part,f_aux_part,f_p_flid_lid,f_p_fiset)
-
-  p_iset = map(partition(f_frange[1]),p_lid_gid,p_lid_part) do indices,
-                                                               lid_to_gid,
-                                                               lid_to_owner
-     me = part_id(indices)
-     LocalIndices(ngids,me,lid_to_gid,lid_to_owner)
-  end
-
-  # Merge neighbors
-  function merge_neigs(f_neigs)
-    dict = Dict{Int32,Int32}()
-    for f in 1:length(f_neigs)
-      for neig in f_neigs[f]
-        dict[neig] = neig
-      end
-    end
-    collect(keys(dict))
-  end
-
-  f_p_parts_snd, f_p_parts_rcv = map(x->assembly_neighbors(partition(x)),f_frange) |> tuple_of_arrays
-  p_f_parts_snd = map(v,f_p_parts_snd...)
-  p_f_parts_rcv = map(v,f_p_parts_rcv...)
-  p_neigs_snd = map(merge_neigs,p_f_parts_snd)
-  p_neigs_rcv = map(merge_neigs,p_f_parts_rcv)
-
-  exchange_graph = ExchangeGraph(p_neigs_snd,p_neigs_rcv)
-  assembly_neighbors(p_iset;neighbors=exchange_graph)
-
-  PRange(p_iset)
-end
-
-function propagate_to_ghost_multifield!(
-  p_lid_gid,f_gids,f_p_flid_lid,f_p_fiset)
-  # Loop over fields
-  nf = length(f_gids)
-  for f in 1:nf
-    # Write data into owned in single-field buffer
-    gids = f_gids[f]
-    p_flid_gid = gids.vector_partition
-    p_flid_lid = f_p_flid_lid[f]
-    p_fiset = f_p_fiset[f]
-    map(
-      p_flid_gid,p_flid_lid,p_lid_gid,p_fiset) do flid_gid,flid_lid,lid_gid,fiset
-      fiset_own_to_local = own_to_local(fiset)
-      for foid in 1:own_length(fiset)
-        flid = fiset_own_to_local[foid]
-        lid = flid_lid[flid]
-        flid_gid[flid] = lid_gid[lid]
-      end
-    end
-    # move to ghost
-    cache=fetch_vector_ghost_values_cache(partition(gids),p_fiset)
-    fetch_vector_ghost_values!(partition(gids),cache) |> wait
-    # write again into multifield array on ghost ids
-    map(
-      p_flid_gid,p_flid_lid,p_lid_gid,p_fiset) do flid_gid,flid_lid,lid_gid,fiset
-      fiset_ghost_to_local=ghost_to_local(fiset)
-      for fhid in 1:ghost_length(fiset)
-        flid = fiset_ghost_to_local[fhid]
-        lid = flid_lid[flid]
-        lid_gid[lid] = flid_gid[flid]
-      end
-    end
-  end
-end
-
 # BlockSparseMatrixAssemblers
 
 const DistributedBlockSparseMatrixAssembler{R,C} =
@@ -475,7 +369,7 @@ function FESpaces.SparseMatrixAssembler(
   local_vec_type,
   trial::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
   test::DistributedMultiFieldFESpace{<:BlockMultiFieldStyle},
-  par_strategy=SubAssembledRows()
+  par_strategy::FESpaces.AssemblyStrategy=Assembled()
 )
   NBr, SBr, Pr = MultiField.get_block_parameters(MultiFieldStyle(test))
   NBc, SBc, Pc = MultiField.get_block_parameters(MultiFieldStyle(trial))
