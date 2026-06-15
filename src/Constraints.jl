@@ -35,8 +35,8 @@ function generate_distributed_constraints(
     sDOF_to_DOF, sDOF_gids
   )
 
-  return generate_aggregated_space_constraints(
-    sDOF_gids, mfdof_gids, mddof_gids, 
+  return generate_distributed_constraints(
+    sDOF_gids, mfdof_gids, mddof_gids,
     sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
     sDOF_to_mdofs, sDOF_to_coeffs
   )
