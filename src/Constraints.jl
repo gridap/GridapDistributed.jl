@@ -85,11 +85,13 @@ end
 function generate_distributed_constraints(
   cell_gids::PRange, spaces::AbstractArray{<:FESpace}, callback::Tuple, dof_to_constraint
 )
-  dof_is_slave = map(x -> x .> 0, dof_to_constraint)
 
+  # Create constraint gids
+  dof_is_slave = map(x -> x .> 0, dof_to_constraint)
   sDOF_gids, mfdof_gids, mddof_gids, sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof = 
     generate_constraint_gids(cell_gids, spaces, dof_is_slave)
 
+  # Generate partial constraints and merge them into (inconsistent but complete) slave tables 
   nc = length(callback)
   sDOF_to_c = map(getindex, dof_to_constraint, sDOF_to_DOF)
   c_to_csDOF_gids, sDOF_to_csDOF = split_gids_by_color(sDOF_gids, sDOF_to_c, nc)
@@ -116,22 +118,32 @@ function generate_distributed_constraints(
     return sDOF_to_DOFs, sDOF_to_coeffs
   end |> tuple_of_arrays
 
-  sDOF_gids, mfdof_gids, mddof_gids, mDOF_to_dof, sDOF_to_dof, sDOF_to_mdofs, sDOF_to_coeffs = 
-  generate_distributed_constraints(
+  # Make constraints consistent
+  DOF_gids, offsets = concatenate_constraint_gids(
     sDOF_gids, mfdof_gids, mddof_gids,
-    sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
-    sDOF_to_DOFs, sDOF_to_coeffs
+    sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF
+  )
+  new_DOFs = consistent_constraints!(
+    sDOF_gids, DOF_gids, sDOF_to_DOFs, sDOF_to_coeffs
   )
 
-  sDOF_to_dof, sDOF_to_mdofs, sDOF_to_coeffs, _ = map(
-    spaces, sDOF_to_dof, sDOF_to_mdofs, sDOF_to_coeffs, partition(sDOF_gids)
-  ) do space, sDOF_to_dof, sDOF_to_mdofs, sDOF_to_coeffs, sDOF_ids
+  # Close fully consistent constraint tables
+  sDOF_to_dof, sDOF_to_DOFs, sDOF_to_coeffs, _ = map(
+    spaces, sDOF_to_DOF, sDOF_to_DOFs, sDOF_to_coeffs, partition(sDOF_gids)
+  ) do space, sDOF_to_DOF, sDOF_to_DOFs, sDOF_to_coeffs, sDOF_ids
     FESpaces.close_slave_constraint_tables(
-      space, sDOF_to_dof, sDOF_to_mdofs, sDOF_to_coeffs; keys = local_to_global(sDOF_ids)
+      space, sDOF_to_DOF, sDOF_to_DOFs, sDOF_to_coeffs; keys = local_to_global(sDOF_ids)
     )
   end
 
-  return sDOF_gids, mfdof_gids, mddof_gids, mDOF_to_dof, sDOF_to_dof, sDOF_to_mdofs, sDOF_to_coeffs
+  # Reindex DOF tables to signed mDOF indices, expand mfdof/mddof gids, etc..
+  new_mfdof_gids, new_mddof_gids, mDOF_to_dof, sDOF_to_dof = reindex_constraints!(
+    sDOF_gids, mfdof_gids, mddof_gids,
+    sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
+    sDOF_to_DOFs, new_DOFs, offsets
+  )
+
+  return sDOF_gids, new_mfdof_gids, new_mddof_gids, mDOF_to_dof, sDOF_to_dof, sDOF_to_mdofs, sDOF_to_coeffs
 end
 
 ###########################################################################################
