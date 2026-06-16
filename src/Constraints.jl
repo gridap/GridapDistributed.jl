@@ -51,12 +51,10 @@ function generate_distributed_constraints(
 end
 
 function generate_distributed_constraints(
-  sDOF_gids::PRange, mfdof_gids::PRange, mddof_gids::PRange, 
+  sDOF_gids::PRange, mfdof_gids::PRange, mddof_gids::PRange,
   sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
   sDOF_to_DOFs, sDOF_to_coeffs
 )
-
-  # Make tables consistent:
   ids = (sDOF_gids, mfdof_gids, mddof_gids)
   offsets = cumsum((0, map(global_length, ids)...))
   DOF_gids = concatenate_gids(ids, offsets)
@@ -64,21 +62,96 @@ function generate_distributed_constraints(
     sDOF_gids, DOF_gids, sDOF_to_DOFs, sDOF_to_coeffs
   )
 
+  new_mfdof_gids, new_mddof_gids, mDOF_to_dof, sDOF_to_dof = reindex_constraints!(
+    sDOF_gids, mfdof_gids, mddof_gids,
+    sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
+    sDOF_to_DOFs, new_DOFs, offsets
+  )
 
-  mDOF_to_dof, sDOF_to_dof = map(
-    DOF_to_dof, mDOF_to_DOF, sDOF_to_DOF
-  ) do DOF_to_dof, mDOF_to_DOF, sDOF_to_DOF
-    for i in eachindex(mDOF_to_DOF)
-      iszero(mDOF_to_DOF[i]) && continue
-      mDOF_to_DOF[i] = DOF_to_dof[mDOF_to_DOF[i]]
+  return sDOF_gids, new_mfdof_gids, new_mddof_gids, mDOF_to_dof, sDOF_to_dof, sDOF_to_DOFs, sDOF_to_coeffs
+end
+
+# Reindexes the master DOF entries in sDOF_to_DOFs (currently holding extended local DOF
+# indices after consistent_constraints!) to signed local mDOF indices (positive = mfdof,
+# negative = mddof). Also expands mfdof_gids and mddof_gids to include any fictitious
+# master DOFs that arrived from other processors, and produces mDOF_to_dof / sDOF_to_dof.
+#
+# offsets = cumsum((0, global_length(sDOF_gids), global_length(mfdof_gids), global_length(mddof_gids)))
+# new_DOFs: per-part Dict{Int,Tuple{Int32,Int32}} mapping DOF_global_gid → (DOF_lid, owner),
+#           built by consistent_constraints!.
+function reindex_constraints!(
+  sDOF_gids, mfdof_gids, mddof_gids,
+  sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
+  sDOF_to_DOFs, new_DOFs, offsets
+)
+  new_mfdof_indices, new_mddof_indices, mDOF_to_dof, sDOF_to_dof = map(
+    partition(mfdof_gids), partition(mddof_gids),
+    sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
+    sDOF_to_DOFs, new_DOFs
+  ) do mfdof_ids, mddof_ids,
+      sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
+      sDOF_to_DOFs, new_DOFs
+
+    n_DOFs   = length(DOF_to_mDOF)
+    n_mfdofs = length(mfdof_to_DOF)
+    n_mddofs = length(mddof_to_DOF)
+
+    # Classify each fictitious DOF as mfdof or mddof using its global DOF gid,
+    # assign it a new local mDOF lid, and record the DOF_lid → signed_mDOF_lid
+    # mapping needed for the sDOF_to_DOFs conversion below.
+    new_mfdof = Dict{Int,Tuple{Int32,Int32}}()
+    new_mddof = Dict{Int,Tuple{Int32,Int32}}()
+    DOF_lid_to_signed_mDOF = Dict{Int,Int32}()
+    n_new_mfdofs = 0
+    n_new_mddofs = 0
+    for (DOF_gid, (DOF_lid, owner)) in new_DOFs
+      if DOF_gid <= offsets[3]  # mfdof: offsets[2] < DOF_gid <= offsets[3]
+        n_new_mfdofs += 1
+        mfdof_gid = DOF_gid - offsets[2]
+        mfdof_lid = Int32(n_mfdofs + n_new_mfdofs)
+        new_mfdof[mfdof_gid] = (mfdof_lid, owner)
+        DOF_lid_to_signed_mDOF[DOF_lid] = mfdof_lid
+      else  # mddof: offsets[3] < DOF_gid <= offsets[4]
+        n_new_mddofs += 1
+        mddof_gid = DOF_gid - offsets[3]
+        mddof_lid = Int32(n_mddofs + n_new_mddofs)
+        new_mddof[mddof_gid] = (mddof_lid, owner)
+        DOF_lid_to_signed_mDOF[DOF_lid] = -mddof_lid
+      end
     end
-    for i in eachindex(sDOF_to_DOF)
-      sDOF_to_DOF[i] = DOF_to_dof[sDOF_to_DOF[i]]
+
+    # Reindex sDOF_to_DOFs.data in-place: local DOF indices → signed local mDOF indices
+    data = sDOF_to_DOFs.data
+    for k in eachindex(data)
+      DOF = data[k]
+      if DOF <= n_DOFs
+        mDOF = DOF_to_mDOF[DOF]
+        data[k] = (mDOF <= n_mfdofs) ? mDOF : -(mDOF - n_mfdofs)
+      else  # fictitious DOF introduced by consistent_constraints!
+        data[k] = DOF_lid_to_signed_mDOF[DOF]
+      end
     end
-    return mDOF_to_DOF, sDOF_to_DOF
+
+    # mDOF_to_dof layout: [orig mfdofs | new fictitious mfdofs (0) | orig mddofs | new fictitious mddofs (0)]
+    mDOF_to_dof = zeros(Int32, n_mfdofs + n_new_mfdofs + n_mddofs + n_new_mddofs)
+    for (mfdof, DOF) in enumerate(mfdof_to_DOF)
+      mDOF_to_dof[mfdof] = DOF_to_dof[DOF]
+    end
+    mddof_offset = n_mfdofs + n_new_mfdofs
+    for (mddof, DOF) in enumerate(mddof_to_DOF)
+      mDOF_to_dof[mddof_offset + mddof] = DOF_to_dof[DOF]
+    end
+
+    sDOF_to_dof = map(DOF -> DOF_to_dof[DOF], sDOF_to_DOF)
+
+    new_mfdof_ids = expand_gids(mfdof_ids, new_mfdof)
+    new_mddof_ids = expand_gids(mddof_ids, new_mddof)
+    return new_mfdof_ids, new_mddof_ids, mDOF_to_dof, sDOF_to_dof
   end |> tuple_of_arrays
 
-  return sDOF_gids, new_mfdof_gids, new_mddof_gids, mDOF_to_dof, sDOF_to_dof, sDOF_to_mdofs, sDOF_to_coeffs
+  new_mfdof_gids = PRange(new_mfdof_indices)
+  new_mddof_gids = PRange(new_mddof_indices)
+  return new_mfdof_gids, new_mddof_gids, mDOF_to_dof, sDOF_to_dof
 end
 
 function generate_constraint_gids(
