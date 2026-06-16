@@ -56,10 +56,10 @@ function generate_distributed_constraints(
   sDOF_to_DOFs, sDOF_to_coeffs
 )
 
-  offsets = cumsum((0, map(length, (sDOF_gids, mfdof_gids, mddof_gids))...))
-  DOF_gids = map(partition(sDOF_gids), partition(mfdof_gids), partition(mddof_gids)) do s_ids, mf_ids, md_ids
-    concatenate_gids((s_ids, mf_ids, md_ids), offsets)
-  end |> PRange
+  DOF_gids, offsets = concatenate_constraint_gids(
+    sDOF_gids, mfdof_gids, mddof_gids,
+    sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF
+  )
   new_DOFs = consistent_constraints!(
     sDOF_gids, DOF_gids, sDOF_to_DOFs, sDOF_to_coeffs
   )
@@ -226,7 +226,7 @@ function consistent_constraints!(
   sDOF_gids::PRange, DOF_gids::PRange, sDOF_to_DOFs, sDOF_to_coeffs
 )
 
-  # Map to global dofs 
+  # Map to global dofs
   map(sDOF_to_DOFs, partition(DOF_gids)) do sDOF_to_DOFs, DOF_ids
     l2g = local_to_global(DOF_ids)
     data = sDOF_to_DOFs.data
@@ -263,7 +263,7 @@ function consistent_constraints!(
     end
     return new_DOFs
   end
-  
+
   wait(t2)
   return new_DOFs
 end
@@ -295,6 +295,36 @@ function concatenate_gids(
   lid_to_gid = vcat(ntuple(i -> local_to_global(ids[i]) .+ offsets[i], length(ids))...)
   lid_to_owner = vcat(map(local_to_owner, ids)...)
   return LocalIndices(n_global, rank, lid_to_gid, lid_to_owner)
+end
+
+function concatenate_constraint_gids(
+  sDOF_gids::PRange, mfdof_gids::PRange, mddof_gids::PRange,
+  sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF
+)
+  offsets = cumsum((0, map(length, (sDOF_gids, mfdof_gids, mddof_gids))...))
+  DOF_gids_indices = map(
+    partition(sDOF_gids), partition(mfdof_gids), partition(mddof_gids),
+    sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF
+  ) do s_ids, mf_ids, md_ids, sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF
+    n_DOFs = length(sDOF_to_DOF) + length(mfdof_to_DOF) + length(mddof_to_DOF)
+    rank = part_id(s_ids)
+    lid_to_gid   = Vector{Int}(undef, n_DOFs)
+    lid_to_owner = Vector{Int32}(undef, n_DOFs)
+    for (slid, DOF) in enumerate(sDOF_to_DOF)
+      lid_to_gid[DOF]   = local_to_global(s_ids)[slid]  + offsets[1]
+      lid_to_owner[DOF] = local_to_owner(s_ids)[slid]
+    end
+    for (mflid, DOF) in enumerate(mfdof_to_DOF)
+      lid_to_gid[DOF]   = local_to_global(mf_ids)[mflid] + offsets[2]
+      lid_to_owner[DOF] = local_to_owner(mf_ids)[mflid]
+    end
+    for (mdlid, DOF) in enumerate(mddof_to_DOF)
+      lid_to_gid[DOF]   = local_to_global(md_ids)[mdlid] + offsets[3]
+      lid_to_owner[DOF] = local_to_owner(md_ids)[mdlid]
+    end
+    LocalIndices(offsets[end], rank, lid_to_gid, lid_to_owner)
+  end
+  return PRange(DOF_gids_indices), offsets
 end
 
 ###########################################################################################
