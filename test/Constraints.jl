@@ -113,7 +113,7 @@ end
     # On P2, both masters are local: mDOF_to_dof gives their local dof.
     if dof_at(sp, 0.75, 0.5) !== nothing
       d_m1 = dof_at(sp, 0.5, 0.5)
-      d_m2 = coalesce(dof_at(sp, 1.0, 0.5), 0)  # 0 when fictitious on P1
+      d_m2 = something(dof_at(sp, 1.0, 0.5), 0)  # 0 when fictitious on P1
       @test slave_data(sp, sdof_vec, smdofs, scoeffs, mdof_to_dof, 0.75, 0.5) ==
             sort([(d_m1, 0.5), (d_m2, 0.5)])
     end
