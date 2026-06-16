@@ -128,13 +128,26 @@ function generate_distributed_constraints(
   )
 
   # Close fully consistent constraint tables
-  sDOF_to_dof, sDOF_to_DOFs, sDOF_to_coeffs, _ = map(
-    spaces, sDOF_to_DOF, sDOF_to_DOFs, sDOF_to_coeffs, partition(sDOF_gids)
-  ) do space, sDOF_to_DOF, sDOF_to_DOFs, sDOF_to_coeffs, sDOF_ids
-    FESpaces.close_slave_constraint_tables(
-      space, sDOF_to_DOF, sDOF_to_DOFs, sDOF_to_coeffs; keys = local_to_global(sDOF_ids)
+  sDOF_indices, sDOF_to_DOF, sDOF_to_DOFs, sDOF_to_coeffs = map(
+    spaces, new_DOFs, sDOF_to_DOF, sDOF_to_DOFs, sDOF_to_coeffs, partition(sDOF_gids)
+  ) do space, new_DOFs, sDOF_to_DOF, sDOF_to_DOFs, sDOF_to_coeffs, sDOF_ids
+    n_DOFs = num_free_dofs(space) + num_dirichlet_dofs(space) + length(new_DOFs)
+    new_sDOF_to_DOF, new_sDOF_to_DOFs, new_sDOF_to_coeffs, _ = FESpaces.close_slave_constraint_tables(
+      n_DOFs, n_DOFs, sDOF_to_DOF, sDOF_to_DOFs, sDOF_to_coeffs; keys = local_to_global(sDOF_ids)
     )
-  end
+
+    # close! reindexes the constraints locally to follow the topological ordering of the DAG.
+    # We need to apply the same permutation to the sDOF_gids to keep consistency.
+    DOF_to_sDOF = find_inverse_index_map(sDOF_to_DOF, n_DOFs)
+    perm = DOF_to_sDOF[new_sDOF_to_DOF]
+    new_sDOF_ids = LocalIndices(
+      global_length(sDOF_ids), part_id(sDOF_ids), 
+      local_to_global(sDOF_ids)[perm], local_to_owner(sDOF_ids)[perm]
+    )
+    
+    return new_sDOF_ids, new_sDOF_to_DOF, new_sDOF_to_DOFs, new_sDOF_to_coeffs
+  end |> tuple_of_arrays
+  sDOF_gids = PRange(sDOF_indices)
 
   # Reindex DOF tables to signed mDOF indices, expand mfdof/mddof gids, etc..
   new_mfdof_gids, new_mddof_gids, mDOF_to_dof, sDOF_to_dof = reindex_constraints!(
@@ -142,6 +155,7 @@ function generate_distributed_constraints(
     sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
     sDOF_to_DOFs, new_DOFs, offsets
   )
+  sDOF_to_mdofs = sDOF_to_DOFs # Has been reindexed!
 
   return sDOF_gids, new_mfdof_gids, new_mddof_gids, mDOF_to_dof, sDOF_to_dof, sDOF_to_mdofs, sDOF_to_coeffs
 end
