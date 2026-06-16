@@ -517,11 +517,11 @@ function generate_gids_by_color(
 end
 
 """
-    split_gids_by_color(gids::PRange, lid_to_color::AbstractArray, ncolors) -> NTuple{ncolors,PRange}
+    split_gids_by_color(gids::PRange, lid_to_color::AbstractArray, ncolors) -> NTuple{ncolors,PRange}, lid_to_clid
 
 Given a set of global ids and a mapping from local ids to colors, this function splits
 the global ids into different sets of global ids per color. Returns a tuple with a `PRange`
-of `LocalIndices` per color.
+of `LocalIndices` per color and a mapping `lid_to_clid` that maps local ids to local ids per color.
 """
 function split_gids_by_color(
   gids::PRange, lid_to_color::AbstractArray, 
@@ -559,19 +559,29 @@ function split_gids_by_color(
     end
     return lid_to_cgid
   end
-  consistent!(PVector(lid_to_cgid,partition(gids))) |> wait
+
+  t = consistent!(PVector(lid_to_cgid,partition(gids)))
+
+  lid_to_clid = map(lid_to_color) do lid_to_color
+    lid_to_clid = zeros(Int32,length(lid_to_color))
+    offsets = zeros(Int, ncolors)
+    for (lid, color) in enumerate(lid_to_color)
+      offsets[color] += 1
+      lid_to_clid[lid] = offsets[color]
+    end
+    return lid_to_clid
+  end
+
+  wait(t)
 
   color_to_gids = map(
-    partition(gids), lid_to_color, lid_to_cgid, color_to_nlids, color_to_ngids
-  ) do ids, lid_to_color, lid_to_cgid, color_to_nlids, color_to_ngids
+    partition(gids), lid_to_color, lid_to_clid, lid_to_cgid, color_to_nlids, color_to_ngids
+  ) do ids, lid_to_color, lid_to_clid, lid_to_cgid, color_to_nlids, color_to_ngids
     color_to_lid_to_gid = [zeros(Int, n) for n in color_to_nlids]
     color_to_lid_to_owner = [zeros(Int32, n) for n in color_to_nlids]
-    offsets = zeros(Int, ncolors)
-    for (color, cgid, owner) in zip(lid_to_color, lid_to_cgid, local_to_owner(ids))
-      offsets[color] += 1
-      lid = offsets[color]
-      color_to_lid_to_gid[color][lid] = cgid
-      color_to_lid_to_owner[color][lid] = owner
+    for (color, clid, cgid, owner) in zip(lid_to_color, lid_to_clid, lid_to_cgid, local_to_owner(ids))
+      color_to_lid_to_gid[color][clid] = cgid
+      color_to_lid_to_owner[color][clid] = owner
     end
 
     color_to_ids = ()
@@ -585,7 +595,7 @@ function split_gids_by_color(
     return color_to_ids
   end |> tuple_of_arrays
 
-  return map(PRange,color_to_gids)
+  return map(PRange,color_to_gids), lid_to_clid
 end
 
 # FEFunction related
@@ -656,6 +666,11 @@ end
 
 function FESpaces.zero_dirichlet_values(U::DistributedSingleFieldFESpace)
   map(zero_dirichlet_values,U.spaces)
+end
+
+function FESpaces.get_dirichlet_dof_ids(U::DistributedSingleFieldFESpace)
+  spaces = map(FESpaces.DirichletFESpace,U.spaces)
+  return generate_gids(get_triangulation(U),spaces)
 end
 
 function FESpaces.FEFunction(
