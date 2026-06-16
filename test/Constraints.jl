@@ -49,7 +49,7 @@ end
 #         (¾,½) → 0.5·(½,½) + 0.5·(1,½)
 
 np        = (2, 1)
-ranks     = collect(LinearIndices((prod(np),)))
+ranks     = DebugArray(LinearIndices((prod(np),)))
 model     = CartesianDiscreteModel(ranks, np, (0,1,0,1), (4,2))
 V         = FESpace(model, ReferenceFE(lagrangian, Float64, 1))
 cell_gids = GridapDistributed.get_cell_gids(model)

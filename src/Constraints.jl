@@ -55,9 +55,11 @@ function generate_distributed_constraints(
   sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
   sDOF_to_DOFs, sDOF_to_coeffs
 )
-  ids = (sDOF_gids, mfdof_gids, mddof_gids)
-  offsets = cumsum((0, map(global_length, ids)...))
-  DOF_gids = concatenate_gids(ids, offsets)
+
+  offsets = cumsum((0, map(length, (sDOF_gids, mfdof_gids, mddof_gids))...))
+  DOF_gids = map(partition(sDOF_gids), partition(mfdof_gids), partition(mddof_gids)) do s_ids, mf_ids, md_ids
+    concatenate_gids((s_ids, mf_ids, md_ids), offsets)
+  end |> PRange
   new_DOFs = consistent_constraints!(
     sDOF_gids, DOF_gids, sDOF_to_DOFs, sDOF_to_coeffs
   )
@@ -290,9 +292,7 @@ function concatenate_gids(
   @assert length(ids) == length(offsets)-1
   rank = part_id(first(ids))
   n_global = offsets[end]
-  lid_to_gid = ntuple(length(ids)) do i
-    local_to_global(ids[i]) .+ offsets[i]
-  end |> vcat
+  lid_to_gid = vcat(ntuple(i -> local_to_global(ids[i]) .+ offsets[i], length(ids))...)
   lid_to_owner = vcat(map(local_to_owner, ids)...)
   return LocalIndices(n_global, rank, lid_to_gid, lid_to_owner)
 end
