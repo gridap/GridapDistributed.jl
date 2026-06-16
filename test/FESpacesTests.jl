@@ -35,7 +35,7 @@ function gid_generation_tests(distribute,parts)
     return lid_to_color
   end
 
-  fgids_2, dgids_2 = GridapDistributed.split_gids_by_color(
+  (fgids_2, dgids_2), _ = GridapDistributed.split_gids_by_color(
     get_free_dof_ids(V0), lid_to_color
   )
 

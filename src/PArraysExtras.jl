@@ -82,3 +82,7 @@ function _local_range(p,np,n,ghost=false,periodic=false)
   periodic && return start:stop
   return max(1, start):min(n,stop)
 end
+
+# This is type piracy, but I have no other option... 
+
+PArrays.jagged_array(t::Table) = jagged_array(t.data, t.ptrs)

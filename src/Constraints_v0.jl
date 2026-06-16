@@ -57,13 +57,30 @@ function generate_distributed_constraints(
 )
 
   # Make tables consistent:
-  ids = (sDOF_gids, mfdof_gids, mddof_gids)
-  offsets = cumsum((0, map(global_length, ids)...))
-  DOF_gids = concatenate_gids(ids, offsets)
-  new_DOFs = consistent_constraints!(
-    sDOF_gids, DOF_gids, sDOF_to_DOFs, sDOF_to_coeffs
-  )
+  #  - coeffs are straightforward
+  #  - dofs have to be converted to mdof gids, communicated, then converted back to local dofs
+  _sDOF_to_mdofs = map(sDOF_to_DOFs) do sDOF_to_DOFs
+    JaggedArray(sDOF_to_DOFs.data, sDOF_to_DOFs.ptrs)
+  end
+  _sDOF_to_coeffs = map(sDOF_to_coeffs) do sDOF_to_coeffs
+    JaggedArray(sDOF_to_coeffs.data, sDOF_to_coeffs.ptrs)
+  end
+  map(to_global_dofs!, _sDOF_to_mdofs, partition(mfdof_gids), partition(mddof_gids), DOF_to_mDOF)
+  t1 = consistent!(PVector(_sDOF_to_mdofs, partition(sDOF_gids)))
+  t2 = consistent!(PVector(_sDOF_to_coeffs, partition(sDOF_gids)))
+  wait(t1)
 
+  mfdof_indices, mddof_indices, mDOF_to_DOF = map(
+    to_local_dofs!, _sDOF_to_mdofs, 
+    partition(sDOF_gids), partition(mfdof_gids), partition(mddof_gids), 
+    mfdof_to_DOF, mddof_to_DOF
+  ) |> tuple_of_arrays
+  new_mfdof_gids, new_mddof_gids = PRange(mfdof_indices), PRange(mddof_indices)
+  wait(t2)
+
+  # After `to_local_dofs!`, sDOF_to_DOFs has been reindexed to mdof numbering.
+  # I make this explicit by renaming the variable.
+  sDOF_to_mdofs = sDOF_to_DOFs
 
   mDOF_to_dof, sDOF_to_dof = map(
     DOF_to_dof, mDOF_to_DOF, sDOF_to_DOF
@@ -147,81 +164,86 @@ function generate_constraint_gids(
   return sDOF_gids, mfdof_gids, mddof_gids, sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof
 end
 
-function consistent_constraints!(
-  sDOF_gids::PRange, DOF_gids::PRange, sDOF_to_DOFs, sDOF_to_coeffs
-)
-
-  # Map to global dofs 
-  map(sDOF_to_DOFs, partition(DOF_gids)) do sDOF_to_DOFs, DOF_ids
-    l2g = local_to_global(DOF_ids)
-    data = sDOF_to_DOFs.data
-    for k in eachindex(data)
-      iszero(data[k]) && continue
-      data[k] = l2g[data[k]]
+# This is easy, all nonzero entries are local
+function to_global_dofs!(sDOF_to_DOFs, mfdof_ids, mddof_ids, DOF_to_mDOF)
+  n_lmfdofs = local_length(mfdof_ids)
+  n_gmfdofs = global_length(mfdof_ids)
+  mfdof_l2g = local_to_global(mfdof_ids)
+  mddof_l2g = local_to_global(mddof_ids)
+  data = sDOF_to_DOFs.data
+  for k in eachindex(data)
+    iszero(data[k]) && continue
+    mDOF = DOF_to_mDOF[data[k]]
+    if mDOF > n_lmfdofs # mddof
+      data[k] = mddof_l2g[mDOF - n_lmfdofs] + n_gmfdofs
+    else # mfdof
+      data[k] = mfdof_l2g[mDOF]
     end
   end
+end
 
-  t1 = consistent!(PVector(map(jagged_array,sDOF_to_DOFs), partition(sDOF_gids)))
-  t2 = consistent!(PVector(map(jagged_array,sDOF_to_coeffs), partition(sDOF_gids)))
-  wait(t1)
-
-  # Map to local dofs, gather external DOFs
-  new_DOFs = map(sDOF_to_DOFs, partition(DOF_gids), partition(sDOF_gids)) do sDOF_to_DOFs, DOF_ids, sDOF_ids
-    rank = part_id(DOF_ids)
-    n_DOF = length(DOF_ids)
-    new_DOFs = Dict{Int,Tuple{Int32,Int32}}()
-    g2l = global_to_local(DOF_ids)
-    ptrs = sDOF_to_DOFs.ptrs
-    data = sDOF_to_DOFs.data
-    for (sdof,owner) in enumerate(local_to_owner(sDOF_ids))
-      for k in ptrs[sdof]:ptrs[sdof+1]-1
-        @assert !iszero(data[k]) # All entries should be nonzero after communication
-        gid = data[k]
-        lid = g2l[gid]
-        if iszero(lid) # Remote DOF
-          lid, dof_owner = get!(new_DOFs,gid,(n_DOF+1,owner))
-          @assert isequal(dof_owner, owner) && !isequal(owner, rank)
-          n_DOF += isequal(lid,n_DOF+1) # Only increment if new
+# This one is tricky: some nonzero entries will be non-local (i.e roots on other processors).
+# We have to add these to the pre-existing dof numbering.
+function to_local_dofs!(sDOF_to_mdofs, sDOF_ids, mfdof_gids, mddof_gids, mfdof_to_DOF, mddof_to_DOF)
+  rank = part_id(sDOF_ids)
+  n_lmfdofs = local_length(mfdof_gids)
+  n_lmddofs = local_length(mddof_gids)
+  n_gmfdofs = global_length(mfdof_gids)
+  new_mfdof = Dict{Int,Tuple{Int32,Int32}}()
+  new_mddof = Dict{Int,Tuple{Int32,Int32}}()
+  mfdof_g2l = global_to_local(mfdof_gids)
+  mddof_g2l = global_to_local(mddof_gids)
+  ptrs = sDOF_to_mdofs.ptrs
+  data = sDOF_to_mdofs.data
+  for (aggdof,owner) in enumerate(local_to_owner(sDOF_ids))
+    for k in ptrs[aggdof]:ptrs[aggdof+1]-1
+      @assert !iszero(data[k]) # All entries should be nonzero after communication
+      gid = data[k]
+      if gid <= n_gmfdofs # mfdof
+        mdof = mfdof_g2l[gid]
+        if iszero(mdof) # Remote mfdof
+          mdof, mdof_owner = get!(new_mfdof,gid,(n_lmfdofs+1,owner))
+          @assert isequal(mdof_owner,owner) && !isequal(owner, rank)
+          n_lmfdofs += isequal(mdof,n_lmfdofs+1) # Only increment if new
         end
-        data[k] = lid
+      else # mddof
+        gid  = gid - n_gmfdofs
+        mdof = mddof_g2l[gid]
+        if iszero(mdof) # Remote mddof
+          mdof, mdof_owner = get!(new_mddof,gid,(n_lmddofs+1,owner))
+          @assert isequal(mdof_owner,owner) && !isequal(owner, rank)
+          n_lmddofs += isequal(mdof,n_lmddofs+1) # Only increment if new
+        end
+        mdof = -mdof # Mark as mddof
       end
+      data[k] = mdof
     end
-    return new_DOFs
   end
   
-  wait(t2)
-  return new_DOFs
-end
-
-# Can be replaced by union_ghost in PartitionedArrays v0.5
-function expand_gids(gids, new_gids)
-  rank = part_id(gids)
-  n_global = global_length(gids)
-  n_old = local_length(gids)
-  n_new = n_old + length(new_gids)
-  lid_to_gid = Vector{Int}(undef,n_new)
-  lid_to_owner = Vector{Int32}(undef,n_new)
-  lid_to_gid[1:n_old] .= local_to_global(gids)
-  lid_to_owner[1:n_old] .= local_to_owner(gids)
-  for (gid, (lid, owner)) in new_gids
-    lid_to_gid[lid] = gid
-    lid_to_owner[lid] = owner
+  # Create expanded master dof numbering
+  function expand_gids(gids, new_gids)
+    rank = part_id(gids)
+    n_global = global_length(gids)
+    n_old = local_length(gids)
+    n_new = n_old + length(new_gids)
+    lid_to_gid = Vector{Int}(undef,n_new)
+    lid_to_owner = Vector{Int32}(undef,n_new)
+    lid_to_gid[1:n_old] .= local_to_global(gids)
+    lid_to_owner[1:n_old] .= local_to_owner(gids)
+    for (gid, (lid, owner)) in new_gids
+      lid_to_gid[lid] = gid
+      lid_to_owner[lid] = owner
+    end
+    LocalIndices(n_global, rank, lid_to_gid, lid_to_owner)
   end
-  return LocalIndices(n_global, rank, lid_to_gid, lid_to_owner)
-end
+  new_mfdof_gids = expand_gids(mfdof_gids, new_mfdof)
+  new_mddof_gids = expand_gids(mddof_gids, new_mddof)
 
-function concatenate_gids(
-  ids::Tuple, offsets::Tuple = cumsum((0, map(global_length, ids)...))
-)
-  @assert allequal(part_id, ids)
-  @assert length(ids) == length(offsets)-1
-  rank = part_id(first(ids))
-  n_global = offsets[end]
-  lid_to_gid = ntuple(length(ids)) do i
-    local_to_global(ids[i]) .+ offsets[i]
-  end |> vcat
-  lid_to_owner = vcat(map(local_to_owner, ids)...)
-  return LocalIndices(n_global, rank, lid_to_gid, lid_to_owner)
+  mDOF_to_DOF = vcat(
+    mfdof_to_DOF, zeros(Int32,length(new_mfdof)),
+    mddof_to_DOF, zeros(Int32,length(new_mddof))
+  )
+  return new_mfdof_gids, new_mddof_gids, mDOF_to_DOF
 end
 
 ###########################################################################################
