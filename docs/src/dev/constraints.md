@@ -1,77 +1,83 @@
 
 # Distributed Constraints
 
-This is a framework for the implementation of distributed constraints. To reduce the number of communications, we rely on one core invariant:
+This is a framework for the implementation of distributed constraints. To reduce the number of communications, we rely on one core assumption:
 
 > If a slave DoF is **owned** by a process, all its master DoFs are **local** to that process (owned or ghost).
 
-Hanging node constraints, periodicity constraints, and AgFEM constraints can all be implemented within this framework, **provided the local triangulation is built with enough overlap** that this invariant holds. Concretely:
+We later will discuss what steps require this invariant, and how to get around it if it cannot be satisfied.
 
-- **Hanging nodes**: masters are vertices/edges of the across-the-face neighbor cell, which is already inside the standard 1-cell ghost layer.
-- **AgFEM**: the local triangulation is built from owned agglomerates **plus one extra layer of agglomerates**. Since AgFEM background meshes are typically Cartesian, this extra overlap is cheap.
-- **Periodicity**: the local triangulation is extended by one layer on each periodic boundary *at construction time*, and periodic partner nodes are identified through this overlap (e.g. for a 4-segment line split across 2 processors, extend each side by one segment and identify the first node of P1 with the second-to-last node of P2, and vice versa). This requires periodicity information to be known **before partitioning**, which is a real but acceptable cost: it is paid once at mesh-construction time, not as a runtime communication pattern.
+Hanging node constraints, periodicity constraints, and AgFEM constraints can all be implemented within this framework (provided the local triangulation is correctly built, see the AgFEM note for more details).
 
-With sufficient overlap, every owned slave's masters — including masters-of-masters in a chain — are already present in the local triangulation. Chains are therefore resolved **locally**, without any extra communication.
+We will now describe the algorithm at a high-level for both the single-constraint-source and multiple-constraint-source cases, then describe each shared step in more detail.
 
-The two methods the (distributed) `ConstraintHandler` needs to support are the same as in serial:
+## Case 1: single constraint source
 
-- `merge!`: merge several local sets of constraints `A, B, C, ...` into one.
-- `close!`: close the DAG so that no DoF is both a master and a slave.
+This is the conceptually simple case: Our assumption implies that each process can fully resolve its owned constraints. Thus, we can proceed as follows:
 
-In addition we use `consistent!`, with the same meaning as in `PartitionedArrays`: it synchronizes the constraint definition of a DoF from its owner to its ghost copies. There is no need for `assemble!` — constraints are never accumulated across processes, only copied.
+- Provided a globally consistent `DOF_to_is_slave` array, we build (in a single communication step) three global communicators: A slave global numbering (sDOF_gids), a free master global numbering (mfdof_gids), and a Dirichlet master global numbering (mddof_gids).
+- Given sDOF_gids, we call a user-provided callback that allocated all LOCAL constraints and fills up all OWNED constraints. This requires no communication, since all masters of owned slaves are local by assumption.
+- At this point, we have correct OWNED constraints. When then proceed to communicate the GHOST constraints from their owners to the processes that hold them as ghosts (one round of nearest-neighbor communication, similar to consistent!).
+- After this, we have a complete set of globally consistent constraints in DOF local numbering. We can then reindex them to mdof numbering (which is what the space constructor expects).
 
-## Setting up and merging local constraints
+## Case 2: multiple constraint sources
 
-Each process sets up its own local constraints `Ak`, `Bk`, `Ck`, ... for owned slave DoFs. Because of the invariant above (with sufficient overlap), this requires **no communication**: all masters needed are already local.
+This case is a bit more complicated. The key concept is the following:
 
-`merge!(Ak, Bk, Ck, ...)` combines these into a single local set, also with **no communication**.
+- Because our assumption, we can merge the OWNED constraints locally without communication.
+- However, the merged set of OWNED constraints CANNOT be closed (chain resolution) before making it consistent accros processors. Otherwise, a local owned slave might be constrained by a local ghost slave whose masters are not yet available locally, so the chain resolution would fail (or would be incomplete).
+- On the other hand, once the merget set of constraints is made consistent, the chain resolution can be done locally without communication, since every process has a complete local view of the constraint DAG restricted to its local DoFs (owned + ghost + fictitious).
 
-Constraints that this process happens to set up for *non-owned* (ghost) slave DoFs may be incomplete or outdated — they will be overwritten by `consistent!` below, so their presence is harmless.
+The process has to be "locally merge, then consistent, then locally close".
+Thus, we can proceed as follows:
 
-## Making constraints consistent
+- We now provide a globally consistent `DOF_to_constraint` array, which assigns a constraint source to each DOF (0 for unconstrained). Then `DOF_to_is_slave` is given by `DOF_to_constraint .> 0`. We build the same three global communicators as in Case 1, that is a slave global numbering (sDOF_gids), a free master global numbering (mfdof_gids), and a Dirichlet master global numbering (mddof_gids). Note that these are the final global communicators, shared by all constraint sources, not one per source.
+- For each constraint source, we extract the subset of slaves belonging to that source and build the corresponding sub-communicator `csDOF_gids`. This communicator is then provided to the source's callback, which fills up the OWNED constraints for that source.
+- We proceed to merging the OWNED constraints from all sources locally, without communication. This may create chains of master-slave relationships across sources. All these masters are local.
+- We then perform the same communication step as in Case 1 to make the merged set of constraints consistent across processes.
+- At this point, we have a complete, consistent local view of the merged constraint DAG on each process. We can then run `close!` locally on each process to resolve all chains, without any further communication.
+- Finally, we reindex to mdof numbering as in Case 1.
 
-After local merging, each process holds a set of constraints whose **owned slaves are correct**, but whose ghost slaves may not be.
+## Building-block overview
 
-`consistent!` performs **one round of nearest-neighbor communication**: each owner sends the constraint definition (masters + coefficients, by **global** DoF id) of its owned slaves to all processes holding that DoF as a ghost.
+### Building the global communicators
 
-On the receiving side, incoming master DoFs are mapped from global to local ids. If a master's global id does not correspond to any DoF currently in the local index space, a new **fictitious local id** is created for it. This is why the local constraint space may contain DoFs that do not belong to the original local FE space — they exist purely as masters referenced by constraints on local slaves.
+Currently, we do this in a very similar way to how we build DOF communicators for generic spaces. That is, we use an available `cell_gids` communicator together with a `cell_to_DOFs` table. The key thing here is that the slave, free master, and Dirichlet master split creates  a coloring of the local DOFs (each DOF has only one color), so all three communicators can be built with a single cell-based table communication step.
 
-After this single round, every process sees a complete, consistent local view of the constraint DAG restricted to its local DoFs (owned + ghost + fictitious).
+This step is the one that strictly requires the assumption at the beginning. We cannot account for DOFs that do not belong to the local spaces because they do not belong to the local triangulation.
 
-## Closing constraints locally
+### Consistent constraints
 
-`close!` can now be run **independently and locally on each process**, with no further communication. Recall that `close!`'s chain-resolution step is an **iterative substitution to a fixed point** (not a single topological pass): it repeatedly replaces any master that is itself a slave with that master's own masters, until no constrained DoF appears as a master anywhere. For a DAG, this fixed point is uniquely determined by the constraint graph itself — it does **not** depend on:
+To obtain consistent constraints accross processes, we need to have a communicator for the slaves (i.e `sDOF_gids`) and the local constraint tables `sDOF_to_DOFs` and `sDOF_to_coeffs` filled with the OWNED constraints.
 
-- the order constraints are stored/iterated in,
-- the order masters appear within a constraint line,
-- which substitutions happen to occur in which pass.
+Additionally, we need some kind of globally consistent key to be able to communicate master DOFs unambiguously across processes. 
+To this end, we create a single global numbering of all local DOFs (`DOF_gids`) built as a (local and global) concatenation of the three global communicators (slaves first, then free masters, then Dirichlet masters). Each process can compute this numbering locally without communication.
 
-So as long as every process's local DAG (after `consistent!`) agrees on the same global DoFs and the same constraint graph, `close!` produces identical results on every process. **No global ordering or extra communication is needed for this step.**
+The procedure is then simple: Map the DOFs to global ids, communicate using `consistent!` to overwrite ghost slave rows with their owners' definitions, then map back to local DOF ids.
 
-## Canonical ordering for tie-breaking
+After the communication step, we have a consistent set of constraints. However, some ghost constraints may reference master DOFs that do not belong to the local index space. We can these `fictitious` or `remote` DOFs. This means that when mapping back to local DOF ids, we need to keep track and assign new local ids to these fictitious masters, so that they can be referenced in the local constraint tables for chain resolution.
 
-The one place where processes *do* need to agree is **discrete resolution choices** — situations where the algorithm must pick one of several otherwise-equivalent options, and all processes must pick the *same* one.
+### Reindexing to mDOF numbering
 
-The clearest example is resolving an over-determined-but-consistent cycle (e.g. a periodic corner where `A = B`, `B = C`, `C = A` all with coefficient 1): the resolution is to pick one DoF as the canonical master and rewrite the others in terms of it. If two processes pick different DoFs as the master for the same cycle, the resulting constraint sets are mutually inconsistent.
+After consistency, we have a complete set of constraints in DOF local numbering. We then need to reindex them to mDOF numbering, which is what the space constructor expects. This is a purely local step, no communication needed. This reindexing also extends the global communicators for free and Dirichlet masters to cover any fictitious masters that were introduced in the consistency step.
 
-This is solved without communication: any such tie-break must be made using a **canonical, globally shared key** — the **global DoF id** — rather than local array order or local index. E.g. "pick the DoF with the smallest global id as master." Since global ids are already shared (no extra communication), every process makes the same choice given the same set of candidates.
+This reindexing and extension do not require any communication.
 
-**Rule of thumb:** anywhere the algorithm needs to break a tie or pick among equivalent options, sort/compare by global DoF id, never by local index or array position.
+### Local merging of constraints
 
-## Relaxing the invariant: per-source overlap + index set union
+Merging of constraints from multiple sources is purely local, since we are only merging the OWNED constraints and our assumption guarantees that all masters of owned slaves are local.
 
-The core invariant ("owned slave ⇒ local masters") was originally framed as a single global property the local triangulation must satisfy. In practice it is more useful — and easier to satisfy — as a **per-constraint-source** property, reconciled afterwards by a purely local bookkeeping step.
+The main thing to lookout for is that (of course) all constraints must be defined on the same local index space.
+This is also where the assumption is needed: If we allow for remote masters in the owned constraints, the local numbering of these remote masters might be different within each source.
 
-**Each constraint source builds its own index set.** Each source produces a constraint set `A`, `B`, `C`, ... together with **its own partitioned index set**, recording the global ids of any "extra" (fictitious) DoFs it referenced as masters.
+Thus, to remove this assumption we would need to first unify the local index space across sources. This means we would need a global numbering of the original DOFs to be able to identify and match remote masters accross sources.
 
-**Unifying the index sets is local.** Before merging `A`, `B`, `C`, ...:
+### Chain resolution (closing) and topological ordering
 
-1. Take the **union** of their index sets (a set of global ids) — purely local, no communication. This defines a single, process-local numbering covering every DoF (owned, ghost, or fictitious) referenced by any of the sets.
+`close!` can now be run **independently and locally on each process**, with no further communication. The only thing we need is a **global topological ordering** of the DAGs. What I mean by this: 
 
-2. **Reindex** each set's constraints into this unified numbering. Only the fictitious masters need remapping — owned/ghost DoFs already share a common local id across all sets.
+- Imagine we have a slave `A` that is constraines by two other slaves `B` and `C`, such that `B` and `C` do not depend on each other.
+- Because `A` depends on `B` (or `C`), `B` will be resolved BEFORE `A` in ALL processes (since local DAGs are consistent). So this relationship is unambiguous and naturally global.
+- However, since `B` and `C` do not depend on each other, their ordering is not fixed by the DAG structure. Then two different processes might resolve `B` before `C` and the other way around, which would lead to different final constraints after closing.
 
-After reindexing, every master referenced by any set has a valid local id in the unified space — i.e. the invariant now holds *for the merged set*, even though no single set satisfied it w.r.t. a common index space beforehand. `merge!`, `close!`, and the final `consistent!` then proceed exactly as described above.
-
-This works without extra communication because of a simple fact: `merge!` never introduces a master that wasn't already a master in one of the input sets. So if each source's index set already covers every master *that source* refers to (a per-source requirement, no harder than the single-source case), the union automatically covers every master in the merged set — including cross-source chains (e.g. a slave in `A`'s overlap that turns out to be defined as a slave by `B`: its master, in turn, is necessarily in `B`'s index set, hence in the union).
-
-**Free vs. slave-valued masters.** The invariant only needs to hold for masters that are themselves **slaves** — those are the ones whose *definition* must be locally available for `close!`'s substitution to work. A master that is **free** (unconstrained) never needs a local id at all for `close!`'s purposes: it can remain a bare global-id reference, à la deal.II, resolved only at assembly/`distribute(x)` time like any other off-process DoF. This shrinks the overlap each source actually needs to provide.
+This second case is the one where we need a global tie-breaking rule to ensure that all processes make the same choice. In practice, this is very simple: We just need to provode a globally-consistent key (e.g. global DoF id) to be used within a priority queue to create the topological ordering. This way, all processes will break ties in the same way and end up with the same closed constraints.

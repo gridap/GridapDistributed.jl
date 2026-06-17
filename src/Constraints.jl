@@ -82,6 +82,13 @@ end
 # In the below implementation, `dof_to_constraint` is an array that, for each local dof, 
 # gives the constraint set it belongs to (0 for unconstrained dofs).
 # In particular we have `dof_is_slave = dof_to_constraint .> 0`.
+#
+# This also means that only ONE constraint can be applied to each DOF 
+# (i.e. we cannot arbitrarily combine constraints from different sets on the same DOF).
+# Also, this means that, for each constraint set, 
+#    `` c_callback(csDOF_to_DOF, csDOF_gids) ``
+# might not asked for ALL possible slaves in that set, but only a subset of them
+# (e.g. only the ones that have been selected). The callbacks need to account for that.
 function generate_distributed_constraints(
   cell_gids::PRange, spaces::AbstractArray{<:FESpace}, callback::Tuple, dof_to_constraint
 )
@@ -144,7 +151,7 @@ function generate_distributed_constraints(
       global_length(sDOF_ids), part_id(sDOF_ids), 
       local_to_global(sDOF_ids)[perm], local_to_owner(sDOF_ids)[perm]
     )
-    
+
     return new_sDOF_ids, new_sDOF_to_DOF, new_sDOF_to_DOFs, new_sDOF_to_coeffs
   end |> tuple_of_arrays
   sDOF_gids = PRange(sDOF_indices)
