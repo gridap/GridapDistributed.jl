@@ -2,14 +2,14 @@
 ## OPTION 1: Single-constraint set, generated from local spaces and local masters.
 
 # This function REQUIRES that :
-#   - all `mdofs` are LOCAL (i.e. no masters on other processors)
+#   - all `DOFs` are LOCAL (i.e. no masters on other processors)
 #   - The OWNED constraints are filled in, GHOST constraints are allocated (but will be thrown away)
 #
 # The reason we require this is because we rely on the local space cell_to_dofs to generate
 # the global constraint and master gids. 
 function generate_distributed_constraints(
   cell_gids::PRange, spaces::AbstractArray{<:FESpace},
-  _sDOF_to_dof, sDOF_to_mdofs, sDOF_to_coeffs
+  _sDOF_to_dof, sDOF_to_DOFs, sDOF_to_coeffs
 )
   dof_is_slave = map(spaces, _sDOF_to_dof) do space, _sDOF_to_dof
     dof_is_slave = fill(false, num_free_dofs(space))
@@ -20,7 +20,7 @@ function generate_distributed_constraints(
   sDOF_gids, mfdof_gids, mddof_gids, sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof = 
     generate_constraint_gids(cell_gids, spaces, dof_is_slave)
 
-  map(sDOF_to_DOF, _sDOF_to_dof, sDOF_to_mdofs, sDOF_to_coeffs) do sDOF_to_DOF, _sDOF_to_dof, sDOF_to_mdofs, sDOF_to_coeffs
+  map(sDOF_to_DOF, _sDOF_to_dof, sDOF_to_DOFs, sDOF_to_coeffs) do sDOF_to_DOF, _sDOF_to_dof, sDOF_to_DOFs, sDOF_to_coeffs
     @notimplementedif sDOF_to_DOF != _sDOF_to_dof """
       TODO: Apply permutation to tables
     """
@@ -29,7 +29,7 @@ function generate_distributed_constraints(
   return generate_distributed_constraints(
     sDOF_gids, mfdof_gids, mddof_gids, 
     sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
-    sDOF_to_mdofs, sDOF_to_coeffs
+    sDOF_to_DOFs, sDOF_to_coeffs
   )
 end
 
@@ -41,12 +41,12 @@ function generate_distributed_constraints(
   sDOF_gids, mfdof_gids, mddof_gids, sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof = 
     generate_constraint_gids(cell_gids, spaces, dof_is_slave)
 
-  sDOF_to_mdofs, sDOF_to_coeffs = callback(sDOF_to_DOF, sDOF_gids)
+  sDOF_to_DOFs, sDOF_to_coeffs = callback(sDOF_to_DOF, sDOF_gids)
 
   return generate_distributed_constraints(
     sDOF_gids, mfdof_gids, mddof_gids,
     sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
-    sDOF_to_mdofs, sDOF_to_coeffs
+    sDOF_to_DOFs, sDOF_to_coeffs
   )
 end
 
@@ -293,7 +293,7 @@ end
 # new_DOFs: per-part Dict{Int,Tuple{Int32,Int32}} mapping DOF_global_gid → (DOF_lid, owner),
 #           built by consistent_constraints!.
 function reindex_constraints!(
-  sDOF_gids, mfdof_gids, mddof_gids,
+  sDOF_gids::PRange, mfdof_gids::PRange, mddof_gids::PRange,
   sDOF_to_DOF, mfdof_to_DOF, mddof_to_DOF, DOF_to_mDOF, DOF_to_dof,
   sDOF_to_DOFs, new_DOFs, offsets
 )
