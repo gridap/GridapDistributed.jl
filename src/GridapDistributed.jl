@@ -74,4 +74,6 @@ include("Redistribution.jl")
 
 include("Adaptivity.jl")
 
+include("Constraints.jl")
+
 end # module
