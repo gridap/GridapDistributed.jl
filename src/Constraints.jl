@@ -199,7 +199,7 @@ function generate_constraint_gids(
 end
 
 function generate_constraint_gids(
-  cell_gids::PRange, cell_to_DOFs::AbstractArray{<:Table}, DOF_is_slave, DOF_to_dof
+  cell_gids::PRange, cell_to_DOFs::AbstractArray, DOF_is_slave, DOF_to_dof
 )
   # Create pos/neg local numberings
   DOF_to_color = map(DOF_is_slave, DOF_to_dof) do DOF_is_slave, DOF_to_dof
