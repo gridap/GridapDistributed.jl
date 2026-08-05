@@ -2,12 +2,33 @@
 struct WithGhost end
 struct NoGhost end
 
+"""
+    with_ghost
+
+Sentinel value passed to triangulation and FE-function accessors to request that
+ghost (off-processor) entries be included in the returned local array.
+
+See also [`no_ghost`](@ref).
+"""
 const with_ghost = WithGhost()
+
+"""
+    no_ghost
+
+Sentinel value passed to triangulation and FE-function accessors to request that
+only owned (on-processor) entries be included in the returned local array.
+
+See also [`with_ghost`](@ref).
+"""
 const no_ghost = NoGhost()
 
 # We do not inherit from Grid on purpose.
 # This object cannot implement the Grid interface in a strict sense
 """
+    DistributedGrid{Dc,Dp,A} <: GridapType
+
+Distributed counterpart of Gridap's `Grid`. Wraps a distributed array of local
+`Grid` objects.
 """
 struct DistributedGrid{Dc,Dp,A} <: GridapType
   grids::A
@@ -37,6 +58,11 @@ Geometry.num_point_dims(::Type{<:DistributedGrid{Dc,Dp}}) where {Dc,Dp} = Dp
 # We do not inherit from GridTopology on purpose.
 # This object cannot implement the GridTopology interface in a strict sense
 """
+    DistributedGridTopology{Dc,Dp,A,B} <: GridapType
+
+Distributed counterpart of Gridap's `GridTopology`. Stores a distributed array of
+local topologies together with distributed index ranges for each
+face dimension.
 """
 struct DistributedGridTopology{Dc,Dp,A,B} <: GridapType
   topos::A
@@ -122,7 +148,7 @@ function _setup_consistent_faces!(topo::DistributedGridTopology, dimfrom::Intege
     JaggedArray(lfrom_to_lto.data, lfrom_to_lto.ptrs)
   end
   wait(consistent!(PVector(lfrom_to_gto, gids_from)))
-  map(lfrom_to_gto, gids_to) do lfrom_to_gto, gids_to
+  foreach(lfrom_to_gto, gids_to) do lfrom_to_gto, gids_to
     to_local!(lfrom_to_gto.data, gids_to)
   end
   return nothing
@@ -169,6 +195,11 @@ function Geometry.get_isboundary_face(topo::DistributedGridTopology, d::Integer)
 end
 
 """
+    DistributedFaceLabeling{A} <: GridapType
+
+Distributed counterpart of Gridap's `FaceLabeling`. Wraps a distributed array of
+local `FaceLabeling` objects. Tags are applied locally on each rank and do NOT need to be 
+consistent; consistency across must be ensured explicitly by the user.
 """
 struct DistributedFaceLabeling{A<:AbstractArray{<:FaceLabeling}}
   labels::A
@@ -215,13 +246,27 @@ end
 # This object cannot implement the DiscreteModel interface in a strict sense
 
 """
+    DistributedDiscreteModel{Dc,Dp} <: GridapType
+
+Abstract type for distributed mesh models. Each MPI rank holds a local portion of the
+mesh (owned cells + ghost cells).
 """
 abstract type DistributedDiscreteModel{Dc,Dp} <: GridapType end
 
+"""
+    get_cell_gids(model::DistributedDiscreteModel) -> PRange
+
+Return the `PRange` of global cell indices for the distributed model.
+"""
 function get_cell_gids(model::DistributedDiscreteModel{Dc}) where Dc
   @abstractmethod
 end
 
+"""
+    get_face_gids(model::DistributedDiscreteModel, dim::Integer) -> PRange
+
+Return the `PRange` of global `dim`-face indices for the distributed model.
+"""
 function get_face_gids(model::DistributedDiscreteModel,dim::Integer)
   @abstractmethod
 end
@@ -268,6 +313,11 @@ function Geometry.get_face_labeling(model::DistributedDiscreteModel)
 end
 
 """
+    GenericDistributedDiscreteModel{Dc,Dp,A,B,C} <: DistributedDiscreteModel{Dc,Dp}
+
+Standard concrete implementation of [`DistributedDiscreteModel`](@ref). Stores a
+distributed array of local `DiscreteModel` objects (`models`) and a vector of
+`PRange` objects for each face dimension (`face_gids`).
 """
 struct GenericDistributedDiscreteModel{Dc,Dp,A,B,C} <: DistributedDiscreteModel{Dc,Dp}
   models::A
@@ -609,6 +659,13 @@ end
 # We do not inherit from Triangulation on purpose.
 # This object cannot implement the Triangulation interface in a strict sense
 """
+    DistributedTriangulation{Dc,Dp,A,B,C} <: GridapType
+
+Distributed counterpart of Gridap's `Triangulation`. Wraps a distributed array of
+local triangulations (one per rank).
+
+Constructed from a `DistributedDiscreteModel` using the standard Gridap constructors:
+`Triangulation(model)`, `Boundary(model, tags=...)`, etc.
 """
 struct DistributedTriangulation{Dc,Dp,A,B,C} <: GridapType
   trians  ::A
@@ -795,12 +852,12 @@ end
 # Filtering cells
 
 @inline function filter_cells_when_needed(
-  portion::Union{WithGhost,FullyAssembledRows},cell_gids,trian)
+  portion::Union{WithGhost,LocallyAssembled},cell_gids,trian)
   return trian
 end
 
 @inline function filter_cells_when_needed(
-  portion::Union{NoGhost,SubAssembledRows},cell_gids,trian)
+  portion::Union{NoGhost,Assembled},cell_gids,trian)
   return remove_ghost_cells(trian,cell_gids)
 end
 
@@ -957,12 +1014,12 @@ function generate_cell_gids(dtrian::DistributedTriangulation)
   generate_cell_gids(dmodel,dtrian)
 end
 
-function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
-                            dtrian::DistributedTriangulation{Dt}) where {Dm,Dt}
-
+function generate_cell_gids(
+  dmodel::DistributedDiscreteModel{Dm},
+  dtrian::DistributedTriangulation{Dt}
+) where {Dm,Dt}
   mgids = get_face_gids(dmodel,Dt)
-  covers_all_faces = _covers_all_faces(dmodel,dtrian)
-  if (covers_all_faces)
+  if _covers_all_faces(dmodel,dtrian)
     tgids = mgids
   else
     tcell_to_mcell = map(local_views(dtrian)) do trian
@@ -973,45 +1030,4 @@ function generate_cell_gids(dmodel::DistributedDiscreteModel{Dm},
     tgids = restrict_gids(mgids,tcell_to_mcell)
   end
   return tgids
-end
-
-function restrict_gids(gids::PRange, new_to_old_lid::AbstractArray)
-
-  n_own = map(partition(gids), new_to_old_lid) do ids, n2o_lid
-    rank = part_id(ids)
-    return count(isequal(rank), view(local_to_owner(ids), n2o_lid)) 
-  end
-
-  # Assign global ids to owned lids
-  first_gid = scan(+,n_own,type=:exclusive,init=one(eltype(n_own)))
-  
-  old_lid_to_new_gid = map(first_gid,new_to_old_lid,partition(gids)) do first_gid, n2o_lid, ids
-    old_lid_to_new_gid = zeros(Int,local_length(ids))
-    old_lid_to_owner = local_to_owner(ids)
-    rank = part_id(ids)
-    gid = first_gid
-    for old in n2o_lid
-      if old_lid_to_owner[old] == rank
-        old_lid_to_new_gid[old] = gid
-        gid += 1
-      end
-    end
-    return old_lid_to_new_gid
-  end
-
-  consistent!(PVector(old_lid_to_new_gid,partition(gids))) |> wait
-
-  # Prepare new partition
-  n_gids = reduction(+,n_own,destination=:all,init=zero(eltype(n_own)))
-
-  new_indices = map(
-    n_gids, old_lid_to_new_gid, new_to_old_lid, partition(gids)
-  ) do n_gids, old_lid_to_new_gid, new_to_old_lid, ids
-    lid_to_gid = old_lid_to_new_gid[new_to_old_lid]
-    lid_to_owner  = local_to_owner(ids)[new_to_old_lid]
-    return LocalIndices(n_gids,part_id(ids),lid_to_gid,lid_to_owner)
-  end
-  _find_neighbours!(new_indices, partition(gids))
-
-  return PRange(new_indices)
 end

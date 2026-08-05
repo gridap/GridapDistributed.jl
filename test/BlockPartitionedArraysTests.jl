@@ -77,4 +77,4 @@ function main(distribute, parts)
   @test norm(v4) ≈ 6.0 * sqrt(2*n_global)
 end
 
-end # module
+end

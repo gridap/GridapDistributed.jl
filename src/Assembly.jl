@@ -1,0 +1,490 @@
+
+# Parallel assembly strategies
+
+"""
+    Assembled <: AssemblyStrategy
+
+Standard parallel assembly strategy. Local contributions from ghost cells are
+communicated to their owning ranks and summed. The result is a fully consistent
+global `PSparseMatrix` / `PVector` with each row owned by exactly one rank.
+
+This is the DEFAULT strategy for all standard FE problems.
+"""
+struct Assembled <: FESpaces.AssemblyStrategy end
+
+"""
+    SubAssembled <: AssemblyStrategy
+
+Sub-assembled strategy. Each rank assembles only over its owned cells; no
+communication of ghost-cell contributions is performed. Ghost-DOF rows are left
+incomplete. Intended for subdomain-based methods (e.g. domain decomposition) that
+handle the interface coupling themselves.
+"""
+struct SubAssembled <: FESpaces.AssemblyStrategy end
+
+"""
+    LocallyAssembled <: AssemblyStrategy
+
+Local-only assembly strategy. Each rank assembles over both owned and ghost cells,
+but only owned-DOF rows are kept; ghost-DOF contributions are discarded. This ASSUMES
+that all local contributions for owned rows can be computed locally, without communication.
+
+WARNING: This is NOT true in general and might yield incorrect assembled systems. 
+Use with caution and only if you know what you are doing.
+"""
+struct LocallyAssembled <: FESpaces.AssemblyStrategy end
+
+function local_assembly_strategy(::Union{Assembled,SubAssembled},rows,cols)
+  DefaultAssemblyStrategy()
+end
+
+# When LocallyAssembling, make sure that you also loop over ghost cells.
+function local_assembly_strategy(::LocallyAssembled,rows,cols)
+  rows_local_to_ghost = local_to_ghost(rows)
+  GenericAssemblyStrategy(
+    identity,
+    identity,
+    row->iszero(rows_local_to_ghost[row]),
+    col->true
+  )
+end
+
+# PSparseMatrix and PVector builders
+
+"""
+    DistributedArrayBuilder{T,N,B}
+
+Builder object used by Gridap's assembly machinery to allocate distributed arrays
+(`PVector` or `PSparseMatrix`). `T` is the local array type, `N` its dimensionality
+(1 for vectors, 2 for matrices), and `B` the assembly strategy.
+
+Constructed automatically by `SparseMatrixAssembler` — users rarely need to build
+this directly.
+"""
+struct DistributedArrayBuilder{T,N,B}
+  local_array_type::Type{T}
+  strategy::B
+  function DistributedArrayBuilder(
+    local_array_type::Type{T},
+    strategy::AssemblyStrategy
+  ) where T
+    N = ndims(T)
+    B = typeof(strategy)
+    new{T,N,B}(local_array_type,strategy)
+  end
+end
+
+const PVectorBuilder{T,B} = DistributedArrayBuilder{T,1,B}
+const PSparseMatrixBuilder{T,B} = DistributedArrayBuilder{T,2,B}
+
+function Algebra.get_array_type(::PSparseMatrixBuilder{Tm}) where Tm
+  T = eltype(Tm)
+  return PSparseMatrix{T}
+end
+
+function Algebra.get_array_type(::PVectorBuilder{Tv}) where Tv
+  T = eltype(Tv)
+  return PVector{T}
+end
+
+# Distributed counters and allocators
+
+"""
+    DistributedCounter{S,T,N} <: GridapType
+
+Distributed N-dimensional counter, with local counters of type T.
+Follows assembly strategy S.
+"""
+struct DistributedCounter{S,T,N,A,B} <: GridapType
+  counters :: A
+  axes     :: B
+  strategy :: S
+  function DistributedCounter(
+    counters :: AbstractArray{T},
+    axes     :: NTuple{N,<:PRange},
+    strategy :: AssemblyStrategy
+  ) where {T,N}
+    A, B, S = typeof(counters), typeof(axes), typeof(strategy)
+    new{S,T,N,A,B}(counters,axes,strategy)
+  end
+end
+
+Base.axes(a::DistributedCounter) = a.axes
+Base.axes(a::DistributedCounter,d::Integer) = a.axes[d]
+local_views(a::DistributedCounter) = a.counters
+
+function local_views(a::DistributedCounter,axes::PRange...)
+  @check all(map(PArrays.matching_local_indices,axes,a.axes))
+  return a.counters
+end
+
+const PVectorCounter{S,T,A,B} = DistributedCounter{S,T,1,A,B}
+Algebra.LoopStyle(::Type{<:PVectorCounter}) = DoNotLoop()
+
+const PSparseMatrixCounter{S,T,A,B} = DistributedCounter{S,T,2,A,B}
+Algebra.LoopStyle(::Type{<:PSparseMatrixCounter}) = Loop()
+
+"""
+    DistributedAllocation{S,T,N} <: GridapType
+
+Distributed N-dimensional allocator, with local allocators of type T. 
+Follows assembly strategy S.
+"""
+struct DistributedAllocation{S,T,N,A,B} <: GridapType
+  allocs   :: A
+  axes     :: B
+  strategy :: S
+  function DistributedAllocation(
+    allocs   :: AbstractArray{T},
+    axes     :: NTuple{N,<:PRange},
+    strategy :: AssemblyStrategy
+  ) where {T,N}
+    A, B, S = typeof(allocs), typeof(axes), typeof(strategy)
+    new{S,T,N,A,B}(allocs,axes,strategy)
+  end
+end
+
+Base.axes(a::DistributedAllocation) = a.axes
+Base.axes(a::DistributedAllocation,d::Integer) = a.axes[d]
+local_views(a::DistributedAllocation) = a.allocs
+
+function local_views(a::DistributedAllocation,axes::PRange...)
+  @check all(map(PArrays.matching_local_indices,axes,a.axes))
+  return a.allocs
+end
+
+function change_axes(a::DistributedAllocation{S,T,N},axes::NTuple{N,<:PRange}) where {S,T,N}
+  indices = map(partition,axes)
+  local_axes = map(indices...) do indices...
+    map(ids -> Base.OneTo(local_length(ids)), indices)
+  end
+  allocs = map(change_axes,a.allocs,local_axes)
+  DistributedAllocation(allocs,axes,a.strategy)
+end
+
+const PVectorAllocation{S,T} = DistributedAllocation{S,T,1}
+const PSparseMatrixAllocation{S,T} = DistributedAllocation{S,T,2}
+
+function get_allocations(a::PSparseMatrixAllocation{S,<:Algebra.AllocationCOO}) where S
+  I,J,V = map(local_views(a)) do alloc
+    alloc.I, alloc.J, alloc.V
+  end |> tuple_of_arrays
+  return I,J,V
+end
+
+function collect_touched_ids(a::PVectorAllocation{S,<:TrackedArrayAllocation}) where S
+  touched_ids = map(local_views(a),partition(axes(a,1))) do a, ids
+    n_global = global_length(ids)
+    rows = remove_ghost(unpermute(ids))
+
+    ghost_lids = ghost_to_local(ids)
+    touched_ghost_lids = collect(Int,filter(lid -> a.touched[lid], ghost_lids))
+    touched_ghost_owners = local_to_owner(ids)[touched_ghost_lids]
+    touched_ghost_gids = to_global!(touched_ghost_lids, ids)
+    ghost = GhostIndices(n_global,touched_ghost_gids,touched_ghost_owners)
+    replace_ghost(rows,ghost)
+  end
+  return touched_ids
+end
+
+# PSparseMatrix assembly chain
+#
+#   1 - nz_counter(PSparseMatrixBuilder) -> PSparseMatrixCounter
+#   2 - nz_allocation(PSparseMatrixCounter) -> PSparseMatrixAllocation
+#   3 - create_from_nz(PSparseMatrixAllocation) -> PSparseMatrix
+
+function Algebra.nz_counter(builder::PSparseMatrixBuilder{MT},axs::NTuple{2,<:PRange}) where MT
+  rows, cols = axs # test ids, trial ids
+  counters = map(partition(rows),partition(cols)) do rows, cols
+    local_axs = (Base.OneTo(local_length(rows)),Base.OneTo(local_length(cols)))
+    Algebra.CounterCOO{MT}(local_axs)
+  end
+  DistributedCounter(counters,axs,builder.strategy)
+end
+
+function Algebra.nz_allocation(a::PSparseMatrixCounter)
+  allocs = map(nz_allocation,local_views(a))
+  DistributedAllocation(allocs,a.axes,a.strategy)
+end
+
+function Algebra.create_from_nz(a::PSparseMatrix)
+  assemble!(a) |> wait
+  return a
+end
+
+function Algebra.create_from_nz(a::PSparseMatrixAllocation{<:LocallyAssembled})
+  A, = create_from_nz_locally_assembled(a)
+  return A
+end
+
+function Algebra.create_from_nz(a::PSparseMatrixAllocation{<:Assembled})
+  A, = create_from_nz_assembled(a)
+  return A
+end
+
+function Algebra.create_from_nz(a::PSparseMatrixAllocation{<:SubAssembled})
+  A, = create_from_nz_subassembled(a)
+  return A
+end
+
+# PVector assembly chain:
+#
+#   1 - nz_counter(PVectorBuilder) -> PVectorCounter
+#   2 - nz_allocation(PVectorCounter) -> PVectorAllocation
+#   3 - create_from_nz(PVectorAllocation) -> PVector
+
+function Algebra.nz_counter(builder::PVectorBuilder{VT},axs::NTuple{1,<:PRange}) where VT
+  rows, = axs
+  counters = map(partition(rows)) do rows
+    axs = (Base.OneTo(local_length(rows)),)
+    nz_counter(ArrayBuilder(VT),axs)
+  end
+  DistributedCounter(counters,(rows,),builder.strategy)
+end
+
+function Arrays.nz_allocation(a::PVectorCounter{<:Union{LocallyAssembled,SubAssembled}})
+  allocs = map(nz_allocation,local_views(a))
+  DistributedAllocation(allocs,a.axes,a.strategy)
+end
+
+function Arrays.nz_allocation(a::PVectorCounter{<:Assembled})
+  values = map(nz_allocation,local_views(a))
+  allocs = map(TrackedArrayAllocation,values)
+  return DistributedAllocation(allocs,a.axes,a.strategy)
+end
+
+function rhs_callback(b::PVectorAllocation{<:Union{LocallyAssembled,SubAssembled}}, rows)
+  b_fespace = PVector(local_views(b), partition(axes(b,1)))
+  locally_repartition(b_fespace, rows)
+end
+
+function rhs_callback(b::PVectorAllocation{<:Assembled}, rows)
+  new_indices = collect_touched_ids(b)
+  values = map(ai -> ai.values, local_views(b))
+  b_fespace = PVector(values, partition(axes(b,1)))
+  locally_repartition(b_fespace, new_indices)
+end
+
+function Algebra.create_from_nz(a::PVector)
+  assemble!(a) |> wait
+  return a
+end
+
+function Algebra.create_from_nz(a::PVectorAllocation{<:Assembled,<:AbstractVector})
+  # This point MUST NEVER be reached. If reached there is an inconsistency
+  # in the parallel code in charge of vector assembly
+  @unreachable
+end
+
+function Algebra.create_from_nz(a::PVectorAllocation{<:Union{LocallyAssembled,SubAssembled}})
+  rows = map(remove_ghost, map(unpermute, partition(axes(a,1))))
+  return rhs_callback(a, rows)
+end
+
+function Algebra.create_from_nz(a::PVectorAllocation{<:Assembled})
+  rows = collect_touched_ids(a)
+  b = rhs_callback(a, rows)
+  t2 = assemble!(b)
+  !isnothing(t2) && wait(t2)
+  return b
+end
+
+# PSystem assembly chain:
+#
+# When assembling a full system (matrix + vector), it is more efficient to 
+# overlap communications the assembly of the matrix and the vector.
+# Not only it is faster, but also necessary to ensure identical ghost indices 
+# in both the matrix and vector rows.
+# This is done by using the following specializations:
+
+function Arrays.nz_allocation(
+  a::PSparseMatrixCounter, b::PVectorCounter
+)
+  return nz_allocation(a), nz_allocation(b)
+end
+
+function Algebra.create_from_nz(
+  a::PSparseMatrixAllocation{<:LocallyAssembled},
+  b::PVectorAllocation{<:LocallyAssembled}
+)
+  A, B = create_from_nz_locally_assembled(a, Base.Fix1(rhs_callback,b))
+  return A, B
+end
+
+function Algebra.create_from_nz(
+  a::PSparseMatrixAllocation{<:Assembled},
+  b::PVectorAllocation{<:Assembled}
+)
+  A, B = create_from_nz_assembled(a, Base.Fix1(rhs_callback,b), assemble!)
+  return A, B
+end
+
+function Algebra.create_from_nz(
+  a::PSparseMatrixAllocation{<:SubAssembled},
+  b::PVectorAllocation{<:SubAssembled}
+)
+  A, B = create_from_nz_subassembled(a, Base.Fix1(rhs_callback,b))
+  return A, B
+end
+
+# Low-level assembly methods
+
+function create_from_nz_locally_assembled(
+  a,
+  callback::Function = rows -> nothing
+)
+  I,J,V = get_allocations(a)
+  test_ids = partition(axes(a,1))
+  trial_ids = partition(axes(a,2))
+
+  rows = map(remove_ghost,map(unpermute,test_ids))
+  b = callback(rows)
+
+  foreach(map_local_to_global!,I,test_ids)
+  foreach(map_local_to_global!,J,trial_ids)
+
+  cols = map(unpermute,trial_ids)
+
+  foreach(map_global_to_local!,I,rows)
+  foreach(map_global_to_local!,J,cols)
+
+  assembled = true
+  a_sys = change_axes(a,(PRange(rows),PRange(cols)))
+  values = map(create_from_nz,local_views(a_sys))
+  A = PSparseMatrix(values,rows,cols,assembled)
+
+  return A, b
+end
+
+function create_from_nz_assembled(
+  a,
+  callback::Function = rows -> nothing,
+  async_callback::Function = b -> empty_async_task
+)
+  I,J,V = get_allocations(a)
+  test_ids = partition(axes(a,1))
+  trial_ids = partition(axes(a,2))
+
+  # convert I and J to global dof ids
+  foreach(map_local_to_global!,I,test_ids)
+  foreach(map_local_to_global!,J,trial_ids)
+
+  # Overlapped COO communication and vector assembly
+  rows = filter_and_replace_ghost(map(unpermute,test_ids),I)
+  t = PArrays.assemble_coo!(I,J,V,rows)
+  b = callback(rows)
+  wait(t)
+
+  # Overlap rhs communications with CSC compression
+  t2 = async_callback(b)
+  cols = filter_and_replace_ghost(map(unpermute,trial_ids),J)
+
+  foreach(map_global_to_local!,I,rows)
+  foreach(map_global_to_local!,J,cols)
+
+  assembled = true
+  a_sys = change_axes(a,(PRange(rows),PRange(cols)))
+  values = map(create_from_nz,local_views(a_sys))
+  A = PSparseMatrix(values,rows,cols,assembled)
+
+  wait(t2)
+  return A, b
+end
+
+function create_from_nz_subassembled(
+  a,
+  callback::Function = rows -> nothing,
+)
+  rows = partition(axes(a,1))
+  cols = partition(axes(a,2))
+
+  b = callback(rows)
+
+  assembled = false
+  values = map(create_from_nz,local_views(a))
+  A = PSparseMatrix(values,rows,cols,assembled)
+
+  return A, b
+end
+
+# Block matrix assembly (Assembled strategy)
+#
+# Gridap's generic create_from_nz(a::ArrayBlock) calls create_from_nz per block
+# independently, producing different row/col PRanges per block → mortar check fails.
+# These dispatches intercept the block case and compute SHARED PRanges by unioning
+# the nonzero indices across all blocks in each block-row and block-col.
+
+function rhs_callback(b::VectorBlock{<:PVectorAllocation{<:Assembled}}, rows_da)
+  b_vecs = [rhs_callback(b.array[i], rows_da[i]) for i in 1:length(rows_da)]
+  mortar(b_vecs)
+end
+
+function Algebra.create_from_nz(a::MatrixBlock{<:PSparseMatrixAllocation{<:Assembled}})
+  A, = create_from_nz_block_assembled(a)
+  return A
+end
+
+function Algebra.create_from_nz(
+  a::MatrixBlock{<:PSparseMatrixAllocation{<:Assembled}},
+  b::VectorBlock{<:PVectorAllocation{<:Assembled}}
+)
+  callback = Base.Fix1(rhs_callback,b)
+  async_callback = assemble!
+  A, B = create_from_nz_block_assembled(a, callback, async_callback)
+  return A, B
+end
+
+function create_from_nz_block_assembled(
+  a              :: MatrixBlock{<:PSparseMatrixAllocation{<:Assembled}},
+  callback       :: Function = rows_da -> nothing,
+  async_callback :: Function = b_vecs  -> [empty_async_task]
+)
+  NBr, NBc  = size(a.array)
+  block_ids = CartesianIndices(a.array)
+
+  I, J, V = map(get_allocations,a.array) |> tuple_of_arrays
+
+  test_ids  = [partition(axes(a.array[i,i],1)) for i in 1:NBr]
+  trial_ids = [partition(axes(a.array[j,j],2)) for j in 1:NBc]
+
+  for i in 1:NBr, j in 1:NBc
+    foreach(map_local_to_global!,I[i,j],test_ids[i])
+    foreach(map_local_to_global!,J[i,j],trial_ids[j])
+  end
+
+  # Shared row partition per block-row: union I[i,:] across all columns
+  rows_da = [filter_and_replace_ghost(I[i,:],test_ids[i]) for i in 1:NBr]
+
+  # COO communication overlapped with callback (e.g. RHS local repartition)
+  ts = [
+    PArrays.assemble_coo!(I[i,j],J[i,j],V[i,j],rows_da[i]) for i in 1:NBr, j in 1:NBc
+  ]
+  b = callback(rows_da)
+  foreach(wait,ts)
+
+  # Kick off async RHS communication, overlapped with column partition computation
+  t2s = async_callback(b)
+
+  # Shared col partition per block-col: union J[:,j] across all rows
+  cols_da = [filter_and_replace_ghost(J[:,j],trial_ids[j]) for j in 1:NBc]
+
+  foreach(wait,t2s)
+
+  for i in 1:NBr, j in 1:NBc
+    foreach(map_global_to_local!,I[i,j],rows_da[i])
+    foreach(map_global_to_local!,J[i,j],cols_da[j])
+  end
+
+  # Build each block's PSparseMatrix using the shared row/col partitions.
+  # All blocks in block-row i store the same rows_da[i] object, so
+  # partition(axes(A,1)) === rows_da[i] for all j → mortar === check passes.
+  assembled = true
+  block_mats = map(block_ids) do idx
+    i,j = idx[1],idx[2]
+    a_sys  = change_axes(a.array[idx],(PRange(rows_da[i]),PRange(cols_da[j])))
+    values = map(create_from_nz,local_views(a_sys))
+    PSparseMatrix(values,rows_da[i],cols_da[j],assembled)
+  end
+
+  return mortar(block_mats), b
+end

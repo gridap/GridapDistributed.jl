@@ -116,7 +116,7 @@ function main(distribute,nranks)
 
   model = GridapDistributed.DistributedDiscreteModel(models,gids)
 
-  das = FullyAssembledRows()
+  das = LocallyAssembled()
   trian = Triangulation(das,model)
 
   reffe = ReferenceFE(raviart_thomas,Float64,0)

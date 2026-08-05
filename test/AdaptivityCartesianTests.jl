@@ -11,7 +11,7 @@ using GridapDistributed
 using PartitionedArrays
 
 using GridapDistributed: i_am_in, generate_subparts
-using GridapDistributed: find_local_to_local_map
+using GridapDistributed: local_to_local_map
 using GridapDistributed: DistributedAdaptedDiscreteModel, redistribute, redistribute_cartesian
 using GridapDistributed: RedistributeGlue, redistribute_cell_dofs, redistribute_fe_function, redistribute_free_values
 

@@ -49,7 +49,8 @@ end
 # DistributedDiscreteModel API
 
 function get_cell_gids(macro_model::MacroDiscreteModel)
-  return linear_indices(local_views(macro_model.model))
+  ranks = linear_indices(local_views(macro_model.model))
+  return PRange(uniform_partition(ranks,length(ranks)))
 end
 
 # TODO: Reuse macro_model.interface_gids
@@ -74,15 +75,17 @@ function get_local_dimranges(macro_model::MacroDiscreteModel{Dc}) where Dc
 end
 
 """
-  Returns a JaggedArray of JaggedArrays such that we have
+    classify_interfaces(model::DistributedDiscreteModel{Dc};sort_faces=true)
+
+Returns a JaggedArray of JaggedArrays such that we have
 
     [interface dimension][interface lid][face dimension] -> interface dfaces lids
-  
-  I.e we bundle interfaces of the same dimension together (macro-faces, macro-edges, macro-nodes), 
-  and for each interface we return a JaggedArray with the d-faces in the interface.
 
-  If `sort_faces` is true, the faces in each interface are sorted by gid. If false, the faces
-  are by default sorted by lid.
+I.e we bundle interfaces of the same dimension together (macro-faces, macro-edges, macro-nodes), 
+and for each interface we return a JaggedArray with the d-faces in the interface.
+
+If `sort_faces` is true, the faces in each interface are sorted by gid. If false, the faces
+are by default sorted by lid.
 """
 function classify_interfaces(model::DistributedDiscreteModel{Dc};sort_faces=true) where Dc
   ranks = linear_indices(local_views(model))
@@ -166,22 +169,22 @@ function classify_interfaces(model::DistributedDiscreteModel{Dc};sort_faces=true
 end
 
 """
-    function generate_interface_gids(nbors,keys) -> gids
+    generate_interface_gids(nbors,keys) -> gids
 
-  Generates a global numbering for the interfaces, given two input arrays per processor:
+Generates a global numbering for the interfaces, given two input arrays per processor:
 
-    - `nbors`: For each interface, the minimum rank of the neighboring processors.
-    - `keys`: For each interface, the minimum gid of the faces in the interface.
-  
-  Then the gids are assigned in the following way: 
-  We iterate over the processors in ascending order. For each processor, we iterate over the local
-  interfaces. Then: 
+- `nbors`: For each interface, the minimum rank of the neighboring processors.
+- `keys`: For each interface, the minimum gid of the faces in the interface.
 
-    - If the `nbor` processor of an interface has a higher (or equal) rank than the current processor, it means we
-    haven't assigned a gid to that interface yet. So we assign a new gid to the current interface.
-    - If the `nbor` processor of an interface has a lower rank than the current processor, it means we 
-    already assigned a gid to that interface (while iterating over `nbor`). So we look for a matching `key`
-    in the `keys` array of the `nbor` processor, and assign the same gid to the current interface.
+Then the gids are assigned in the following way: 
+We iterate over the processors in ascending order. For each processor, we iterate over the local
+interfaces. Then: 
+
+- If the `nbor` processor of an interface has a higher (or equal) rank than the current processor, it means we
+haven't assigned a gid to that interface yet. So we assign a new gid to the current interface.
+- If the `nbor` processor of an interface has a lower rank than the current processor, it means we 
+already assigned a gid to that interface (while iterating over `nbor`). So we look for a matching `key`
+in the `keys` array of the `nbor` processor, and assign the same gid to the current interface.
 """
 function generate_interface_gids(nbors,keys)
   # Gather to main
@@ -222,21 +225,27 @@ function generate_interface_gids(nbors,keys)
   n_glob = emit(_n_glob)
 
   # Create PRange
-  ranks = linear_indices(igids)
-  indices = map(ranks,n_glob,igids,nbors) do rank,n_glob, igids, nbors
-    LocalIndices(n_glob,rank,igids,nbors)
+  n_own = map(linear_indices(nbors), nbors) do rank, nbors
+    count(==(rank), nbors)
   end
-  return PRange(indices)
+  return PRange(permuted_variable_partition(n_own, igids, nbors; n_global=n_glob))
 end
 
 """
-  Given a model and a set of local interfaces for each model, returns
-    - `nbors`: For each interface, the minimum rank of the neighboring processors.
-    - `keys`: For each interface, the minimum gid of the faces in the interface.
+    generate_nbors_and_keys(
+      model::DistributedDiscreteModel{Dc}, d_to_interfaces;
+      is_sorted = false, dimensions = 0:Dc-1
+    )
 
-  Options: 
-   - `is_sorted`: If true, the keys are assumed to be sorted by gid. This allows some optimization.
-   - `dimensions`: List/Set of interface dimensions to be considered. 
+Given a model and a set of local interfaces for each model, returns
+
+- `nbors`: For each interface, the minimum rank of the neighboring processors.
+- `keys`: For each interface, the minimum gid of the faces in the interface.
+
+Options: 
+
+- `is_sorted`: If true, the keys are assumed to be sorted by gid. This allows some optimization.
+- `dimensions`: List/Set of interface dimensions to be considered. 
 """
 function generate_nbors_and_keys(
   model::DistributedDiscreteModel{Dc},
@@ -303,13 +312,16 @@ function generate_nbors_and_keys(
 end
 
 """
-  Returns a global (consistent) face labeling for the macro model. Requires communication.
+    get_global_face_labeling(macro_model::MacroDiscreteModel{Dc})
 
-  The face labeling contains the following tags: 
-    - `Interior_i` : Faces which are interior to processor `i`.
-    - `Interface_j`: Faces which belong to interface `j` (global id).
-    - `Interiors`  : Union of all `Interior_i` tags.
-    - `Interfaces` : Union of all `Interface_j` tags.
+Returns a global (consistent) face labeling for the macro model. Requires communication.
+
+The face labeling contains the following tags: 
+
+- `Interior_i` : Faces which are interior to processor `i`.
+- `Interface_j`: Faces which belong to interface `j` (global id).
+- `Interiors`  : Union of all `Interior_i` tags.
+- `Interfaces` : Union of all `Interface_j` tags.
 """
 function get_global_face_labeling(macro_model::MacroDiscreteModel{Dc}) where Dc
   model = macro_model.model
@@ -374,15 +386,19 @@ function get_global_face_labeling(macro_model::MacroDiscreteModel{Dc}) where Dc
 end
 
 """
-  Returns a local face labeling for the macro model. Does not require communication.
-  WARNING: This is NOT consistent, it is sub-assembled. The same face might have 
-           different labels in different processors.
+    get_local_face_labeling(macro_model::MacroDiscreteModel{Dc})
 
-  The face labeling contains the following tags: 
-    - `Interior`   : Faces which are interior to the processor.
-    - `Exterior`   : Faces which are exterior to the processor.
-    - `Interface_i`: Faces which belong to interface `i` (local id).
-    - `Interfaces` : Union of all `Interface_i` tags.
+Returns a local face labeling for the macro model. Does not require communication.
+
+WARNING: This is NOT consistent, it is sub-assembled. The same face might have 
+         different labels in different processors.
+
+The face labeling contains the following tags: 
+
+- `Interior`   : Faces which are interior to the processor.
+- `Exterior`   : Faces which are exterior to the processor.
+- `Interface_i`: Faces which belong to interface `i` (local id).
+- `Interfaces` : Union of all `Interface_i` tags.
 """
 function get_local_face_labeling(macro_model::MacroDiscreteModel{Dc}) where Dc
   model = macro_model.model
