@@ -31,8 +31,11 @@ function main(distribute, parts)
   Y = MultiFieldFESpace([V,Q0])
 
   ph_i = interpolate(p_ex, Q0)
+  e_i = ph_i - p_ex + p_mean
   @test abs(sum(∫(ph_i)*dΩ)) < 1.0e-10
-  @test abs(sum(∫(ph_i - p_ex + p_mean)*dΩ)) < 1.0e-10
+  # the L² norm of the error and not the mean value of it, which the shift
+  # cancels whatever direction it follows
+  @test sqrt(sum(∫(e_i*e_i)*dΩ)) < 1.0e-10
 
   # Stokes
 
@@ -75,6 +78,37 @@ function main(distribute, parts)
   B0 = assemble_vector(q -> b(uh,q),Q0)
   @test abs(sum(B)) < 1.0e-10
   @test abs(sum(B0)) < 1.0e-10
+
+  # Moment based bases
+  #
+  # `modalC0` is not a partition of unity from order 2 on, so the DOF values of
+  # 𝔥 are not all ones: the volume is not the sum of the `∫φᵢ`, and the DOF the
+  # space fixes cannot be the last one, on which they vanish. Pure Neumann
+  # Poisson, whose solution the zero mean value selects, is solved in the same
+  # space in the two bases.
+  u_N(x) = cos(pi*x[1])
+  f_N(x) = pi^2*cos(pi*x[1])
+  dΩ_N = Measure(Ω,8)
+
+  uh_N = map((ReferenceFE(lagrangian,Float64,2),ReferenceFE(QUAD,modalC0,Float64,2))) do reffe
+    V0 = FESpace(model,reffe;conformity=:H1,constraint=:zeromean)
+    @test isa(V0,GridapDistributed.DistributedZeroMeanFESpace)
+    # the DOF values of 𝔥 do not vanish on the fixed DOF
+    @test V0.metadata.h_diri != 0
+    op = AffineFEOperator((u,v) -> ∫( ∇(u)⋅∇(v) )*dΩ_N,
+                          v -> ∫( f_N*v )*dΩ_N, TrialFESpace(V0), V0)
+    uh = solve(op)
+    @test abs(sum(∫(uh)*dΩ_N)) < 1.0e-10
+    uh
+  end
+  e_N = uh_N[1] - uh_N[2]
+  @test sqrt(sum(∫(e_N*e_N)*dΩ_N)) < 1.0e-10
+  e_ex = uh_N[1] - u_N
+  @test sqrt(sum(∫(e_ex*e_ex)*dΩ_N)) < 1.0e-2
+
+  # A space with Dirichlet DOFs is rejected
+  @test_throws ArgumentError FESpace(model,ReferenceFE(lagrangian,Float64,1);
+                                     dirichlet_tags="boundary",constraint=:zeromean)
 
   return true
 end

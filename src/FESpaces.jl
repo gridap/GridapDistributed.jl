@@ -133,7 +133,7 @@ function fetch_vector_ghost_values_cache(vector_partition,partition)
 end
 
 function fetch_vector_ghost_values!(vector_partition,cache)
-  assemble!((a,b)->b, vector_partition, cache) 
+  assemble!((a,b)->b, vector_partition, cache)
 end
 
 function generate_gids(
@@ -157,7 +157,7 @@ function generate_gids(
         end
       end
     end
-    me = part_id(indices) 
+    me = part_id(indices)
     nodofs = count(p->p==me,ldof_to_owner)
     ldof_to_owner, nodofs
   end |> tuple_of_arrays
@@ -166,17 +166,17 @@ function generate_gids(
                                               cell_to_ldofs,
                                               cell_range)
 
-  # Note1 : this call potentially updates cell_prange with the 
+  # Note1 : this call potentially updates cell_prange with the
   #         info required to exchange info among nearest neighbours
   #         so that it can be re-used in the future for other exchanges
 
-  # Note2 : we need to call reverse() as the senders and receivers are 
+  # Note2 : we need to call reverse() as the senders and receivers are
   #         swapped in the AssemblyCache of partition(cell_range)
 
   # Exchange the dof owners
   cache_fetch=fetch_vector_ghost_values_cache(cell_ldofs_to_part,partition(cell_range))
   fetch_vector_ghost_values!(cell_ldofs_to_part,cache_fetch) |> wait
-  
+
   cell_wise_to_dof_wise!(ldof_to_owner,
                          cell_ldofs_to_part,
                          cell_to_ldofs,
@@ -184,7 +184,7 @@ function generate_gids(
 
   # Find the global range of owned dofs
   first_gdof = scan(+,nodofs,type=:exclusive,init=one(eltype(nodofs)))
-  
+
   # Distribute gdofs to owned ones
   ldof_to_gdof = map(first_gdof,ldof_to_owner,partition(cell_range)) do first_gdof,ldof_to_owner,indices
     me = part_id(indices)
@@ -468,7 +468,7 @@ end
 function FESpaces.interpolate!(
   u,
   free_values::AbstractVector,
-  f::DistributedSingleFieldFESpace, 
+  f::DistributedSingleFieldFESpace,
   isconsistent=false)
   map(f.spaces,local_views(free_values)) do V,vec
     interpolate!(u,vec,V)
@@ -479,7 +479,7 @@ end
 function FESpaces.interpolate!(
   u::DistributedCellField,
   free_values::AbstractVector,
-  f::DistributedSingleFieldFESpace, 
+  f::DistributedSingleFieldFESpace,
   isconsistent=false)
   map(local_views(u),f.spaces,local_views(free_values)) do u, V,vec
     interpolate!(u,vec,V)
@@ -553,7 +553,7 @@ end
 #   space = DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
 #   return _add_distributed_constraint(space,reffe,constraint)
 # end
-# 
+#
 # function FESpaces.FESpace(
 #   _trian::DistributedTriangulation,reffe;split_own_and_ghost=false,constraint=nothing,kwargs...
 # )
@@ -598,9 +598,9 @@ end
 function DistributedSingleFieldFESpace(
   model::DistributedDiscreteModel, # Active model, not bg model
   trian::DistributedTriangulation,
-  cell_gids::PRange, 
-  cell_reffe::AbstractArray; 
-  split_own_and_ghost=false, 
+  cell_gids::PRange,
+  cell_reffe::AbstractArray;
+  split_own_and_ghost=false,
   constraint=nothing,
   kwargs...
 )
@@ -628,7 +628,7 @@ function _find_vector_type(spaces,gids;split_own_and_ghost=false)
   return vector_type
 end
 
-# TODO: We would like to avoid this, but I cannot extract the maximal order 
+# TODO: We would like to avoid this, but I cannot extract the maximal order
 #       from the space itself...
 function _add_distributed_constraint(
   F::DistributedFESpace,reffe::ReferenceFE,constraint
@@ -788,7 +788,7 @@ function FESpaces.symbolic_loop_matrix_and_vector!(A,b,a::DistributedSparseMatri
   Aviews=local_views(A,rows,cols)
   bviews=local_views(b,rows)
   aviews=local_views(a)
-  map(symbolic_loop_matrix_and_vector!,Aviews,bviews,aviews,data)  
+  map(symbolic_loop_matrix_and_vector!,Aviews,bviews,aviews,data)
 end
 
 function FESpaces.numeric_loop_matrix_and_vector!(A,b,a::DistributedSparseMatrixAssembler,data)
@@ -862,15 +862,17 @@ function FESpaces.SparseMatrixAssembler(
 end
 
 # ZeroMean FESpace
-struct DistributedZeroMeanCache{A,B}
-  dvol::A
+struct DistributedZeroMeanCache{A,B,C}
+  int_φi::A
   vol::B
+  h_free::C
+  h_diri::Float64
 end
 
-const DistributedZeroMeanFESpace{A,B,C,D,E,F} = DistributedSingleFieldFESpace{A,B,C,D,DistributedZeroMeanCache{E,F}}
+const DistributedZeroMeanFESpace{A,B,C,D,E,F,G} = DistributedSingleFieldFESpace{A,B,C,D,DistributedZeroMeanCache{E,F,G}}
 
 function FESpaces.FESpaceWithConstantFixed(
-  space::DistributedSingleFieldFESpace, 
+  space::DistributedSingleFieldFESpace,
   gid_to_fix::Int = num_free_dofs(space)
 )
   # Find the gid within the processors
@@ -892,21 +894,82 @@ function FESpaces.FESpaceWithConstantFixed(
 end
 
 function FESpaces.ZeroMeanFESpace(space::DistributedSingleFieldFESpace,dΩ::DistributedMeasure)
-  # Create underlying space
-  _space = FESpaceWithConstantFixed(space,num_free_dofs(space))
+  # Reduced so that all proc throw
+  ndir = reduce(+,map(num_dirichlet_dofs,local_views(space)),init=0)
+  ndir == 0 || throw(ArgumentError("""\n
+  The space of a `ZeroMeanFESpace` must have no Dirichlet DOF, and this one has $ndir.
+  """))
+
+  # `h_dofs` is all ones on every processor or on none.
+  uh = interpolate(one(Float64),space)
+  h_dofs = get_free_dof_values(uh)
+  isunit = reduce(&, map(h -> all(isone,h), partition(h_dofs)), init=true)
 
   # Setup volume integration
-  _vol, dvol = map(local_views(space),local_views(dΩ)) do lspace, dΩ
-    dvol = assemble_vector(v -> ∫(v)dΩ, lspace)
-    vol  = sum(dvol)
-    return vol, dvol
+  _vol, int_φi = map(local_views(space),local_views(dΩ),partition(h_dofs)) do lspace, dΩ, h_dofs
+    int_φi = assemble_vector(v -> ∫(v)dΩ, lspace)
+    vol = isunit ? sum(int_φi) : dot(int_φi,h_dofs)
+    return vol, int_φi
   end |> tuple_of_arrays
-  vol  = reduce(+,_vol,init=zero(eltype(vol)))
-  metadata = DistributedZeroMeanCache(dvol,vol)
+  vol = reduce(+,_vol,init=zero(eltype(_vol)))
+
+  int_φi_norm = reduce(+,map(v -> norm(v,1),int_φi),init=zero(Float64))
+  abs(vol) > eps(Float64)*int_φi_norm || throw(ArgumentError(
+    "Mean value undefined: the fespace has zero ($vol) volume."))
+  @check _represents_mean_functional(space,dΩ,uh) """\n
+  `space` does not contain a riesz representative for the mean functional.
+  Either it does not contain the constants and you should impose the zero mean
+  value with a Lagrange multiplier (using a mixed field formulation with a
+  `ConstantFESpace` unknown), or the space's DOF basis is broken.
+  """
+
+  # The h_dofs of the dof to fix must not be zero
+  gid_to_fix, h_diri = isunit ? (num_free_dofs(space),one(Float64)) :
+    _dof_to_fix(h_dofs,get_free_dof_ids(space))
+
+  # Create underlying space. Fixing a DOF renumbers the free ones, so `h_free`
+  # is interpolated in it.
+  _space = FESpaceWithConstantFixed(space,gid_to_fix)
+  h_free = isunit ? nothing : get_free_dof_values(interpolate(one(Float64),_space))
+  metadata = DistributedZeroMeanCache(int_φi,vol,h_free,h_diri)
 
   return DistributedSingleFieldFESpace(
     _space.spaces,_space.gids,_space.trian,_space.vector_type,metadata
   )
+end
+
+# The global DOF where `|h_dofs|` is largest, the largest global id among ties, and its `h_dofs`.
+function _dof_to_fix(h_dofs,gids)
+  owned_max = map(partition(h_dofs),partition(gids)) do h, ids
+    maximum(l -> abs(h[l]), own_to_local(ids); init=zero(eltype(h)))
+  end
+  hmax = reduce(max,owned_max,init=zero(eltype(h_dofs)))
+
+  owned_gid = map(partition(h_dofs),partition(gids)) do h, ids
+    l2g, g = local_to_global(ids), 0
+    for l in own_to_local(ids)
+      abs(h[l]) == hmax && (g = max(g,Int(l2g[l])))
+    end
+    g
+  end
+  gid = reduce(max,owned_gid,init=0)
+
+  owned_val = map(partition(h_dofs),partition(gids)) do h, ids
+    l2g, v = local_to_global(ids), zero(eltype(h))
+    for l in own_to_local(ids)
+      Int(l2g[l]) == gid && (v = h[l])
+    end
+    v
+  end
+  return gid, reduce(+,owned_val,init=zero(eltype(h_dofs)))
+end
+
+# See Gridap's homonym
+function _represents_mean_functional(space::DistributedSingleFieldFESpace,dΩ::DistributedMeasure,uh)
+  one_ = one(Float64)
+  r = assemble_vector(q -> ∫( q*(uh-one_) )dΩ,space)
+  int_φi = assemble_vector(q -> ∫( q )dΩ,space)
+  norm(r) ≤ 1.0e-6*norm(int_φi)
 end
 
 function FESpaces.FEFunction(
@@ -925,23 +988,24 @@ function FESpaces.FEFunction(
   isconsistent=false
 )
   free_values = change_ghost(free_values,f.gids,is_consistent=isconsistent,make_consistent=true)
-  
+
   c = _compute_new_distributed_fixedval(
     f,free_values,dirichlet_values
   )
-  fv = free_values .+ c # TODO: Do we need to copy, or can we just modify? 
+  h_free = f.metadata.h_free
+  fv = isnothing(h_free) ? free_values .+ c : free_values .+ c .* h_free # TODO: Do we need to copy, or can we just modify?
   dv = map(dirichlet_values) do dv
-    dv .+ c
+    dv .+ c*f.metadata.h_diri
   end
-  
+
   fields = map(FEFunction,f.spaces,partition(fv),dv)
   trian = get_triangulation(f)
   metadata = DistributedFEFunctionData(fv)
   DistributedCellField(fields,trian,metadata)
 end
 
-# This is required, otherwise we end up calling `FEFunction` with a fixed value of zero, 
-# which does not properly interpolate the function provided. 
+# This is required, otherwise we end up calling `FEFunction` with a fixed value of zero,
+# which does not properly interpolate the function provided.
 # With this change, we are interpolating in the unconstrained space and then
 # substracting the mean.
 function FESpaces.interpolate!(u,free_values::AbstractVector,
@@ -958,15 +1022,15 @@ end
 function _compute_new_distributed_fixedval(
   f::DistributedZeroMeanFESpace,fv,dv
 )
-  dvol = f.metadata.dvol
+  int_φi = f.metadata.int_φi
   vol  = f.metadata.vol
-  
-  c_i = map(local_views(f),partition(fv),dv,dvol) do space,fv,dv,dvol
+
+  c_i = map(local_views(f),partition(fv),dv,int_φi) do space,fv,dv,int_φi
     if isa(FESpaces.ConstantApproach(space),FESpaces.FixConstant)
       lid_to_fix = space.dof_to_fix
-      c = FESpaces._compute_new_fixedval(fv,dv,dvol,vol,lid_to_fix)
+      c = FESpaces._compute_new_fixedval(fv,dv,int_φi,vol,lid_to_fix)
     else
-      c = - dot(fv,dvol)/vol
+      c = - dot(fv,int_φi)/vol
     end
     c
   end
@@ -978,19 +1042,19 @@ end
 
 """
     ConstantFESpace(
-      model::DistributedDiscreteModel; 
-      constraint_type=:global, 
+      model::DistributedDiscreteModel;
+      constraint_type=:global,
       kwargs...
     )
 
 Distributed equivalent to `ConstantFESpace(model;kwargs...)`.
 
 With `constraint_type=:global`, a single dof is shared by all processors.
-This creates a global constraint, which is NOT scalable in parallel. Use at your own peril. 
+This creates a global constraint, which is NOT scalable in parallel. Use at your own peril.
 
 With `constraint_type=:local`, a single dof is owned by each processor and shared with no one else.
 This space is locally-constant in each processor, and therefore scalable (but not equivalent
-to its serial counterpart). 
+to its serial counterpart).
 """
 function FESpaces.ConstantFESpace(
   model::DistributedDiscreteModel;
