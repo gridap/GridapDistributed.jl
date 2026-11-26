@@ -592,25 +592,8 @@ function DistributedSingleFieldFESpace(
   cell_reffe = map(local_views(model)) do model
     ReferenceFE(model,reffe)
   end
+  # Goes to src/Pullbacks.jl
   DistributedSingleFieldFESpace(model,trian,cell_gids,cell_reffe;kwargs...)
-end
-
-function DistributedSingleFieldFESpace(
-  model::DistributedDiscreteModel, # Active model, not bg model
-  trian::DistributedTriangulation,
-  cell_gids::PRange, 
-  cell_reffe::AbstractArray; 
-  split_own_and_ghost=false, 
-  constraint=nothing,
-  kwargs...
-)
-  spaces = map(local_views(model),local_views(trian),cell_reffe) do model, trian, cell_reffe
-    FESpace(model,cell_reffe;trian,kwargs...)
-  end
-  gids = generate_gids(cell_gids,spaces)
-  vector_type = _find_vector_type(spaces,gids;split_own_and_ghost)
-  space = DistributedSingleFieldFESpace(spaces,gids,trian,vector_type)
-  return _add_distributed_constraint(space,cell_reffe,constraint)
 end
 
 function _find_vector_type(spaces,gids;split_own_and_ghost=false)
