@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Constrained `Gridap` compat entry to `0.20.8 - 0.20.10`. Gridap 0.20.11 contains (Gridap PR[#1349](https://github.com/gridap/Gridap.jl/pull/1349)) which broke GridapDistributed's `nedelec` and `raviart_thomas` FESpaces.
+
 ## [0.4.17] - 2026-06-01
 
 ### Added
