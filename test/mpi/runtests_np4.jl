@@ -36,6 +36,7 @@ include("../AutodiffTests.jl")
 include("../ConstantFESpacesTests.jl")
 include("../MacroDiscreteModelsTests.jl")
 include("../HcurlProjectionTests.jl")
+include("../MomentBasedFESpacesTests.jl")
 
 include("runtests_np4_body.jl")
 

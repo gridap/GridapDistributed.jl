@@ -51,7 +51,13 @@ function all_tests(distribute, parts)
 
     HcurlProjectionTests.main(distribute, parts)
     PArrays.toc!(t, "HcurlProjection")
-    
+
+    HcurlProjectionTests.main(distribute, (parts..., 1))
+    PArrays.toc!(t, "HcurlProjection3D")
+
+    MomentBasedFESpacesTests.main(distribute, (parts..., 1))
+    PArrays.toc!(t, "MomentBasedFESpaces")
+
   end
 
   if TESTCASE ∈ ("all", "mpi-transient")
