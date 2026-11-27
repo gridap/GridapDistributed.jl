@@ -12,6 +12,8 @@ end
 if TESTCASE ∈ ("all", "seq-fespaces")
   @time @testset "FESpaces"         begin include("FESpacesTests.jl") end
   @time @testset "Pullbacks"        begin include("PullbackTests.jl") end
+  @time @testset "HcurlProjection"  begin include("HcurlProjectionTests.jl") end
+  @time @testset "MomentFESpaces"   begin include("MomentBasedFESpacesTests.jl") end
   @time @testset "MultiField"       begin include("MultiFieldTests.jl") end
   @time @testset "issue_142"        begin include("issue_142.jl") end
   @time @testset "ZeroMeanFESpaces" begin include("ZeroMeanFESpacesTests.jl") end

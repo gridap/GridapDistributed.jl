@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.18] - 2026-11-11
+
+### Added
+
+- Added support for Gridap 0.20.11. Compat changed to Gridap 0.20.11, since Gridap PR[#1349](https://github.com/gridap/Gridap.jl/pull/1349) broke some FESpaces. Since PR[#216](https://github.com/gridap/GridapDistributed.jl/pull/216).
 
 ## [0.4.17] - 2026-06-01
 
