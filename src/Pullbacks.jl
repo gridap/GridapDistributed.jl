@@ -147,17 +147,30 @@ function FESpaces.compute_cell_bases_changes(
   end
 end
 
-# `rotating_pλ` / `trimmed_pλ` this change depends on cell's vertex ids global order.
-# Those ids are global in serial but local in a distributed view, so each rank
-# feeds the serial kernel its global vertex ids instead.
+# `rotating_pλ` / `trimmed_pλ`: this change depends on the order of each cell's
+# vertex ids, which are global in serial but local in a distributed view.
 function FESpaces.compute_cell_bases_changes(
   ::Union{RotatingPΛName,TrimmedPΛName}, ::CoVariantPiolaMap,
   model::DistributedDiscreteModel, cell_reffe, cell_Jt
 )
   D = num_cell_dims(model)
+  cell_verts = map(local_views(model)) do model
+    Table(get_faces(get_grid_topology(model), D, 0))
+  end
+
+  # Whether every rank lists every cell's vertices in increasing local id
+  # order, in which case the rotations can be skipped (alltrivial vertex
+  # ordering in Gridap's Pullback.jl).
+  trivial = map(cell_verts) do cell_verts
+    c = array_cache(cell_verts)
+    all(i -> issorted(getindex!(c, cell_verts, i)), eachindex(cell_verts))
+  end
+  getany(reduction(&, trivial; init=true, destination=:all)) &&
+    return map(_ -> nothing, cell_reffe)
+
+  # Otherwise feed the serial kernel global vertex ids, which all ranks agree on.
   vertex_gids = partition(get_face_gids(model, 0))
-  map(local_views(model), cell_reffe, vertex_gids) do model, cell_reffe, vertex_gids
-    lcell_verts = Table(get_faces(get_grid_topology(model), D, 0))
+  map(cell_verts, cell_reffe, vertex_gids) do lcell_verts, cell_reffe, vertex_gids
     l2g = local_to_global(vertex_gids)
     gcell_verts = Table(l2g[lcell_verts.data], lcell_verts.ptrs)
     rc = RotationCache(get_prebasis(testitem(cell_reffe)))

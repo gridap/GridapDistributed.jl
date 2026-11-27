@@ -38,7 +38,7 @@ function setup_p2_model()
   ptr  = [ 1, 5, 9 ]
   data = [ 1,2,3,4, 5,1,6,3  ]
   cell_vertex_lids = Gridap.Arrays.Table(data,ptr)
-  
+
   node_coordinates = Vector{Point{2,Float64}}(undef,6)
   node_coordinates[1]=Point{2,Float64}(0.5,0.0)
   node_coordinates[2]=Point{2,Float64}(1.0,0.0)
@@ -53,6 +53,60 @@ function setup_p2_model()
     node_coordinates, cell_vertex_lids, [reffe], cell_types, Geometry.NonOriented()
   )
   return Geometry.UnstructuredDiscreteModel(grid)
+end
+
+function setup_pλ_model(σ)
+  # Two triangles sharing the diagonal of the unit square. `σ` relabels the four
+  # vertices: same cells in the same slot order, different vertex ids.
+
+  pts = [ Point(0.0,0.0), Point(1.0,0.0), Point(0.0,1.0), Point(1.0,1.0) ]
+  cells = ( (1,2,3), (2,4,3) )
+
+  node_coordinates = Vector{Point{2,Float64}}(undef,4)
+  for old in eachindex(pts)
+    node_coordinates[σ[old]] = pts[old]
+  end
+  data = reduce(vcat, [ [σ[v] for v in c] for c in cells ])
+  cell_vertex_lids = Gridap.Arrays.Table(data, Int32[1,4,7])
+
+  reffe = ReferenceFEs.ReferenceFE(TRI,ReferenceFEs.lagrangian,Float64,1)
+  cell_types = collect(Fill(1,length(cell_vertex_lids)))
+  grid = Geometry.UnstructuredGrid(
+    node_coordinates, cell_vertex_lids, [reffe], cell_types, Geometry.NonOriented()
+  )
+  Geometry.UnstructuredDiscreteModel(grid)
+end
+
+# The PΛ elements order each face's dofs by that face's vertex ids, so the ids
+# must be ones the ranks share. Here the ranks number the four vertices in
+# opposite directions: both still produce the same `get_cell_dof_ids`, but the
+# shape functions in the shared-edge slots differ by a sign, so an interpolant
+# built from local ids is discontinuous across the diagonal.
+function pλ_cross_rank(ranks)
+  @assert length(ranks)==2
+
+  models = map(ranks) do rank
+    setup_pλ_model(rank == 1 ? [1,2,3,4] : [4,3,2,1])
+  end
+  cell_ids = map(ranks) do rank
+    LocalIndices(2, rank, [1,2], Int32[1,2])
+  end
+  model = GridapDistributed.DistributedDiscreteModel(models, PRange(cell_ids))
+
+  # No rank is locally sorted, so this mesh does exercise the non-trivial branch.
+  local_allsorted = map(local_views(model)) do m
+    all(issorted, Geometry.get_faces(Geometry.get_grid_topology(m), 2, 0))
+  end
+  @test !PartitionedArrays.getany(reduction(&, local_allsorted; init=true, destination=:all))
+
+  u(x) = VectorValue(1.0, 0.0)
+  Ω  = Triangulation(model)
+  dΩ = Measure(Ω, 4)
+  for name in (rotating_pλ, trimmed_pλ)
+    V  = FESpace(model, ReferenceFE(name,Float64,1); conformity=CurlConformity())
+    uh = interpolate(u, V)
+    @test sqrt(sum(∫((uh-u)⋅(uh-u))dΩ)) < 1.0e-10
+  end
 end
 
 function f(model,reffe,trian,das)
@@ -76,7 +130,7 @@ function f(model,reffe,trian,das)
   dc2 = dc.contribs.items[2]
   c1  = Gridap.CellData.get_contribution(dc1,t1)
   c2  = Gridap.CellData.get_contribution(dc2,t2)
-  
+
   tol = 1.0e-12
   @test norm(c1[1]-c2[2]) < tol
   @test norm(c1[2]-c2[1]) < tol
@@ -123,7 +177,7 @@ function main(distribute,nranks)
   f(model,reffe,trian,das)
   f(trian,reffe,trian,das)
   f(Triangulation(model),reffe,trian,das)
-  
+
   reffe = ReferenceFE(QUAD, raviart_thomas, 0)
   f(model,reffe,trian,das)
   f(trian,reffe,trian,das)
@@ -133,11 +187,13 @@ function main(distribute,nranks)
   f(model,reffe,trian,das)
   f(trian,reffe,trian,das)
   f(Triangulation(model),reffe,trian,das)
-  
+
   reffe = ReferenceFE(QUAD, nedelec, 0)
   f(model,reffe,trian,das)
   f(trian,reffe,trian,das)
   f(Triangulation(model),reffe,trian,das)
+
+  pλ_cross_rank(ranks)
 end
 
 end # module
